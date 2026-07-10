@@ -1,0 +1,24 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:XaultWallet.Desktop"
+             x:Class="XaultWallet.Desktop.App"
+             RequestedThemeVariant="Dark">
+
+    <Application.DataTemplates>
+        <local:ViewLocator />
+    </Application.DataTemplates>
+
+    <Application.Styles>
+        <FluentTheme />
+        <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
+    </Application.Styles>
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <Color x:Key="XmrOrange">#FF6600</Color>
+            <SolidColorBrush x:Key="XmrOrangeBrush" Color="#FF6600" />
+            <SolidColorBrush x:Key="PanelBrush" Color="#1B1B1F" />
+            <SolidColorBrush x:Key="PanelBorderBrush" Color="#2E2E34" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

@@ -1,0 +1,82 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
+             xmlns:conv="clr-namespace:XaultWallet.Desktop"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="620"
+             x:Class="XaultWallet.Desktop.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+
+    <ScrollViewer>
+        <Border Width="620" Margin="0,24" VerticalAlignment="Top" HorizontalAlignment="Center"
+                Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource PanelBorderBrush}"
+                BorderThickness="1" CornerRadius="12" Padding="28">
+            <StackPanel Spacing="16">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Text="Settings" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" Content="Close" Command="{Binding CloseCommand}"/>
+                </Grid>
+
+                <!-- monero-wallet-rpc binary -->
+                <StackPanel Spacing="6">
+                    <TextBlock Text="monero-wallet-rpc executable" FontWeight="SemiBold"/>
+                    <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="12"
+                               Text="XaultWallet drives the official Monero wallet RPC binary; it does not reimplement Monero's cryptography. Point this at the monero-wallet-rpc from a Monero CLI release."/>
+                    <Grid ColumnDefinitions="*,8,Auto">
+                        <TextBox Grid.Column="0" Watermark="Path to monero-wallet-rpc (blank = auto-detect)"
+                                 Text="{Binding WalletRpcBinaryPath}"/>
+                        <Button Grid.Column="2" Content="Browse&#8230;" Command="{Binding BrowseCommand}"/>
+                    </Grid>
+                    <TextBlock Text="{Binding DefaultBinaryHint}" Opacity="0.45" FontSize="11" TextWrapping="Wrap"/>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Content="Test binary" Command="{Binding TestBinaryCommand}" IsEnabled="{Binding !Busy}"/>
+                        <TextBlock Text="{Binding BinaryTestResult}" TextWrapping="Wrap" VerticalAlignment="Center"
+                                   MaxWidth="380"
+                                   Foreground="{Binding BinaryTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <Separator/>
+
+                <!-- Daemon -->
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Default daemon" FontWeight="SemiBold"/>
+                    <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="12"
+                               Text="Used to pre-fill the daemon address when you create a wallet. Existing wallets keep the daemon they were created with."/>
+                    <TextBox Watermark="http://host:port" Text="{Binding DefaultDaemonAddress}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <TextBlock Text="Network" VerticalAlignment="Center" Opacity="0.6"/>
+                        <ComboBox SelectedIndex="{Binding NetworkIndex}" Width="150">
+                            <ComboBoxItem>Mainnet</ComboBoxItem>
+                            <ComboBoxItem>Stagenet</ComboBoxItem>
+                            <ComboBoxItem>Testnet</ComboBoxItem>
+                        </ComboBox>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Content="Test daemon" Command="{Binding TestDaemonCommand}" IsEnabled="{Binding !Busy}"/>
+                        <TextBlock Text="{Binding DaemonTestResult}" TextWrapping="Wrap" VerticalAlignment="Center"
+                                   MaxWidth="380"
+                                   Foreground="{Binding DaemonTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <Separator/>
+
+                <!-- Refresh cadence -->
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Auto-refresh interval (seconds)" FontWeight="SemiBold"/>
+                    <TextBox Text="{Binding AutoRefreshSeconds}" Width="120" HorizontalAlignment="Left"/>
+                    <TextBlock Text="How often the open wallet re-checks balance and history (5&#8211;600s)." Opacity="0.45" FontSize="11"/>
+                </StackPanel>
+
+                <Separator/>
+
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <Button Content="Save" Classes="accent" Command="{Binding SaveCommand}"/>
+                    <TextBlock Text="{Binding SavedMessage}" VerticalAlignment="Center" Foreground="#4CAF7D"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </ScrollViewer>
+</UserControl>

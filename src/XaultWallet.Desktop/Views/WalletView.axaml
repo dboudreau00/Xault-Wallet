@@ -1,0 +1,85 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
+             xmlns:conv="clr-namespace:XaultWallet.Desktop"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="560"
+             x:Class="XaultWallet.Desktop.Views.WalletView"
+             x:DataType="vm:WalletViewModel">
+
+    <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,*,Auto">
+        <!-- Balance header -->
+        <Border Grid.Row="0" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource PanelBorderBrush}"
+                BorderThickness="1" CornerRadius="12" Padding="20">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" Spacing="2">
+                    <TextBlock Text="Balance" Opacity="0.5" FontSize="12"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{Binding Balance, StringFormat='{}{0:0.############}'}" FontSize="30" FontWeight="Bold"/>
+                        <TextBlock Text="XMR" FontSize="16" VerticalAlignment="Bottom" Margin="0,0,0,6" Opacity="0.6"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding UnlockedBalance, StringFormat='Unlocked: {0:0.############} XMR'}" Opacity="0.6" FontSize="12"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Button Content="Refresh" Command="{Binding RefreshCommand}" IsEnabled="{Binding IsReady}"/>
+                    <Button Content="Lock" Classes="accent" Command="{Binding LockCommand}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <TextBlock Grid.Row="1" Text="{Binding Status}" Opacity="0.5" FontSize="12" Margin="4,8"/>
+
+        <!-- Startup failure banner with retry -->
+        <Border Grid.Row="2" IsVisible="{Binding StartupFailed}" Margin="0,0,0,8"
+                Background="#2A1A1A" BorderBrush="#5A2A2A" BorderThickness="1" CornerRadius="8" Padding="14">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="#FFB4B4"
+                           Text="The wallet backend didn't start. Check that monero-wallet-rpc is installed and the daemon is reachable, then retry."/>
+                <Button Grid.Column="1" Content="Retry" Command="{Binding RetryStartupCommand}" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <TabControl Grid.Row="3" Margin="0,4" IsEnabled="{Binding IsReady}">
+            <TabItem Header="Receive">
+                <StackPanel Spacing="12" Margin="4,12">
+                    <TextBlock Text="Your address" Opacity="0.6"/>
+                    <TextBox Text="{Binding PrimaryAddress}" IsReadOnly="True" TextWrapping="Wrap"/>
+                    <Button Content="New subaddress" Command="{Binding NewAddressCommand}" HorizontalAlignment="Left"/>
+                </StackPanel>
+            </TabItem>
+
+            <TabItem Header="Send">
+                <StackPanel Spacing="12" Margin="4,12" MaxWidth="520" HorizontalAlignment="Left">
+                    <TextBox Watermark="Destination address" Text="{Binding SendAddress}"/>
+                    <TextBox Watermark="Amount (XMR)" Text="{Binding SendAmount}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Priority" VerticalAlignment="Center" Opacity="0.6"/>
+                        <ComboBox SelectedIndex="{Binding SendPriority}" Width="160">
+                            <ComboBoxItem>Default</ComboBoxItem>
+                            <ComboBoxItem>Low</ComboBoxItem>
+                            <ComboBoxItem>Medium</ComboBoxItem>
+                            <ComboBoxItem>High</ComboBoxItem>
+                        </ComboBox>
+                    </StackPanel>
+                    <Button Content="Send" Classes="accent" Command="{Binding SendCommand}" IsEnabled="{Binding !Sending}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="{Binding SendResult}" TextWrapping="Wrap" Opacity="0.8"/>
+                </StackPanel>
+            </TabItem>
+
+            <TabItem Header="History">
+                <DataGrid ItemsSource="{Binding History}" IsReadOnly="True" Margin="0,8"
+                          x:CompileBindings="False"
+                          GridLinesVisibility="Horizontal" HeadersVisibility="Column">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="90"/>
+                        <DataGridTextColumn Header="Amount"
+                            Binding="{Binding Amount, Converter={x:Static conv:AtomicToXmrConverter.Instance}}" Width="140"/>
+                        <DataGridTextColumn Header="Height" Binding="{Binding Height}" Width="110"/>
+                        <DataGridTextColumn Header="Tx" Binding="{Binding TxId}" Width="*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>

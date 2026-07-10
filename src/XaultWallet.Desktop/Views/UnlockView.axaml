@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="560"
+             x:Class="XaultWallet.Desktop.Views.UnlockView"
+             x:DataType="vm:UnlockViewModel">
+
+    <Grid>
+        <Border Width="380" VerticalAlignment="Center" HorizontalAlignment="Center"
+                Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource PanelBorderBrush}"
+                BorderThickness="1" CornerRadius="12" Padding="28">
+            <StackPanel Spacing="16">
+                <TextBlock Text="Unlock wallet" FontSize="20" FontWeight="SemiBold"/>
+                <TextBlock Text="Enter your password to decrypt the vault." Opacity="0.6" TextWrapping="Wrap"/>
+
+                <TextBox Watermark="Password"
+                         PasswordChar="●"
+                         Text="{Binding Password}"
+                         IsEnabled="{Binding !Busy}">
+                    <TextBox.KeyBindings>
+                        <KeyBinding Gesture="Enter" Command="{Binding UnlockCommand}"/>
+                    </TextBox.KeyBindings>
+                </TextBox>
+
+                <TextBlock Text="{Binding Error}" Foreground="#FF6B6B" TextWrapping="Wrap"
+                           IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+                <Button Content="Unlock" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Classes="accent" Command="{Binding UnlockCommand}" IsEnabled="{Binding !Busy}"/>
+
+                <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" Height="3"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

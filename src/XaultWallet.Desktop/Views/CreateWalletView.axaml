@@ -1,0 +1,147 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
+             xmlns:conv="clr-namespace:XaultWallet.Desktop"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="620"
+             x:Class="XaultWallet.Desktop.Views.CreateWalletView"
+             x:DataType="vm:CreateWalletViewModel">
+
+    <ScrollViewer>
+        <Border Width="560" Margin="0,24" VerticalAlignment="Top" HorizontalAlignment="Center"
+                Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource PanelBorderBrush}"
+                BorderThickness="1" CornerRadius="12" Padding="28">
+            <StackPanel Spacing="14">
+                <TextBlock Text="Create your vault" FontSize="20" FontWeight="SemiBold"/>
+                <TextBlock TextWrapping="Wrap" Opacity="0.6"
+                           Text="Your seed and settings are encrypted with AES-256-GCM; the key is derived from your password with Argon2id."/>
+
+                <!-- Network / daemon -->
+                <Grid ColumnDefinitions="Auto,12,*" VerticalAlignment="Center">
+                    <StackPanel Grid.Column="0" Spacing="4">
+                        <TextBlock Text="Network" FontSize="12" Opacity="0.6"/>
+                        <ComboBox SelectedIndex="{Binding NetworkIndex}" Width="150">
+                            <ComboBoxItem>Mainnet</ComboBoxItem>
+                            <ComboBoxItem>Stagenet</ComboBoxItem>
+                            <ComboBoxItem>Testnet</ComboBoxItem>
+                        </ComboBox>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Spacing="4">
+                        <TextBlock Text="Daemon address" FontSize="12" Opacity="0.6"/>
+                        <TextBox Text="{Binding DaemonAddress}"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Mainnet = real money. Make the risk impossible to miss. -->
+                <Border IsVisible="{Binding IsMainnet}" Background="#2A1414" BorderBrush="#7A2E2E"
+                        BorderThickness="1" CornerRadius="8" Padding="14">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="⚠ Mainnet — real funds at risk" FontWeight="Bold" Foreground="#FF6B6B"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#E8B0B0"
+                                   Text="XaultWallet is unaudited beta software. Mainnet transactions are irreversible and a bug could cause permanent loss. Test on stagenet or testnet first, keep an independent backup of your seed, and do not store more than you can afford to lose. If you enabled 'wipe real wallet on duress', understand it permanently destroys the real seed on this device."/>
+                    </StackPanel>
+                </Border>
+
+                <Separator Margin="0,6"/>
+
+                <!-- Real wallet seed -->
+                <TextBlock Text="Real wallet" FontWeight="SemiBold"/>
+                <StackPanel Orientation="Horizontal" Spacing="18">
+                    <RadioButton GroupName="RealMode" Content="Create new wallet" IsChecked="{Binding CreateNewReal, Mode=TwoWay}"/>
+                    <RadioButton GroupName="RealMode" Content="Import existing seed"/>
+                </StackPanel>
+
+                <!-- Generate -->
+                <StackPanel Spacing="10" IsVisible="{Binding CreateNewReal}">
+                    <Button Content="Generate new seed" Command="{Binding GenerateRealSeedCommand}"
+                            IsEnabled="{Binding !Busy}" HorizontalAlignment="Left"/>
+
+                    <StackPanel Spacing="10" IsVisible="{Binding RealSeedGenerated}">
+                        <TextBlock Text="Write these 25 words down in order and keep them offline. They are the ONLY way to recover your funds."
+                                   TextWrapping="Wrap" FontSize="12" Foreground="#E0A030"/>
+                        <TextBox Text="{Binding RealMnemonic}" IsReadOnly="True" TextWrapping="Wrap"
+                                 FontFamily="Cascadia Mono,Consolas,monospace" MinHeight="70"/>
+                        <Button Content="Download backup (.txt)" Command="{Binding DownloadRealBackupCommand}" HorizontalAlignment="Left"/>
+
+                        <Border Background="#151519" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1"
+                                CornerRadius="8" Padding="14">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Confirm your backup" FontWeight="SemiBold" FontSize="13"/>
+                                <TextBlock Text="Enter the requested words to prove you saved the seed." Opacity="0.6" FontSize="12"/>
+                                <Grid ColumnDefinitions="*,8,*,8,*">
+                                    <TextBox Grid.Column="0" Watermark="{Binding VerifyPrompt1}" Text="{Binding VerifyInput1}"/>
+                                    <TextBox Grid.Column="2" Watermark="{Binding VerifyPrompt2}" Text="{Binding VerifyInput2}"/>
+                                    <TextBox Grid.Column="4" Watermark="{Binding VerifyPrompt3}" Text="{Binding VerifyInput3}"/>
+                                </Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <Button Content="Verify" Command="{Binding VerifyRealSeedCommand}"/>
+                                    <TextBlock Text="{Binding VerifyMessage}" VerticalAlignment="Center"
+                                               Foreground="{Binding RealVerified, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Import -->
+                <StackPanel Spacing="10" IsVisible="{Binding !CreateNewReal}">
+                    <TextBox Watermark="Existing 25-word seed" Text="{Binding RealMnemonic}"
+                             AcceptsReturn="True" Height="70" TextWrapping="Wrap"
+                             FontFamily="Cascadia Mono,Consolas,monospace"/>
+                    <TextBox Watermark="Restore height (0 = full scan)" Text="{Binding RestoreHeight}" HorizontalAlignment="Left" Width="240"/>
+                </StackPanel>
+
+                <Separator Margin="0,6"/>
+
+                <!-- Passwords -->
+                <TextBlock Text="Main password" FontWeight="SemiBold"/>
+                <TextBox Watermark="Main password" PasswordChar="&#9679;" Text="{Binding MainPassword}"/>
+                <TextBlock Text="{Binding StrengthLabel}" Opacity="0.6" FontSize="12"/>
+                <TextBox Watermark="Confirm main password" PasswordChar="&#9679;" Text="{Binding MainPasswordConfirm}"/>
+
+                <Separator Margin="0,6"/>
+
+                <!-- Duress -->
+                <CheckBox Content="Set up a duress (decoy) password" IsChecked="{Binding EnableDuress}"/>
+                <StackPanel Spacing="10" IsVisible="{Binding EnableDuress}" Margin="12,0,0,0">
+                    <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="12"
+                               Text="Entering the duress password opens a separate decoy wallet. The app looks and behaves identically, so a coercer sees a working wallet."/>
+                    <TextBox Watermark="Duress password" PasswordChar="&#9679;" Text="{Binding DuressPassword}"/>
+
+                    <StackPanel Orientation="Horizontal" Spacing="18">
+                        <RadioButton GroupName="DuressMode" Content="Generate decoy seed" IsChecked="{Binding CreateNewDuress, Mode=TwoWay}"/>
+                        <RadioButton GroupName="DuressMode" Content="Import decoy seed"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="8" IsVisible="{Binding CreateNewDuress}">
+                        <Button Content="Generate decoy seed" Command="{Binding GenerateDuressSeedCommand}" IsEnabled="{Binding !Busy}" HorizontalAlignment="Left"/>
+                        <TextBox Text="{Binding DuressMnemonic}" IsReadOnly="True" TextWrapping="Wrap"
+                                 FontFamily="Cascadia Mono,Consolas,monospace" MinHeight="56"
+                                 IsVisible="{Binding DuressSeedGenerated}"/>
+                        <Button Content="Download decoy backup (.txt)" Command="{Binding DownloadDuressBackupCommand}"
+                                IsVisible="{Binding DuressSeedGenerated}" HorizontalAlignment="Left"/>
+                    </StackPanel>
+                    <StackPanel Spacing="8" IsVisible="{Binding !CreateNewDuress}">
+                        <TextBox Watermark="Decoy 25-word seed" Text="{Binding DuressMnemonic}"
+                                 AcceptsReturn="True" Height="56" TextWrapping="Wrap"
+                                 FontFamily="Cascadia Mono,Consolas,monospace"/>
+                    </StackPanel>
+
+                    <CheckBox Content="Also wipe the real wallet from this device when the duress password is used"
+                              IsChecked="{Binding WipeRealOnDuress}"/>
+                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#E0A030"
+                               Text="Wipe is irreversible on this device. Only enable it if your real seed is backed up elsewhere."/>
+                </StackPanel>
+
+                <TextBlock Text="{Binding Error}" Foreground="#FF6B6B" TextWrapping="Wrap"
+                           IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+                <Button Content="Create vault" Classes="accent" HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center" Command="{Binding CreateCommand}"
+                        IsEnabled="{Binding !Busy}"/>
+                <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" Height="3"/>
+            </StackPanel>
+        </Border>
+    </ScrollViewer>
+</UserControl>

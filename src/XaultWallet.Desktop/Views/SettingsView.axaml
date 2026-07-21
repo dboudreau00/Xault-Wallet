@@ -4,77 +4,104 @@
              xmlns:conv="clr-namespace:XaultWallet.Desktop"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="620"
+             mc:Ignorable="d" d:DesignWidth="960" d:DesignHeight="700"
              x:Class="XaultWallet.Desktop.Views.SettingsView"
              x:DataType="vm:SettingsViewModel">
 
     <ScrollViewer>
-        <Border Width="620" Margin="0,24" VerticalAlignment="Top" HorizontalAlignment="Center"
-                Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource PanelBorderBrush}"
-                BorderThickness="1" CornerRadius="12" Padding="28">
-            <StackPanel Spacing="16">
+        <Border MaxWidth="720" Margin="24,20" VerticalAlignment="Top" HorizontalAlignment="Center"
+                Classes="card" Padding="28,24">
+            <StackPanel Spacing="14">
                 <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Grid.Column="0" Text="Settings" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="0" Text="Settings" Classes="h1" VerticalAlignment="Center"/>
                     <Button Grid.Column="1" Content="Close" Command="{Binding CloseCommand}"/>
                 </Grid>
 
                 <!-- monero-wallet-rpc binary -->
                 <StackPanel Spacing="6">
-                    <TextBlock Text="monero-wallet-rpc executable" FontWeight="SemiBold"/>
-                    <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="12"
-                               Text="XaultWallet drives the official Monero wallet RPC binary; it does not reimplement Monero's cryptography. Point this at the monero-wallet-rpc from a Monero CLI release."/>
+                    <TextBlock Text="MONERO-WALLET-RPC EXECUTABLE" Classes="eyebrow"/>
+                    <TextBlock TextWrapping="Wrap" Classes="muted"
+                               Text="XaultWallet drives the official Monero wallet RPC binary; it doesn't reimplement Monero's cryptography. Point this at monero-wallet-rpc from a Monero CLI release."/>
                     <Grid ColumnDefinitions="*,8,Auto">
-                        <TextBox Grid.Column="0" Watermark="Path to monero-wallet-rpc (blank = auto-detect)"
+                        <TextBox Grid.Column="0" Classes="mono" FontSize="12.5"
+                                 Watermark="Path to monero-wallet-rpc (blank = auto-detect)"
                                  Text="{Binding WalletRpcBinaryPath}"/>
                         <Button Grid.Column="2" Content="Browse&#8230;" Command="{Binding BrowseCommand}"/>
                     </Grid>
-                    <TextBlock Text="{Binding DefaultBinaryHint}" Opacity="0.45" FontSize="11" TextWrapping="Wrap"/>
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <Button Content="Test binary" Command="{Binding TestBinaryCommand}" IsEnabled="{Binding !Busy}"/>
-                        <TextBlock Text="{Binding BinaryTestResult}" TextWrapping="Wrap" VerticalAlignment="Center"
-                                   MaxWidth="380"
-                                   Foreground="{Binding BinaryTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
-                    </StackPanel>
+                    <TextBlock Text="{Binding DefaultBinaryHint}" Foreground="{StaticResource TextTertiary}"
+                               FontSize="11" TextWrapping="Wrap"/>
+                    <Button Content="Test binary" Command="{Binding TestBinaryCommand}" IsEnabled="{Binding !Busy}"
+                            HorizontalAlignment="Left"/>
+                    <TextBlock Text="{Binding BinaryTestResult}" TextWrapping="Wrap"
+                               IsVisible="{Binding BinaryTestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               Foreground="{Binding BinaryTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
                 </StackPanel>
 
                 <Separator/>
 
                 <!-- Daemon -->
                 <StackPanel Spacing="6">
-                    <TextBlock Text="Default daemon" FontWeight="SemiBold"/>
-                    <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="12"
-                               Text="Used to pre-fill the daemon address when you create a wallet. Existing wallets keep the daemon they were created with."/>
-                    <TextBox Watermark="http://host:port" Text="{Binding DefaultDaemonAddress}"/>
-                    <StackPanel Orientation="Horizontal" Spacing="12">
-                        <TextBlock Text="Network" VerticalAlignment="Center" Opacity="0.6"/>
-                        <ComboBox SelectedIndex="{Binding NetworkIndex}" Width="150">
+                    <TextBlock Text="DEFAULT NODE" Classes="eyebrow"/>
+                    <TextBlock TextWrapping="Wrap" Classes="muted"
+                               Text="Pre-fills the daemon address when you create a wallet. Existing wallets keep the node they were created with."/>
+
+                    <ComboBox x:CompileBindings="False" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding PresetNodes}" SelectedItem="{Binding SelectedPreset}"
+                              PlaceholderText="Choose a reputable public node (optional)…">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Display}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextTertiary}" FontSize="11"
+                               Text="Public nodes are third-party: the operator can see your IP and broadcast transactions, and nodes can go offline. Test before relying on one. For mainnet privacy, run your own node."/>
+
+                    <Grid ColumnDefinitions="Auto,10,*">
+                        <ComboBox Grid.Column="0" SelectedIndex="{Binding NetworkIndex}" Width="128">
                             <ComboBoxItem>Mainnet</ComboBoxItem>
                             <ComboBoxItem>Stagenet</ComboBoxItem>
                             <ComboBoxItem>Testnet</ComboBoxItem>
                         </ComboBox>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <Button Content="Test daemon" Command="{Binding TestDaemonCommand}" IsEnabled="{Binding !Busy}"/>
-                        <TextBlock Text="{Binding DaemonTestResult}" TextWrapping="Wrap" VerticalAlignment="Center"
-                                   MaxWidth="380"
-                                   Foreground="{Binding DaemonTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
-                    </StackPanel>
+                        <TextBox Grid.Column="2" Classes="mono" FontSize="12.5"
+                                 Watermark="http://host:port" Text="{Binding DefaultDaemonAddress}"/>
+                    </Grid>
+                    <Button Content="Test node" Command="{Binding TestDaemonCommand}" IsEnabled="{Binding !Busy}"
+                            HorizontalAlignment="Left"/>
+                    <TextBlock Text="{Binding DaemonTestResult}" TextWrapping="Wrap"
+                               IsVisible="{Binding DaemonTestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               Foreground="{Binding DaemonTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
                 </StackPanel>
 
                 <Separator/>
 
                 <!-- Refresh cadence -->
                 <StackPanel Spacing="6">
-                    <TextBlock Text="Auto-refresh interval (seconds)" FontWeight="SemiBold"/>
-                    <TextBox Text="{Binding AutoRefreshSeconds}" Width="120" HorizontalAlignment="Left"/>
-                    <TextBlock Text="How often the open wallet re-checks balance and history (5&#8211;600s)." Opacity="0.45" FontSize="11"/>
+                    <TextBlock Text="AUTO-REFRESH INTERVAL" Classes="eyebrow"/>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBox Text="{Binding AutoRefreshSeconds}" Width="100"/>
+                        <TextBlock Text="seconds" Classes="muted" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="How often the open wallet re-checks balance and history (5&#8211;600s)."
+                               Foreground="{StaticResource TextTertiary}" FontSize="11"/>
+                </StackPanel>
+
+                <Separator/>
+
+                <!-- About -->
+                <StackPanel Spacing="6">
+                    <TextBlock Text="ABOUT" Classes="eyebrow"/>
+                    <TextBlock Text="XaultWallet" FontWeight="SemiBold"/>
+                    <TextBlock Text="Brought to life in harmony." Classes="muted"/>
+                    <Button Classes="link" Content="https://dboudreau.dev" Click="OpenLink_Click"
+                            HorizontalAlignment="Left"/>
                 </StackPanel>
 
                 <Separator/>
 
                 <StackPanel Orientation="Horizontal" Spacing="12">
                     <Button Content="Save" Classes="accent" Command="{Binding SaveCommand}"/>
-                    <TextBlock Text="{Binding SavedMessage}" VerticalAlignment="Center" Foreground="#4CAF7D"/>
+                    <TextBlock Text="{Binding SavedMessage}" VerticalAlignment="Center" Foreground="{StaticResource SuccessBrush}"/>
                 </StackPanel>
             </StackPanel>
         </Border>

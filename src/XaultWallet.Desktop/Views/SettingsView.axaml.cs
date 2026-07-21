@@ -1,5 +1,7 @@
+using System;
 using System.Threading.Tasks;
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using XaultWallet.Desktop.ViewModels;
 
@@ -33,5 +35,21 @@ public partial class SettingsView : UserControl
         });
 
         return files.Count > 0 ? files[0].Path.LocalPath : null;
+    }
+
+    private async void OpenLink_Click(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            TopLevel? top = TopLevel.GetTopLevel(this);
+            if (top?.Launcher is { } launcher)
+            {
+                await launcher.LaunchUriAsync(new Uri("https://dboudreau.dev"));
+            }
+        }
+        catch
+        {
+            // Browser launch can be unavailable on some platforms; ignore.
+        }
     }
 }

@@ -4,79 +4,122 @@
              xmlns:conv="clr-namespace:XaultWallet.Desktop"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="560"
+             mc:Ignorable="d" d:DesignWidth="860" d:DesignHeight="640"
              x:Class="XaultWallet.Desktop.Views.WalletView"
              x:DataType="vm:WalletViewModel">
 
-    <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,*,Auto">
-        <!-- Balance header -->
-        <Border Grid.Row="0" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource PanelBorderBrush}"
-                BorderThickness="1" CornerRadius="12" Padding="20">
-            <Grid ColumnDefinitions="*,Auto">
-                <StackPanel Grid.Column="0" Spacing="2">
-                    <TextBlock Text="Balance" Opacity="0.5" FontSize="12"/>
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="{Binding Balance, StringFormat='{}{0:0.############}'}" FontSize="30" FontWeight="Bold"/>
-                        <TextBlock Text="XMR" FontSize="16" VerticalAlignment="Bottom" Margin="0,0,0,6" Opacity="0.6"/>
+    <Grid Margin="24" RowDefinitions="Auto,Auto,*">
+
+        <!-- ============ Balance + node sync ============ -->
+        <Border Grid.Row="0" Classes="card" Padding="24">
+            <StackPanel Spacing="20">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0" Spacing="3">
+                        <TextBlock Text="TOTAL BALANCE" Classes="eyebrow"/>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Classes="mono" FontSize="36" FontWeight="Bold"
+                                       Text="{Binding Balance, StringFormat='{}{0:0.############}'}"/>
+                            <TextBlock Text="XMR" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Bottom"
+                                       Margin="0,0,0,8" Foreground="{StaticResource TextTertiary}"/>
+                        </StackPanel>
+                        <TextBlock Classes="muted"
+                                   Text="{Binding UnlockedBalance, StringFormat='Spendable now: {0:0.############} XMR'}"/>
                     </StackPanel>
-                    <TextBlock Text="{Binding UnlockedBalance, StringFormat='Unlocked: {0:0.############} XMR'}" Opacity="0.6" FontSize="12"/>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+                        <Button Content="Refresh" Command="{Binding RefreshCommand}" IsEnabled="{Binding IsReady}"/>
+                        <Button Content="Lock" Classes="accent" Command="{Binding LockCommand}"/>
+                    </StackPanel>
+                </Grid>
+
+                <Separator/>
+
+                <!-- Node sync tracker (the signature readout) -->
+                <StackPanel Spacing="9">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <Ellipse Grid.Column="0" Width="9" Height="9" Margin="0,0,9,0" VerticalAlignment="Center"
+                                 Fill="{Binding IsSynced, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+                        <TextBlock Grid.Column="1" Classes="mono" FontSize="12.5" VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextSecondary}" Text="{Binding SyncText}"/>
+                        <TextBlock Grid.Column="2" Classes="eyebrow" VerticalAlignment="Center" Text="NODE SYNC"/>
+                    </Grid>
+                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding SyncProgress}"/>
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <Button Content="Refresh" Command="{Binding RefreshCommand}" IsEnabled="{Binding IsReady}"/>
-                    <Button Content="Lock" Classes="accent" Command="{Binding LockCommand}"/>
-                </StackPanel>
-            </Grid>
+            </StackPanel>
         </Border>
 
-        <TextBlock Grid.Row="1" Text="{Binding Status}" Opacity="0.5" FontSize="12" Margin="4,8"/>
-
-        <!-- Startup failure banner with retry -->
-        <Border Grid.Row="2" IsVisible="{Binding StartupFailed}" Margin="0,0,0,8"
-                Background="#2A1A1A" BorderBrush="#5A2A2A" BorderThickness="1" CornerRadius="8" Padding="14">
+        <!-- ============ Startup failure banner ============ -->
+        <Border Grid.Row="1" IsVisible="{Binding StartupFailed}" Margin="0,14,0,0"
+                Background="#2A1414" BorderBrush="#7A2E2E" BorderThickness="1" CornerRadius="12" Padding="16">
             <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Grid.Column="0" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="#FFB4B4"
-                           Text="The wallet backend didn't start. Check that monero-wallet-rpc is installed and the daemon is reachable, then retry."/>
+                <TextBlock Grid.Column="0" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="#F0B4B4"
+                           Text="The wallet backend didn't start. Check that monero-wallet-rpc is set in Settings and your node is reachable, then retry."/>
                 <Button Grid.Column="1" Content="Retry" Command="{Binding RetryStartupCommand}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
 
-        <TabControl Grid.Row="3" Margin="0,4" IsEnabled="{Binding IsReady}">
+        <!-- ============ Tabs ============ -->
+        <TabControl Grid.Row="2" Margin="0,16,0,0" IsEnabled="{Binding IsReady}">
+
             <TabItem Header="Receive">
-                <StackPanel Spacing="12" Margin="4,12">
-                    <TextBlock Text="Your address" Opacity="0.6"/>
-                    <TextBox Text="{Binding PrimaryAddress}" IsReadOnly="True" TextWrapping="Wrap"/>
-                    <Button Content="New subaddress" Command="{Binding NewAddressCommand}" HorizontalAlignment="Left"/>
+                <StackPanel Spacing="12" Margin="2,16,2,2">
+                    <TextBlock Text="YOUR ADDRESS" Classes="eyebrow"/>
+                    <Border Background="{StaticResource InsetBg}" BorderBrush="{StaticResource BorderSubtle}"
+                            BorderThickness="1" CornerRadius="10" Padding="14,12">
+                        <TextBox Classes="mono" Text="{Binding PrimaryAddress}" IsReadOnly="True"
+                                 TextWrapping="Wrap" BorderThickness="0" Background="Transparent"
+                                 Padding="0" MinHeight="0" FontSize="12.5"
+                                 Watermark="Your address appears once the wallet is open"/>
+                    </Border>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Copy address" Click="CopyAddress_Click"/>
+                        <Button Content="New subaddress" Command="{Binding NewAddressCommand}"/>
+                    </StackPanel>
+                    <TextBlock Classes="muted" TextWrapping="Wrap"
+                               Text="Share this address to receive XMR. A new subaddress gives you a fresh, unlinkable address for the same wallet."/>
                 </StackPanel>
             </TabItem>
 
             <TabItem Header="Send">
-                <StackPanel Spacing="12" Margin="4,12" MaxWidth="520" HorizontalAlignment="Left">
-                    <TextBox Watermark="Destination address" Text="{Binding SendAddress}"/>
-                    <TextBox Watermark="Amount (XMR)" Text="{Binding SendAmount}"/>
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="Priority" VerticalAlignment="Center" Opacity="0.6"/>
-                        <ComboBox SelectedIndex="{Binding SendPriority}" Width="160">
-                            <ComboBoxItem>Default</ComboBoxItem>
-                            <ComboBoxItem>Low</ComboBoxItem>
-                            <ComboBoxItem>Medium</ComboBoxItem>
-                            <ComboBoxItem>High</ComboBoxItem>
-                        </ComboBox>
+                <StackPanel Spacing="14" Margin="2,16,2,2" MaxWidth="560" HorizontalAlignment="Left">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="DESTINATION ADDRESS" Classes="eyebrow"/>
+                        <TextBox Classes="mono" Watermark="Recipient's Monero address" Text="{Binding SendAddress}"/>
                     </StackPanel>
-                    <Button Content="Send" Classes="accent" Command="{Binding SendCommand}" IsEnabled="{Binding !Sending}" HorizontalAlignment="Left"/>
-                    <TextBlock Text="{Binding SendResult}" TextWrapping="Wrap" Opacity="0.8"/>
+                    <Grid ColumnDefinitions="*,12,Auto">
+                        <StackPanel Grid.Column="0" Spacing="6">
+                            <TextBlock Text="AMOUNT (XMR)" Classes="eyebrow"/>
+                            <TextBox Classes="mono" Watermark="0.00" Text="{Binding SendAmount}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Spacing="6">
+                            <TextBlock Text="PRIORITY" Classes="eyebrow"/>
+                            <ComboBox SelectedIndex="{Binding SendPriority}" MinWidth="150">
+                                <ComboBoxItem>Default</ComboBoxItem>
+                                <ComboBoxItem>Low</ComboBoxItem>
+                                <ComboBoxItem>Medium</ComboBoxItem>
+                                <ComboBoxItem>High</ComboBoxItem>
+                            </ComboBox>
+                        </StackPanel>
+                    </Grid>
+                    <Button Content="Review &amp; send" Classes="accent" HorizontalAlignment="Left"
+                            Command="{Binding SendCommand}" IsEnabled="{Binding !Sending}"/>
+                    <ProgressBar IsIndeterminate="True" IsVisible="{Binding Sending}" Height="3"/>
+                    <TextBlock Text="{Binding SendResult}" Classes="mono" FontSize="12" TextWrapping="Wrap"
+                               Foreground="{StaticResource TextSecondary}"
+                               IsVisible="{Binding SendResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                 </StackPanel>
             </TabItem>
 
             <TabItem Header="History">
-                <DataGrid ItemsSource="{Binding History}" IsReadOnly="True" Margin="0,8"
+                <DataGrid ItemsSource="{Binding History}" IsReadOnly="True" Margin="0,14,0,0"
                           x:CompileBindings="False"
-                          GridLinesVisibility="Horizontal" HeadersVisibility="Column">
+                          GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                          RowHeight="38">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="90"/>
-                        <DataGridTextColumn Header="Amount"
-                            Binding="{Binding Amount, Converter={x:Static conv:AtomicToXmrConverter.Instance}}" Width="140"/>
+                        <DataGridTextColumn Header="Amount (XMR)"
+                            Binding="{Binding Amount, Converter={x:Static conv:AtomicToXmrConverter.Instance}}" Width="150"/>
                         <DataGridTextColumn Header="Height" Binding="{Binding Height}" Width="110"/>
-                        <DataGridTextColumn Header="Tx" Binding="{Binding TxId}" Width="*"/>
+                        <DataGridTextColumn Header="Transaction" Binding="{Binding TxId}" Width="*"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </TabItem>

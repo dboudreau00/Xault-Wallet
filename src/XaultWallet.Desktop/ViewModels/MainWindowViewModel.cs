@@ -19,15 +19,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public MainWindowViewModel()
     {
-        // First run → create-wallet flow; otherwise → unlock.
-        if (VaultManager.Exists(AppServices.Instance.VaultPath))
-        {
-            _current = BuildUnlock();
-        }
-        else
-        {
-            _current = BuildCreate();
-        }
+        // Show the startup splash first; it runs node + binary checks in the background,
+        // then routes to create-wallet (no vault) or unlock (vault exists).
+        var startup = new StartupViewModel();
+        startup.Ready += () => Current = startup.VaultExists ? BuildUnlock() : BuildCreate();
+        _current = startup;
     }
 
     private UnlockViewModel BuildUnlock()

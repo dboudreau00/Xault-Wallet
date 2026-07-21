@@ -3,23 +3,55 @@
         xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="620"
+        mc:Ignorable="d" d:DesignWidth="920" d:DesignHeight="660"
         x:Class="XaultWallet.Desktop.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="XaultWallet" Width="900" Height="620"
-        MinWidth="720" MinHeight="520"
-        Background="#141416">
+        Title="XaultWallet" Width="1080" Height="760"
+        MinWidth="900" MinHeight="600"
+        Icon="/Assets/xault.ico"
+        Background="{StaticResource AppBg}"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="NoChrome"
+        ExtendClientAreaTitleBarHeightHint="-1">
 
     <Grid RowDefinitions="Auto,*">
-        <Border Grid.Row="0" Background="#0F0F11" Padding="16,10" BorderBrush="#242428" BorderThickness="0,0,0,1">
-            <Grid ColumnDefinitions="Auto,*,Auto">
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
-                    <Border Width="22" Height="22" CornerRadius="11" Background="{StaticResource XmrOrangeBrush}"/>
-                    <TextBlock Text="XaultWallet" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                    <TextBlock Text="Monero · encrypted at rest" FontSize="12" Opacity="0.5" VerticalAlignment="Center"/>
+        <!-- Custom title bar: our own chrome extended to the top edge, draggable -->
+        <Border Grid.Row="0" Background="#101013" BorderBrush="{StaticResource BorderSubtle}"
+                BorderThickness="0,0,0,1" PointerPressed="TitleBar_PointerPressed"
+                DoubleTapped="TitleBar_DoubleTapped">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto" Height="46">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="11"
+                            VerticalAlignment="Center" Margin="18,0,0,0">
+                    <Canvas Width="20" Height="20" VerticalAlignment="Center">
+                        <Line StartPoint="4,3.5" EndPoint="16,16.5" Stroke="{StaticResource AccentBrush}"
+                              StrokeThickness="3" StrokeLineCap="Round"/>
+                        <Line StartPoint="16,3.5" EndPoint="4,16.5" Stroke="{StaticResource TextPrimary}"
+                              StrokeThickness="3" StrokeLineCap="Round"/>
+                    </Canvas>
+                    <TextBlock Text="Xault" FontSize="16.5" FontWeight="Bold" VerticalAlignment="Center"/>
+                    <TextBlock Text="Wallet" FontSize="16.5" FontWeight="Light" VerticalAlignment="Center"
+                               Margin="-6,0,0,0" Foreground="{StaticResource TextSecondary}"/>
                 </StackPanel>
-                <Button Grid.Column="2" Content="Settings" Command="{Binding OpenSettingsCommand}"
-                        IsVisible="{Binding !SettingsOpen}" VerticalAlignment="Center"/>
+
+                <Button Grid.Column="1" Content="Settings" Command="{Binding OpenSettingsCommand}"
+                        IsVisible="{Binding !SettingsOpen}" VerticalAlignment="Center"
+                        HorizontalAlignment="Right" Margin="0,0,10,0"/>
+
+                <!-- Window controls -->
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Stretch">
+                    <Button Classes="chrome" Click="Minimize_Click" ToolTip.Tip="Minimize">
+                        <Rectangle Width="11" Height="1.5" Fill="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
+                    </Button>
+                    <Button Classes="chrome" Click="MaxRestore_Click" ToolTip.Tip="Maximize">
+                        <Border Width="10" Height="10" BorderBrush="{StaticResource TextSecondary}" BorderThickness="1.5" CornerRadius="2"/>
+                    </Button>
+                    <Button Classes="chrome chromeClose" Click="Close_Click" ToolTip.Tip="Close">
+                        <Canvas Width="12" Height="12">
+                            <Line StartPoint="1,1" EndPoint="11,11" Stroke="{StaticResource TextSecondary}" StrokeThickness="1.5"/>
+                            <Line StartPoint="11,1" EndPoint="1,11" Stroke="{StaticResource TextSecondary}" StrokeThickness="1.5"/>
+                        </Canvas>
+                    </Button>
+                </StackPanel>
             </Grid>
         </Border>
 

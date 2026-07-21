@@ -3,35 +3,62 @@
              xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="560"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="620"
              x:Class="XaultWallet.Desktop.Views.UnlockView"
              x:DataType="vm:UnlockViewModel">
 
     <Grid>
-        <Border Width="380" VerticalAlignment="Center" HorizontalAlignment="Center"
-                Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource PanelBorderBrush}"
-                BorderThickness="1" CornerRadius="12" Padding="28">
-            <StackPanel Spacing="16">
-                <TextBlock Text="Unlock wallet" FontSize="20" FontWeight="SemiBold"/>
-                <TextBlock Text="Enter your password to decrypt the vault." Opacity="0.6" TextWrapping="Wrap"/>
+        <StackPanel Width="400" Spacing="24" VerticalAlignment="Center" HorizontalAlignment="Center">
 
-                <TextBox Watermark="Password"
-                         PasswordChar="●"
-                         Text="{Binding Password}"
-                         IsEnabled="{Binding !Busy}">
-                    <TextBox.KeyBindings>
-                        <KeyBinding Gesture="Enter" Command="{Binding UnlockCommand}"/>
-                    </TextBox.KeyBindings>
-                </TextBox>
+            <!-- X brand mark: two interlocking strokes on a vault tile -->
+            <Border Width="66" Height="66" CornerRadius="18" HorizontalAlignment="Center"
+                    Background="{StaticResource Surface}" BorderBrush="{StaticResource BorderStrong}"
+                    BorderThickness="1" BoxShadow="0 10 30 -6 #55000000">
+                <Canvas Width="66" Height="66">
+                    <Line StartPoint="21,19" EndPoint="45,47" Stroke="{StaticResource AccentBrush}"
+                          StrokeThickness="6.5" StrokeLineCap="Round"/>
+                    <Line StartPoint="45,19" EndPoint="21,47" Stroke="{StaticResource TextPrimary}"
+                          StrokeThickness="6.5" StrokeLineCap="Round"/>
+                    <Ellipse Canvas.Left="29" Canvas.Top="29" Width="8" Height="8"
+                             Fill="{StaticResource Surface}" Stroke="{StaticResource AccentBrush}" StrokeThickness="2"/>
+                </Canvas>
+            </Border>
 
-                <TextBlock Text="{Binding Error}" Foreground="#FF6B6B" TextWrapping="Wrap"
-                           IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-
-                <Button Content="Unlock" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                        Classes="accent" Command="{Binding UnlockCommand}" IsEnabled="{Binding !Busy}"/>
-
-                <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" Height="3"/>
+            <StackPanel Spacing="4">
+                <TextBlock Text="Welcome back" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                <TextBlock Text="Enter your password to unlock the vault" Classes="muted"
+                           HorizontalAlignment="Center"/>
             </StackPanel>
-        </Border>
+
+            <!-- Login card -->
+            <Border Classes="card" Padding="24">
+                <StackPanel Spacing="14">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="PASSWORD" Classes="eyebrow"/>
+                        <TextBox Watermark="Enter your password"
+                                 PasswordChar="●"
+                                 Text="{Binding Password}"
+                                 IsEnabled="{Binding !Busy}">
+                            <TextBox.KeyBindings>
+                                <KeyBinding Gesture="Enter" Command="{Binding UnlockCommand}"/>
+                            </TextBox.KeyBindings>
+                        </TextBox>
+                    </StackPanel>
+
+                    <TextBlock Text="{Binding Error}" Foreground="{StaticResource DangerBrush}"
+                               TextWrapping="Wrap" FontSize="12.5"
+                               IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+                    <Button Content="Unlock" Classes="accent" HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center" Command="{Binding UnlockCommand}"
+                            IsEnabled="{Binding !Busy}"/>
+
+                    <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" Height="3"/>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="Your seed is encrypted with AES-256-GCM · Argon2id" Classes="eyebrow"
+                       HorizontalAlignment="Center" Opacity="0.7"/>
+        </StackPanel>
     </Grid>
 </UserControl>

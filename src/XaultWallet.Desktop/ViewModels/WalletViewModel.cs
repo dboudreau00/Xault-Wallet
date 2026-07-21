@@ -24,6 +24,12 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private ulong _height;
     [ObservableProperty] private string _primaryAddress = string.Empty;
 
+    // Node sync tracker
+    [ObservableProperty] private double _syncProgress;          // 0..100
+    [ObservableProperty] private ulong _daemonHeight;
+    [ObservableProperty] private bool _isSynced;
+    [ObservableProperty] private string _syncText = "Connecting to node\u2026";
+
     // Send tab
     [ObservableProperty] private string _sendAddress = string.Empty;
     [ObservableProperty] private decimal _sendAmount;
@@ -88,11 +94,15 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     {
         try
         {
-            int seconds = Math.Clamp(AppServices.Instance.AutoRefreshSeconds, 5, 600);
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(seconds));
-            while (await timer.WaitForNextTickAsync(ct))
+            while (!ct.IsCancellationRequested)
             {
                 await SoftRefreshAsync();
+
+                // Snappy updates while the node is catching up; relaxed once synced.
+                int delayMs = IsSynced
+                    ? Math.Clamp(AppServices.Instance.AutoRefreshSeconds, 5, 600) * 1000
+                    : 3000;
+                await Task.Delay(delayMs, ct);
             }
         }
         catch (OperationCanceledException)
@@ -124,24 +134,64 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             (Balance, UnlockedBalance) = await _wallet.GetBalanceAsync(_cts.Token);
             Height = await _wallet.GetHeightAsync(_cts.Token);
 
+            // Node sync tracker: compare the wallet's scanned height against the daemon's tip.
+            try
+            {
+                DaemonHeight = await MoneroDiagnostics.ProbeDaemonAsync(_secrets.DaemonAddress, _cts.Token);
+            }
+            catch
+            {
+                DaemonHeight = 0; // daemon momentarily unreachable; keep last balances
+            }
+            UpdateSyncStatus();
+
             IReadOnlyList<TransferEntry> entries = await _wallet.GetHistoryAsync(_cts.Token);
             History.Clear();
             foreach (TransferEntry t in entries)
             {
                 History.Add(t);
             }
-
-            Status = $"Synced to height {Height}";
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            Status = "Sync issue: " + Friendly(ex);
+            SyncText = "Sync issue: " + Friendly(ex);
         }
         finally
         {
             _refreshGate.Release();
         }
+    }
+
+    private void UpdateSyncStatus()
+    {
+        ulong wallet = Height;
+        ulong node = DaemonHeight;
+
+        if (node == 0)
+        {
+            IsSynced = false;
+            SyncProgress = 0;
+            SyncText = "Connecting to node\u2026";
+            Status = SyncText;
+            return;
+        }
+
+        if (wallet + 1 >= node)
+        {
+            IsSynced = true;
+            SyncProgress = 100;
+            SyncText = $"Synced \u00b7 block {node:N0}";
+        }
+        else
+        {
+            IsSynced = false;
+            SyncProgress = Math.Clamp(100.0 * wallet / node, 0, 99.9);
+            ulong behind = node - wallet;
+            SyncText = $"Syncing \u00b7 {SyncProgress:0.0}%  \u00b7  {wallet:N0} / {node:N0}  ({behind:N0} behind)";
+        }
+
+        Status = SyncText;
     }
 
     [RelayCommand]

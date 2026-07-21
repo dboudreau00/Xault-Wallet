@@ -55,6 +55,10 @@
             </Grid>
         </Border>
 
-        <ContentControl Grid.Row="1" Content="{Binding Current}" Margin="0"/>
+        <TransitioningContentControl Grid.Row="1" Content="{Binding Current}" Margin="0">
+            <TransitioningContentControl.PageTransition>
+                <CrossFade Duration="0:0:0.30"/>
+            </TransitioningContentControl.PageTransition>
+        </TransitioningContentControl>
     </Grid>
 </Window>

@@ -23,15 +23,17 @@ public static class RemoteNodes
     public static IReadOnlyList<RemoteNode> All { get; } = new[]
     {
         // ---- Mainnet (real funds) ----
-        new RemoteNode("Cake Wallet (mainnet)",  "http://xmr-node.cakewallet.com:18081", 0),
-        new RemoteNode("Rino (mainnet)",         "http://node.community.rino.io:18081",  0),
-        new RemoteNode("MoneroDevs (mainnet)",   "http://node.monerodevs.org:18089",     0),
+        new RemoteNode("Cake Wallet (mainnet)",   "http://xmr-node.cakewallet.com:18081",  0),
+        new RemoteNode("Rino (mainnet)",          "http://node.community.rino.io:18081",   0),
+        new RemoteNode("MoneroDevs (mainnet)",    "http://node.monerodevs.org:18089",      0),
+        new RemoteNode("SethForPrivacy (mainnet)","http://node.sethforprivacy.com:18089",  0),
+        new RemoteNode("HashVault (mainnet)",     "http://nodes.hashvault.pro:18081",      0),
 
         // ---- Stagenet (mainnet-like, no value) ----
-        new RemoteNode("Rino (stagenet)",        "http://stagenet.community.rino.io:38081", 1),
-        new RemoteNode("MoneroDevs (stagenet)",  "http://node.monerodevs.org:38089",        1),
+        new RemoteNode("Rino (stagenet)",         "http://stagenet.community.rino.io:38081", 1),
+        new RemoteNode("MoneroDevs (stagenet)",   "http://node.monerodevs.org:38089",        1),
 
         // ---- Testnet (developer network, no value) ----
-        new RemoteNode("MoneroDevs (testnet)",   "http://node.monerodevs.org:28089",     2),
+        new RemoteNode("MoneroDevs (testnet)",    "http://node.monerodevs.org:28089",     2),
     };
 }

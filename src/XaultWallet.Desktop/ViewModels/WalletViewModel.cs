@@ -37,6 +37,18 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private string _sendResult = string.Empty;
     [ObservableProperty] private bool _sending;
 
+    // Payment proof (the tx key from the most recent send — safe to share for explorer verification)
+    [ObservableProperty] private bool _hasLastTx;
+    [ObservableProperty] private string _lastTxId = string.Empty;
+    [ObservableProperty] private string _lastTxKey = string.Empty;
+
+    // Verify-a-payment panel
+    [ObservableProperty] private string _verifyTxId = string.Empty;
+    [ObservableProperty] private string _verifyTxKey = string.Empty;
+    [ObservableProperty] private string _verifyAddress = string.Empty;
+    [ObservableProperty] private string _verifyResult = string.Empty;
+    [ObservableProperty] private bool _verifyOk;
+
     public ObservableCollection<TransferEntry> History { get; } = new();
 
     public string WalletLabel => _secrets.Label;
@@ -145,11 +157,21 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             }
             UpdateSyncStatus();
 
-            IReadOnlyList<TransferEntry> entries = await _wallet.GetHistoryAsync(_cts.Token);
-            History.Clear();
-            foreach (TransferEntry t in entries)
+            // History often isn't available until the wallet finishes scanning; a transient
+            // get_transfers failure here should NOT flip the sync status. Keep last known list.
+            try
             {
-                History.Add(t);
+                IReadOnlyList<TransferEntry> entries = await _wallet.GetHistoryAsync(_cts.Token);
+                History.Clear();
+                foreach (TransferEntry t in entries)
+                {
+                    History.Add(t);
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                Log.Info("Transaction history not ready yet: " + ex.Message);
             }
         }
         catch (OperationCanceledException) { }
@@ -258,7 +280,13 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         {
             uint priority = (uint)Math.Clamp(SendPriority, 0, 3);
             TransferResult r = await _wallet.SendAsync(SendAddress.Trim(), SendAmount, priority, _cts.Token);
-            SendResult = $"Sent. tx: {r.TxHash} (fee {MoneroRpcClient.AtomicToXmr(r.Fee)} XMR)";
+            SendResult = $"Sent {SendAmount} XMR (fee {MoneroRpcClient.AtomicToXmr(r.Fee)} XMR).";
+
+            // Surface the transaction key so the payment can be proven on an explorer.
+            LastTxId = r.TxHash;
+            LastTxKey = r.TxKey;
+            HasLastTx = !string.IsNullOrWhiteSpace(r.TxHash);
+
             Log.Info("Transfer submitted.");
             SendAddress = string.Empty;
             SendAmount = 0;
@@ -275,6 +303,57 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         finally
         {
             Sending = false;
+        }
+    }
+
+    /// <summary>Copy the last send's txid + tx key into the verify panel as a convenience.</summary>
+    [RelayCommand]
+    private void PrefillVerifyFromLast()
+    {
+        VerifyTxId = LastTxId;
+        VerifyTxKey = LastTxKey;
+        VerifyResult = string.Empty;
+    }
+
+    [RelayCommand]
+    private async Task VerifyPaymentAsync()
+    {
+        VerifyResult = string.Empty;
+        VerifyOk = false;
+
+        if (!IsReady)
+        {
+            VerifyResult = "Wallet isn't ready yet.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(VerifyTxId) || string.IsNullOrWhiteSpace(VerifyTxKey) || string.IsNullOrWhiteSpace(VerifyAddress))
+        {
+            VerifyResult = "Enter the transaction ID, transaction key, and destination address.";
+            return;
+        }
+
+        try
+        {
+            (ulong received, ulong confirmations, bool inPool) =
+                await _wallet.CheckTxKeyAsync(VerifyTxId, VerifyTxKey, VerifyAddress, _cts.Token);
+
+            if (received == 0)
+            {
+                VerifyOk = false;
+                VerifyResult = "No payment to that address was found in this transaction.";
+            }
+            else
+            {
+                VerifyOk = true;
+                string status = inPool ? "in mempool (0 confirmations)" : $"{confirmations:N0} confirmation(s)";
+                VerifyResult = $"Verified: that address received {MoneroRpcClient.AtomicToXmr(received)} XMR — {status}.";
+            }
+        }
+        catch (Exception ex)
+        {
+            VerifyOk = false;
+            VerifyResult = "Couldn't verify: " + Friendly(ex);
         }
     }
 

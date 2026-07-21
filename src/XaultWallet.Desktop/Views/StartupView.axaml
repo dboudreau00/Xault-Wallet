@@ -7,50 +7,100 @@
              x:Class="XaultWallet.Desktop.Views.StartupView"
              x:DataType="vm:StartupViewModel">
 
+    <!-- Opacity-only animations: the one primitive Avalonia is guaranteed to interpolate.
+         Staggered via Delay so the entrance still feels sequenced. -->
+    <UserControl.Styles>
+        <Style Selector="Ellipse.glowPulse">
+            <Style.Animations>
+                <Animation Duration="0:0:2.8" IterationCount="INFINITE" Easing="SineEaseInOut">
+                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0.42"/></KeyFrame>
+                    <KeyFrame Cue="50%"><Setter Property="Opacity" Value="0.12"/></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0.42"/></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
+        <Style Selector="Border.fadeSeq">
+            <Setter Property="Opacity" Value="0"/>
+            <Style.Animations>
+                <Animation Duration="0:0:0.5" FillMode="Forward" Easing="CubicEaseOut">
+                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
+        <Style Selector="Ellipse.fadeDot">
+            <Setter Property="Opacity" Value="0"/>
+            <Style.Animations>
+                <Animation Duration="0:0:0.4" Delay="0:0:0.35" FillMode="Forward" Easing="CubicEaseOut">
+                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
+        <Style Selector="StackPanel.fadeA">
+            <Setter Property="Opacity" Value="0"/>
+            <Style.Animations>
+                <Animation Duration="0:0:0.5" Delay="0:0:0.3" FillMode="Forward" Easing="CubicEaseOut">
+                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
+        <Style Selector="StackPanel.fadeB">
+            <Setter Property="Opacity" Value="0"/>
+            <Style.Animations>
+                <Animation Duration="0:0:0.5" Delay="0:0:0.55" FillMode="Forward" Easing="CubicEaseOut">
+                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+    </UserControl.Styles>
+
     <Grid>
-        <StackPanel Width="360" Spacing="26" VerticalAlignment="Center" HorizontalAlignment="Center">
+        <StackPanel Width="380" Spacing="28" VerticalAlignment="Center" HorizontalAlignment="Center">
 
-            <!-- X brand mark with a soft pulse while checks run -->
-            <Border Width="80" Height="80" CornerRadius="22" HorizontalAlignment="Center"
-                    Background="{StaticResource Surface}" BorderBrush="{StaticResource BorderStrong}"
-                    BorderThickness="1" BoxShadow="0 14 40 -8 #66000000">
-                <Border.Styles>
-                    <Style Selector="Canvas.pulse">
-                        <Style.Animations>
-                            <Animation Duration="0:0:1.6" IterationCount="INFINITE" Easing="SineEaseInOut">
-                                <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1.0"/></KeyFrame>
-                                <KeyFrame Cue="50%"><Setter Property="Opacity" Value="0.72"/></KeyFrame>
-                                <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1.0"/></KeyFrame>
-                            </Animation>
-                        </Style.Animations>
-                    </Style>
-                </Border.Styles>
-                <Canvas Width="80" Height="80" Classes="pulse">
-                    <Line StartPoint="26,24" EndPoint="54,56" Stroke="{StaticResource AccentBrush}"
-                          StrokeThickness="8" StrokeLineCap="Round"/>
-                    <Line StartPoint="54,24" EndPoint="26,56" Stroke="{StaticResource TextPrimary}"
-                          StrokeThickness="8" StrokeLineCap="Round"/>
-                    <Ellipse Canvas.Left="35" Canvas.Top="35" Width="10" Height="10"
-                             Fill="{StaticResource Surface}" Stroke="{StaticResource AccentBrush}" StrokeThickness="2.5"/>
-                </Canvas>
-            </Border>
+            <!-- X badge with an ambient glow (glow pulses; the mark fades in) -->
+            <Grid Width="150" Height="150" HorizontalAlignment="Center">
+                <Ellipse Classes="glowPulse" Width="140" Height="140" HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Fill="{StaticResource AccentBrush}"/>
 
-            <StackPanel Spacing="5">
+                <Border Classes="fadeSeq" Width="86" Height="86" CornerRadius="24"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Background="{StaticResource Surface}" BorderBrush="{StaticResource BorderStrong}"
+                        BorderThickness="1" BoxShadow="0 16 44 -8 #77000000">
+                    <Grid>
+                        <Canvas Width="86" Height="86">
+                            <Line StartPoint="27,25" EndPoint="59,61" Stroke="{StaticResource AccentBrush}"
+                                  StrokeThickness="8.5" StrokeLineCap="Round"/>
+                            <Line StartPoint="59,25" EndPoint="27,61" Stroke="{StaticResource TextPrimary}"
+                                  StrokeThickness="8.5" StrokeLineCap="Round"/>
+                        </Canvas>
+                        <Ellipse Classes="fadeDot" Width="11" Height="11" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                 Fill="{StaticResource Surface}" Stroke="{StaticResource AccentBrush}" StrokeThickness="2.5"/>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <StackPanel Classes="fadeA" Spacing="5">
                 <TextBlock HorizontalAlignment="Center">
-                    <Run Text="Xault" FontSize="22" FontWeight="Bold"/><Run Text="Wallet" FontSize="22" FontWeight="Light" Foreground="{StaticResource TextSecondary}"/>
+                    <Run Text="Xault" FontSize="24" FontWeight="Bold"/><Run Text="Wallet" FontSize="24" FontWeight="Light" Foreground="{StaticResource TextSecondary}"/>
                 </TextBlock>
                 <TextBlock Text="{Binding Status}" Classes="muted" HorizontalAlignment="Center"/>
             </StackPanel>
 
-            <StackPanel Spacing="14">
+            <StackPanel Classes="fadeB" Spacing="14">
                 <ProgressBar IsIndeterminate="True" IsVisible="{Binding Checking}" Height="3" Width="220"
                              HorizontalAlignment="Center"/>
                 <TextBlock Text="{Binding Detail}" Classes="eyebrow" HorizontalAlignment="Center"
                            TextWrapping="Wrap" TextAlignment="Center" MaxWidth="320"/>
+                <Button Content="Continue anyway" Command="{Binding ContinueCommand}"
+                        IsVisible="{Binding Checking}" HorizontalAlignment="Center"/>
             </StackPanel>
-
-            <Button Content="Continue anyway" Command="{Binding ContinueCommand}"
-                    IsVisible="{Binding Checking}" HorizontalAlignment="Center"/>
         </StackPanel>
     </Grid>
 </UserControl>

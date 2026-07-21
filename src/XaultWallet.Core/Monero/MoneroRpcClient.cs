@@ -160,6 +160,18 @@ public sealed class MoneroRpcClient : IDisposable
     public Task<GetTransfersResult> GetTransfersAsync(bool @in = true, bool @out = true, bool pending = true, CancellationToken ct = default) =>
         CallAsync<GetTransfersResult>("get_transfers", new { @in, @out, pending, pool = pending }, ct);
 
+    // ---- Payment proof (transaction key) ----
+
+    /// <summary>Get the transaction private key for an outgoing tx. Safe to share to prove a
+    /// specific payment (it does NOT let anyone spend your funds).</summary>
+    public Task<QueryKeyResult> GetTxKeyAsync(string txid, CancellationToken ct = default) =>
+        CallAsync<QueryKeyResult>("get_tx_key", new { txid }, ct);
+
+    /// <summary>Verify a payment: given txid + tx key + destination address, returns how much
+    /// that address received and how many confirmations it has.</summary>
+    public Task<CheckTxKeyResult> CheckTxKeyAsync(string txid, string txKey, string address, CancellationToken ct = default) =>
+        CallAsync<CheckTxKeyResult>("check_tx_key", new { txid, tx_key = txKey, address }, ct);
+
     // ---- Wallet lifecycle (used by seed generation) ----
 
     /// <summary>Create a brand-new deterministic wallet. The RPC server must have been started
@@ -214,6 +226,13 @@ public sealed class QueryKeyResult
 public sealed class GetVersionResult
 {
     [JsonPropertyName("version")] public uint Version { get; set; }
+}
+
+public sealed class CheckTxKeyResult
+{
+    [JsonPropertyName("received")] public ulong Received { get; set; }
+    [JsonPropertyName("confirmations")] public ulong Confirmations { get; set; }
+    [JsonPropertyName("in_pool")] public bool InPool { get; set; }
 }
 
 public sealed class TransferResult

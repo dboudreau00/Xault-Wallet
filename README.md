@@ -1,12 +1,26 @@
 # XaultWallet
 
+> ## ⚠️ Unaudited beta — do NOT use with real funds
+>
+> This is an **educational, work-in-progress** Monero wallet. It has **not** had a professional
+> security audit. It may contain bugs that cause **permanent, irreversible loss of funds** —
+> Monero transactions cannot be reversed or refunded.
+>
+> - **Do not store real (mainnet) XMR in it.** Use **testnet** or **stagenet** only.
+> - Provided **as-is, with no warranty of any kind** (see [LICENSE](LICENSE)).
+> - The **"wipe real wallet on duress"** option is irreversible and can destroy your seed.
+> - Always keep an **independent offline backup** of your 25-word seed.
+>
+> If you are looking for a wallet to actually hold Monero, use an established, audited one
+> (e.g. the official Monero GUI/CLI, Feather, or Cake). Read [SECURITY.md](SECURITY.md) in full
+> before doing anything with this project.
+
 A desktop Monero (XMR) wallet, structured after **Wasabi Wallet** (.NET + Avalonia +
 MVVM). It is **password-protected**, **encrypted at rest with AES-256-GCM**, and supports a
 **duress password** that opens a decoy wallet (and can optionally wipe the real one).
 
-> ⚠️ **Read [SECURITY.md](SECURITY.md) before putting real funds in this.** This is a
-> solid, reviewable foundation with a fully-implemented, unit-tested security core — but it
-> has **not** been independently audited. Any wallet that holds meaningful money should be.
+> This is a solid, reviewable foundation with a fully-implemented, unit-tested security core —
+> but it has **not** been independently audited. Any wallet that holds meaningful money should be.
 
 ## Why this design
 
@@ -169,3 +183,26 @@ The downloadable seed backup is intentionally plaintext (that's what a backup is
 warning says so. See `SECURITY.md` for the threat model and the honest limits of the
 memory-hygiene and plausible-deniability guarantees.
 
+
+## Contributing & security
+
+This is a personal, educational project shared in the open. Review, issues, and pull requests
+are welcome — extra eyes on a self-custody wallet are exactly the point of open-sourcing it.
+For anything security-sensitive, please follow the private reporting process in
+[SECURITY.md](SECURITY.md) rather than opening a public issue.
+
+## License
+
+Released under the **MIT License** — see [LICENSE](LICENSE). Provided as-is, with no warranty.
+
+> Prefer copyleft? MIT was chosen here mainly so the license text could be included exactly and
+> correctly. If you'd rather use **GPLv3** (which better matches Monero's own ethos and keeps
+> derivatives open source), swap it on GitHub: **Add file → Create new file →** name it
+> `LICENSE` → **Choose a license template → GNU GPLv3**. GitHub inserts the canonical, verbatim
+> license text for you. Update this section to match if you do.
+
+## Acknowledgements
+
+Built on the official Monero tools (`monerod`, `monero-wallet-rpc`) — this project drives them
+rather than reimplementing Monero's cryptography. UI built with [Avalonia](https://avaloniaui.net/).
+Brought to life in harmony — https://dboudreau.dev

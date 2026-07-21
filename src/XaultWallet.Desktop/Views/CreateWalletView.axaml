@@ -55,8 +55,17 @@
                             <StackPanel Spacing="10" IsVisible="{Binding !CreateNewReal}">
                                 <TextBox Classes="mono" Watermark="Existing 25-word seed" Text="{Binding RealMnemonic}"
                                          AcceptsReturn="True" Height="64" TextWrapping="Wrap"/>
-                                <TextBox Classes="mono" Watermark="Restore height (0 = full scan)" Text="{Binding RestoreHeight}"
-                                         HorizontalAlignment="Left" Width="220"/>
+                                <TextBlock Text="SYNC FROM" Classes="eyebrow"/>
+                                <ComboBox SelectedIndex="{Binding RestoreMode}" HorizontalAlignment="Stretch">
+                                    <ComboBoxItem>Full history — scan everything (safest, slowest)</ComboBoxItem>
+                                    <ComboBoxItem>From a specific block height</ComboBoxItem>
+                                    <ComboBoxItem>From now — newest blocks only (new seeds only)</ComboBoxItem>
+                                </ComboBox>
+                                <TextBox Classes="mono" Watermark="Block height (your wallet's creation height)"
+                                         Text="{Binding RestoreHeight}" IsVisible="{Binding IsSpecificHeight}"
+                                         HorizontalAlignment="Left" Width="280"/>
+                                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource TextTertiary}"
+                                           Text="'From now' skips all past blocks — only use it for a brand-new seed with no history, or you may not see existing funds. If unsure, pick Full history."/>
                             </StackPanel>
                         </StackPanel>
 

@@ -2,6 +2,7 @@ using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using XaultWallet.Core.Models;
+using XaultWallet.Core.Monero;
 using XaultWallet.Core.Security;
 
 namespace XaultWallet.Desktop.ViewModels;
@@ -58,6 +59,13 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
     [ObservableProperty] private bool _realSeedGenerated;           // true only after generation
     [ObservableProperty] private bool _realVerified;
     [ObservableProperty] private bool _realBackedUp;
+
+    // Import "sync from" mode: 0 = full history, 1 = from a specific block, 2 = from now.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSpecificHeight))]
+    private int _restoreMode = 1;
+
+    public bool IsSpecificHeight => RestoreMode == 1;
 
     // --- verification quiz ---
     [ObservableProperty] private string _verifyPrompt1 = string.Empty;
@@ -345,13 +353,26 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         Busy = true;
         try
         {
+            // For imports, resolve the "sync from" choice into a restore height. Generated
+            // wallets keep the tip height captured at generation (nothing before it to scan).
+            ulong effectiveRestore = RestoreHeight;
+            if (!CreateNewReal)
+            {
+                effectiveRestore = RestoreMode switch
+                {
+                    0 => 0UL,                                   // full history
+                    2 => await GetTipHeightAsync(),             // from now (fastest)
+                    _ => RestoreHeight,                         // from a specific block
+                };
+            }
+
             var main = new WalletSecrets
             {
                 Kind = ProfileKind.Real,
                 Label = "Main",
                 Network = Network,
                 Mnemonic = RealMnemonic.Trim(),
-                RestoreHeight = RestoreHeight,
+                RestoreHeight = effectiveRestore,
                 DaemonAddress = DaemonAddress.Trim(),
                 EphemeralWalletPassword = Convert.ToHexString(VaultCrypto.RandomBytes(24)),
             };
@@ -365,7 +386,7 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
                     Label = "Wallet",
                     Network = Network,
                     Mnemonic = DuressMnemonic.Trim(),
-                    RestoreHeight = RestoreHeight,
+                    RestoreHeight = effectiveRestore,
                     DaemonAddress = DaemonAddress.Trim(),
                     EphemeralWalletPassword = Convert.ToHexString(VaultCrypto.RandomBytes(24)),
                     DuressWipeReal = WipeRealOnDuress,
@@ -455,6 +476,19 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         !string.IsNullOrWhiteSpace(address)
         && Uri.TryCreate(address.Trim(), UriKind.Absolute, out Uri? uri)
         && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+
+    /// <summary>Current daemon tip height, or 0 (full scan) if it can't be reached.</summary>
+    private async Task<ulong> GetTipHeightAsync()
+    {
+        try
+        {
+            return await MoneroDiagnostics.ProbeDaemonAsync(DaemonAddress.Trim());
+        }
+        catch
+        {
+            return 0; // fall back to a full scan rather than silently skipping blocks
+        }
+    }
 
     private static string NormalizeMnemonic(string raw) =>
         string.Join(' ', (raw ?? string.Empty)

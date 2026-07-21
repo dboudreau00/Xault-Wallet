@@ -77,7 +77,20 @@ connection over Tor. XaultWallet passes your daemon address straight through to
    is the source of truth.
 4. Run under **full-disk encryption**.
 
-## Responsible disclosure
+## Reporting a vulnerability
 
-If you find a vulnerability, do not open a public issue. Contact the maintainer privately and
-allow time for a fix before disclosure.
+**Please do not open a public GitHub issue for security bugs.** Public disclosure before a fix
+puts any user at risk.
+
+Instead, report privately:
+
+- Open a **GitHub private security advisory** (repo → **Security → Report a vulnerability**), or
+- Contact the maintainer at **https://dboudreau.dev**.
+
+Please include what you found, how to reproduce it, and the potential impact. As an unpaid
+solo/beta project there is no bug-bounty, but credit will be given (if you want it) once a fix
+is released. Please allow a reasonable window for a fix before any public disclosure.
+
+Highest-priority areas: the vault format and its Argon2id/AES-256-GCM usage, the two-slot
+duress design (does it actually resist distinguishing the real slot from the decoy?), the
+irreversible "wipe on duress" path, and how long the seed/password persist in process memory.

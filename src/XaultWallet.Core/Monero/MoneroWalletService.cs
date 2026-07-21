@@ -142,6 +142,18 @@ public sealed class MoneroWalletService : IAsyncDisposable
     public async Task RefreshAsync(CancellationToken ct = default) =>
         await Rpc.RefreshAsync(ct).ConfigureAwait(false);
 
+    /// <summary>Transaction private key for an outgoing tx — used to prove a payment on an explorer.</summary>
+    public async Task<string> GetTxKeyAsync(string txid, CancellationToken ct = default) =>
+        (await Rpc.GetTxKeyAsync(txid.Trim(), ct).ConfigureAwait(false)).Key;
+
+    /// <summary>Verify a payment given txid + tx key + address. Returns (received atomic, confirmations, inPool).</summary>
+    public async Task<(ulong received, ulong confirmations, bool inPool)> CheckTxKeyAsync(
+        string txid, string txKey, string address, CancellationToken ct = default)
+    {
+        CheckTxKeyResult r = await Rpc.CheckTxKeyAsync(txid.Trim(), txKey.Trim(), address.Trim(), ct).ConfigureAwait(false);
+        return (r.Received, r.Confirmations, r.InPool);
+    }
+
     public async Task<IReadOnlyList<TransferEntry>> GetHistoryAsync(CancellationToken ct = default)
     {
         GetTransfersResult r = await Rpc.GetTransfersAsync(ct: ct).ConfigureAwait(false);

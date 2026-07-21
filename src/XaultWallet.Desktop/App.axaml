@@ -8,17 +8,235 @@
         <local:ViewLocator />
     </Application.DataTemplates>
 
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- ============ "Quiet vault" palette ============ -->
+            <Color x:Key="AppBgColor">#161619</Color>
+            <SolidColorBrush x:Key="AppBg" Color="#161619" />
+            <SolidColorBrush x:Key="Surface" Color="#1E1E24" />
+            <SolidColorBrush x:Key="SurfaceAlt" Color="#282830" />
+            <SolidColorBrush x:Key="SurfaceHover" Color="#32323B" />
+            <SolidColorBrush x:Key="InsetBg" Color="#121216" />
+            <SolidColorBrush x:Key="BorderSubtle" Color="#2C2C34" />
+            <SolidColorBrush x:Key="BorderStrong" Color="#3C3C47" />
+            <SolidColorBrush x:Key="TextPrimary" Color="#ECECEF" />
+            <SolidColorBrush x:Key="TextSecondary" Color="#9C9CA7" />
+            <SolidColorBrush x:Key="TextTertiary" Color="#6C6C78" />
+            <SolidColorBrush x:Key="AccentBrush" Color="#F76B1C" />
+            <SolidColorBrush x:Key="AccentSoft" Color="#26F76B1C" />
+            <SolidColorBrush x:Key="SuccessBrush" Color="#46B98A" />
+            <SolidColorBrush x:Key="WarningBrush" Color="#E0A030" />
+            <SolidColorBrush x:Key="DangerBrush" Color="#FF6B6B" />
+
+            <!-- Legacy keys kept as aliases so existing views upgrade centrally -->
+            <Color x:Key="XmrOrange">#F76B1C</Color>
+            <SolidColorBrush x:Key="XmrOrangeBrush" Color="#F76B1C" />
+            <SolidColorBrush x:Key="PanelBrush" Color="#1E1E24" />
+            <SolidColorBrush x:Key="PanelBorderBrush" Color="#2C2C34" />
+
+            <FontFamily x:Key="MonoFont">Cascadia Code,Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace</FontFamily>
+
+            <!-- Re-tint Fluent's accent (accent buttons, checks, radios, tab underline, selection) -->
+            <Color x:Key="SystemAccentColor">#F76B1C</Color>
+            <Color x:Key="SystemAccentColorLight1">#FF7E38</Color>
+            <Color x:Key="SystemAccentColorLight2">#FF9052</Color>
+            <Color x:Key="SystemAccentColorLight3">#FFA36D</Color>
+            <Color x:Key="SystemAccentColorDark1">#DD5E12</Color>
+            <Color x:Key="SystemAccentColorDark2">#C1510C</Color>
+            <Color x:Key="SystemAccentColorDark3">#A04407</Color>
+        </ResourceDictionary>
+    </Application.Resources>
+
     <Application.Styles>
         <FluentTheme />
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
-    </Application.Styles>
 
-    <Application.Resources>
-        <ResourceDictionary>
-            <Color x:Key="XmrOrange">#FF6600</Color>
-            <SolidColorBrush x:Key="XmrOrangeBrush" Color="#FF6600" />
-            <SolidColorBrush x:Key="PanelBrush" Color="#1B1B1F" />
-            <SolidColorBrush x:Key="PanelBorderBrush" Color="#2E2E34" />
-        </ResourceDictionary>
-    </Application.Resources>
+        <!-- Window -->
+        <Style Selector="Window">
+            <Setter Property="Background" Value="{StaticResource AppBg}" />
+            <Setter Property="FontFamily" Value="Inter, ui-sans-serif, sans-serif" />
+        </Style>
+
+        <!-- Text defaults + utility classes -->
+        <Style Selector="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+        </Style>
+        <Style Selector="TextBlock.eyebrow">
+            <Setter Property="Foreground" Value="{StaticResource TextTertiary}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="TextBlock.muted">
+            <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+        <Style Selector="TextBlock.h1">
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="TextBlock.mono">
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+        </Style>
+
+        <!-- Card surface with soft elevation -->
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="{StaticResource Surface}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderSubtle}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="BoxShadow" Value="0 10 30 -6 #55000000" />
+        </Style>
+
+        <!-- Buttons: quiet default, refined shape -->
+        <Style Selector="Button">
+            <Setter Property="CornerRadius" Value="9" />
+            <Setter Property="Padding" Value="15,9" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Background" Value="{StaticResource SurfaceAlt}" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+        </Style>
+        <Style Selector="Button /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="CornerRadius" Value="9" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource SurfaceHover}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderStrong}" />
+        </Style>
+        <Style Selector="Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource InsetBg}" />
+        </Style>
+        <Style Selector="Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Opacity" Value="0.45" />
+        </Style>
+
+        <!-- Accent (primary) button -->
+        <Style Selector="Button.accent">
+            <Setter Property="Foreground" Value="#1A1206" />
+        </Style>
+        <Style Selector="Button.accent /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+        </Style>
+        <Style Selector="Button.accent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#FF7E38" />
+        </Style>
+        <Style Selector="Button.accent:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#DD5E12" />
+        </Style>
+
+        <!-- Window-control (caption) buttons in the custom title bar -->
+        <Style Selector="Button.chrome">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Width" Value="46" />
+            <Setter Property="Height" Value="46" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.chrome /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="0" />
+        </Style>
+        <Style Selector="Button.chrome:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource SurfaceHover}" />
+        </Style>
+        <Style Selector="Button.chrome:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource SurfaceAlt}" />
+        </Style>
+        <Style Selector="Button.chromeClose:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#C42B1C" />
+        </Style>
+        <Style Selector="Button.chromeClose:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#E04434" />
+        </Style>
+
+        <!-- Inline hyperlink-style button -->
+        <Style Selector="Button.link">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontWeight" Value="Normal" />
+        </Style>
+        <Style Selector="Button.link /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.link:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="TextElement.Foreground" Value="#FF8F52" />
+        </Style>
+        <Style Selector="Button.link:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+
+        <!-- TextBox: inset well, accent focus ring -->
+        <Style Selector="TextBox">
+            <Setter Property="CornerRadius" Value="9" />
+            <Setter Property="Padding" Value="12,9" />
+            <Setter Property="MinHeight" Value="38" />
+        </Style>
+        <Style Selector="TextBox /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="{StaticResource InsetBg}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderSubtle}" />
+            <Setter Property="CornerRadius" Value="9" />
+        </Style>
+        <Style Selector="TextBox:pointerover /template/ Border#PART_BorderElement">
+            <Setter Property="BorderBrush" Value="{StaticResource BorderStrong}" />
+        </Style>
+        <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+        </Style>
+
+        <!-- ComboBox -->
+        <Style Selector="ComboBox">
+            <Setter Property="CornerRadius" Value="9" />
+            <Setter Property="Padding" Value="12,7" />
+            <Setter Property="MinHeight" Value="38" />
+        </Style>
+
+        <!-- Sync tracker / progress -->
+        <Style Selector="ProgressBar">
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+            <Setter Property="Background" Value="{StaticResource BorderSubtle}" />
+            <Setter Property="MinHeight" Value="6" />
+            <Setter Property="CornerRadius" Value="3" />
+        </Style>
+
+        <!-- Tabs: quiet labels, accent underline on the active one -->
+        <Style Selector="TabItem">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{StaticResource TextTertiary}" />
+            <Setter Property="Padding" Value="2,6" />
+            <Setter Property="Margin" Value="0,0,22,0" />
+            <Setter Property="MinHeight" Value="36" />
+        </Style>
+        <Style Selector="TabItem:selected">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+        </Style>
+        <Style Selector="TabItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="TextElement.Foreground" Value="{StaticResource TextSecondary}" />
+        </Style>
+
+        <!-- Checkbox / radio spacing -->
+        <Style Selector="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+        </Style>
+        <Style Selector="RadioButton">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+        </Style>
+
+        <!-- Separator -->
+        <Style Selector="Separator">
+            <Setter Property="Background" Value="{StaticResource BorderSubtle}" />
+            <Setter Property="Height" Value="1" />
+        </Style>
+    </Application.Styles>
 </Application>

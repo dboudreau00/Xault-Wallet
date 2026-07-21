@@ -1,0 +1,56 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="620"
+             x:Class="XaultWallet.Desktop.Views.StartupView"
+             x:DataType="vm:StartupViewModel">
+
+    <Grid>
+        <StackPanel Width="360" Spacing="26" VerticalAlignment="Center" HorizontalAlignment="Center">
+
+            <!-- X brand mark with a soft pulse while checks run -->
+            <Border Width="80" Height="80" CornerRadius="22" HorizontalAlignment="Center"
+                    Background="{StaticResource Surface}" BorderBrush="{StaticResource BorderStrong}"
+                    BorderThickness="1" BoxShadow="0 14 40 -8 #66000000">
+                <Border.Styles>
+                    <Style Selector="Canvas.pulse">
+                        <Style.Animations>
+                            <Animation Duration="0:0:1.6" IterationCount="INFINITE" Easing="SineEaseInOut">
+                                <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1.0"/></KeyFrame>
+                                <KeyFrame Cue="50%"><Setter Property="Opacity" Value="0.72"/></KeyFrame>
+                                <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1.0"/></KeyFrame>
+                            </Animation>
+                        </Style.Animations>
+                    </Style>
+                </Border.Styles>
+                <Canvas Width="80" Height="80" Classes="pulse">
+                    <Line StartPoint="26,24" EndPoint="54,56" Stroke="{StaticResource AccentBrush}"
+                          StrokeThickness="8" StrokeLineCap="Round"/>
+                    <Line StartPoint="54,24" EndPoint="26,56" Stroke="{StaticResource TextPrimary}"
+                          StrokeThickness="8" StrokeLineCap="Round"/>
+                    <Ellipse Canvas.Left="35" Canvas.Top="35" Width="10" Height="10"
+                             Fill="{StaticResource Surface}" Stroke="{StaticResource AccentBrush}" StrokeThickness="2.5"/>
+                </Canvas>
+            </Border>
+
+            <StackPanel Spacing="5">
+                <TextBlock HorizontalAlignment="Center">
+                    <Run Text="Xault" FontSize="22" FontWeight="Bold"/><Run Text="Wallet" FontSize="22" FontWeight="Light" Foreground="{StaticResource TextSecondary}"/>
+                </TextBlock>
+                <TextBlock Text="{Binding Status}" Classes="muted" HorizontalAlignment="Center"/>
+            </StackPanel>
+
+            <StackPanel Spacing="14">
+                <ProgressBar IsIndeterminate="True" IsVisible="{Binding Checking}" Height="3" Width="220"
+                             HorizontalAlignment="Center"/>
+                <TextBlock Text="{Binding Detail}" Classes="eyebrow" HorizontalAlignment="Center"
+                           TextWrapping="Wrap" TextAlignment="Center" MaxWidth="320"/>
+            </StackPanel>
+
+            <Button Content="Continue anyway" Command="{Binding ContinueCommand}"
+                    IsVisible="{Binding Checking}" HorizontalAlignment="Center"/>
+        </StackPanel>
+    </Grid>
+</UserControl>

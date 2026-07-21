@@ -19,6 +19,24 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty] private string _savedMessage = string.Empty;
     [ObservableProperty] private bool _busy;
 
+    /// <summary>Selecting a preset fills the daemon address and network below.</summary>
+    [ObservableProperty] private RemoteNode? _selectedPreset;
+
+    public IReadOnlyList<RemoteNode> PresetNodes => RemoteNodes.All;
+
+    partial void OnSelectedPresetChanged(RemoteNode? value)
+    {
+        if (value is null)
+        {
+            return;
+        }
+
+        DefaultDaemonAddress = value.Url;
+        NetworkIndex = value.NetworkIndex;
+        SavedMessage = string.Empty;
+        DaemonTestResult = string.Empty;
+    }
+
     /// <summary>Set by the View: opens a file picker and returns the chosen path (or null).</summary>
     public Func<Task<string?>>? BrowseHandler { get; set; }
 

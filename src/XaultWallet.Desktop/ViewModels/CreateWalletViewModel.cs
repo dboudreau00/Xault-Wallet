@@ -67,7 +67,11 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
     [ObservableProperty] private string _verifyInput2 = string.Empty;
     [ObservableProperty] private string _verifyInput3 = string.Empty;
     [ObservableProperty] private string _verifyMessage = string.Empty;
+    [ObservableProperty] private bool _showVerifyOverlay;
     private int[] _verifyIndices = System.Array.Empty<int>();
+
+    /// <summary>The generated seed split into numbered words for the display grid.</summary>
+    public System.Collections.ObjectModel.ObservableCollection<SeedWord> RealSeedWords { get; } = new();
 
     // --- status ---
     [ObservableProperty] private string _error = string.Empty;
@@ -115,7 +119,7 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
             RealSeedGenerated = true;
             RealVerified = false;
             RealBackedUp = false;
-            SetupVerification(mnemonic);
+            PopulateSeedWords(mnemonic);
         }
         catch (Exception ex)
         {
@@ -149,6 +153,32 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         }
     }
 
+    private void PopulateSeedWords(string mnemonic)
+    {
+        RealSeedWords.Clear();
+        string[] words = mnemonic.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < words.Length; i++)
+        {
+            RealSeedWords.Add(new SeedWord(i + 1, words[i]));
+        }
+    }
+
+    /// <summary>Opens the verification overlay with three freshly-picked word positions.</summary>
+    [RelayCommand]
+    private void OpenVerify()
+    {
+        if (!RealSeedGenerated)
+        {
+            return;
+        }
+
+        SetupVerification(RealMnemonic);
+        ShowVerifyOverlay = true;
+    }
+
+    [RelayCommand]
+    private void CloseVerify() => ShowVerifyOverlay = false;
+
     private void SetupVerification(string mnemonic)
     {
         string[] words = mnemonic.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -181,7 +211,15 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
             words[_verifyIndices[2]].Equals(VerifyInput3.Trim(), StringComparison.OrdinalIgnoreCase);
 
         RealVerified = ok;
-        VerifyMessage = ok ? "Backup verified \u2713" : "One or more words don't match. Check your written backup.";
+        if (ok)
+        {
+            VerifyMessage = string.Empty;
+            ShowVerifyOverlay = false; // success — dismiss the overlay
+        }
+        else
+        {
+            VerifyMessage = "One or more words don't match. Check your written backup.";
+        }
     }
 
     [RelayCommand]
@@ -426,3 +464,6 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
             .Split(' ', StringSplitOptions.RemoveEmptyEntries))
             .ToLowerInvariant();
 }
+
+/// <summary>A single numbered word in the seed display grid.</summary>
+public sealed record SeedWord(int Number, string Word);

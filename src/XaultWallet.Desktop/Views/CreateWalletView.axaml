@@ -33,6 +33,15 @@
                     <Grid ColumnDefinitions="*,28,*">
                         <StackPanel Grid.Column="0" Spacing="13">
                             <TextBlock Text="NETWORK &amp; NODE" Classes="eyebrow"/>
+                            <ComboBox x:CompileBindings="False" HorizontalAlignment="Stretch"
+                                      ItemsSource="{Binding PresetNodes}" SelectedItem="{Binding SelectedPreset}"
+                                      PlaceholderText="Choose a public node (optional)…">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Display}"/>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
                             <Grid ColumnDefinitions="Auto,10,*">
                                 <ComboBox Grid.Column="0" SelectedIndex="{Binding NetworkIndex}" Width="128">
                                     <ComboBoxItem>Mainnet</ComboBoxItem>

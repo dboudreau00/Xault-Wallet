@@ -22,8 +22,6 @@ public sealed class MoneroProcessManager : IAsyncDisposable
     private const int StderrTailMax = 60;
 
     public Uri? Endpoint { get; private set; }
-    public string RpcUser { get; } = "xw_" + Convert.ToHexString(RandomNumberGenerator.GetBytes(6));
-    public string RpcPassword { get; } = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
 
     public MoneroProcessManager(string walletRpcBinary)
     {

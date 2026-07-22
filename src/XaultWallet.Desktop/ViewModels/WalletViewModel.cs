@@ -19,8 +19,18 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private string _status = "Starting wallet\u2026";
     [ObservableProperty] private bool _isReady;
     [ObservableProperty] private bool _startupFailed;
-    [ObservableProperty] private decimal _balance;
-    [ObservableProperty] private decimal _unlockedBalance;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LockedBalance))]
+    [NotifyPropertyChangedFor(nameof(HasLocked))]
+    private decimal _balance;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LockedBalance))]
+    [NotifyPropertyChangedFor(nameof(HasLocked))]
+    private decimal _unlockedBalance;
+
+    /// <summary>Balance still maturing (total minus spendable). Never negative.</summary>
+    public decimal LockedBalance => Math.Max(0m, Balance - UnlockedBalance);
+    public bool HasLocked => LockedBalance > 0m;
     [ObservableProperty] private ulong _height;
     [ObservableProperty] private string _primaryAddress = string.Empty;
 
@@ -36,6 +46,10 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private int _sendPriority = 1;
     [ObservableProperty] private string _sendResult = string.Empty;
     [ObservableProperty] private bool _sending;
+
+    // Send confirmation overlay (irreversible action — always confirm)
+    [ObservableProperty] private bool _showSendConfirm;
+    [ObservableProperty] private string _sendSummary = string.Empty;
 
     // Payment proof (the tx key from the most recent send — safe to share for explorer verification)
     [ObservableProperty] private bool _hasLastTx;
@@ -102,6 +116,11 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         await InitializeAsync();
     }
 
+    private DateTime _lastActivityUtc = DateTime.UtcNow;
+
+    /// <summary>Called from the window on any user input to defer auto-lock.</summary>
+    public void NotifyActivity() => _lastActivityUtc = DateTime.UtcNow;
+
     private async Task AutoRefreshLoopAsync(CancellationToken ct)
     {
         try
@@ -109,6 +128,15 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             while (!ct.IsCancellationRequested)
             {
                 await SoftRefreshAsync();
+
+                // Auto-lock after inactivity (0 = disabled).
+                int lockMinutes = AppServices.Instance.AutoLockMinutes;
+                if (lockMinutes > 0 && DateTime.UtcNow - _lastActivityUtc > TimeSpan.FromMinutes(lockMinutes))
+                {
+                    Log.Info("Auto-locking after inactivity.");
+                    await LockAsync();
+                    return;
+                }
 
                 // Snappy updates while the node is catching up; relaxed once synced.
                 int delayMs = IsSynced
@@ -245,8 +273,10 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         await SoftRefreshAsync();
     }
 
+    /// <summary>Step 1 of sending: validate the form, then open the confirmation overlay.
+    /// Monero transactions are irreversible, so a deliberate confirm step is required.</summary>
     [RelayCommand]
-    private async Task SendAsync()
+    private void ReviewSend()
     {
         SendResult = string.Empty;
 
@@ -256,9 +286,11 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(SendAddress))
+        // Sanity-check the address (charset/length/network prefix). monero-wallet-rpc remains
+        // the final authority; this catches wrong-network and truncated-paste mistakes early.
+        if (MoneroAddress.Problem(SendAddress, _secrets.Network) is { } problem)
         {
-            SendResult = "Enter a destination address.";
+            SendResult = problem;
             return;
         }
 
@@ -275,6 +307,19 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
+        string prio = SendPriority switch { 1 => "Low", 2 => "Medium", 3 => "High", _ => "Default" };
+        SendSummary = $"Send {SendAmount} XMR ({prio} priority) to:";
+        ShowSendConfirm = true;
+    }
+
+    [RelayCommand]
+    private void CancelSend() => ShowSendConfirm = false;
+
+    /// <summary>Step 2: the user explicitly confirmed. Actually submit the transfer.</summary>
+    [RelayCommand]
+    private async Task ConfirmSendAsync()
+    {
+        ShowSendConfirm = false;
         Sending = true;
         try
         {
@@ -313,6 +358,30 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         VerifyTxId = LastTxId;
         VerifyTxKey = LastTxKey;
         VerifyResult = string.Empty;
+    }
+
+    /// <summary>Fetch the tx key for one of THIS wallet's past outgoing transactions, so older
+    /// payments can be proven too (only works for transactions this wallet sent).</summary>
+    [RelayCommand]
+    private async Task FetchTxKeyAsync()
+    {
+        VerifyResult = string.Empty;
+        VerifyOk = false;
+
+        if (!IsReady || string.IsNullOrWhiteSpace(VerifyTxId))
+        {
+            VerifyResult = "Enter the transaction ID of a payment this wallet sent.";
+            return;
+        }
+
+        try
+        {
+            VerifyTxKey = await _wallet.GetTxKeyAsync(VerifyTxId, _cts.Token);
+        }
+        catch (Exception ex)
+        {
+            VerifyResult = "Couldn't fetch a key for that transaction (is it one this wallet sent?): " + Friendly(ex);
+        }
     }
 
     [RelayCommand]

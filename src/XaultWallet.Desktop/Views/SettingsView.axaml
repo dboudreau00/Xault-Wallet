@@ -75,7 +75,7 @@
 
                 <Separator/>
 
-                <!-- Refresh cadence -->
+                <!-- Refresh cadence + auto-lock -->
                 <StackPanel Spacing="6">
                     <TextBlock Text="AUTO-REFRESH INTERVAL" Classes="eyebrow"/>
                     <StackPanel Orientation="Horizontal" Spacing="10">
@@ -84,6 +84,32 @@
                     </StackPanel>
                     <TextBlock Text="How often the open wallet re-checks balance and history (5&#8211;600s)."
                                Foreground="{StaticResource TextTertiary}" FontSize="11"/>
+                </StackPanel>
+
+                <StackPanel Spacing="6">
+                    <TextBlock Text="AUTO-LOCK" Classes="eyebrow"/>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBox Text="{Binding AutoLockMinutes}" Width="100"/>
+                        <TextBlock Text="minutes of inactivity (0 = never)" Classes="muted" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="Locks the wallet automatically after no mouse or keyboard input. Shreds the open wallet; you'll re-enter your password."
+                               Foreground="{StaticResource TextTertiary}" FontSize="11" TextWrapping="Wrap"/>
+                </StackPanel>
+
+                <Separator/>
+
+                <!-- Change master password -->
+                <StackPanel Spacing="6">
+                    <TextBlock Text="CHANGE MASTER PASSWORD" Classes="eyebrow"/>
+                    <TextBlock TextWrapping="Wrap" Classes="muted"
+                               Text="Re-encrypts the real wallet under a new password. Your seed does not change. The duress password (if set) is unaffected and cannot be used here."/>
+                    <TextBox Watermark="Current password" PasswordChar="&#9679;" Text="{Binding CurrentPassword}"/>
+                    <TextBox Watermark="New password" PasswordChar="&#9679;" Text="{Binding NewPassword}"/>
+                    <TextBox Watermark="Confirm new password" PasswordChar="&#9679;" Text="{Binding NewPasswordConfirm}"/>
+                    <Button Content="Change password" Command="{Binding ChangePasswordCommand}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="{Binding ChangePasswordResult}" TextWrapping="Wrap" FontSize="12.5"
+                               IsVisible="{Binding ChangePasswordResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               Foreground="{Binding ChangePasswordOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
                 </StackPanel>
 
                 <Separator/>

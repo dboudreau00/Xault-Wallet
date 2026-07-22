@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using XaultWallet.Core.Diagnostics;
 using XaultWallet.Core.Monero;
+using XaultWallet.Core.Security;
 
 namespace XaultWallet.Desktop.ViewModels;
 
@@ -11,6 +12,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty] private string _defaultDaemonAddress;
     [ObservableProperty] private int _networkIndex;
     [ObservableProperty] private int _autoRefreshSeconds;
+    [ObservableProperty] private int _autoLockMinutes;
 
     [ObservableProperty] private string _binaryTestResult = string.Empty;
     [ObservableProperty] private bool _binaryTestOk;
@@ -18,6 +20,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty] private bool _daemonTestOk;
     [ObservableProperty] private string _savedMessage = string.Empty;
     [ObservableProperty] private bool _busy;
+
+    // Change master password
+    [ObservableProperty] private string _currentPassword = string.Empty;
+    [ObservableProperty] private string _newPassword = string.Empty;
+    [ObservableProperty] private string _newPasswordConfirm = string.Empty;
+    [ObservableProperty] private string _changePasswordResult = string.Empty;
+    [ObservableProperty] private bool _changePasswordOk;
 
     /// <summary>Selecting a preset fills the daemon address and network below.</summary>
     [ObservableProperty] private RemoteNode? _selectedPreset;
@@ -51,6 +60,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _defaultDaemonAddress = s.DefaultDaemonAddress;
         _networkIndex = s.DefaultNetworkIndex;
         _autoRefreshSeconds = s.AutoRefreshSeconds;
+        _autoLockMinutes = s.AutoLockMinutes;
         DefaultBinaryHint = "Leave blank to auto-detect. Currently resolves to: " +
                             AppServices.Instance.ResolvedDefaultWalletRpcBinary;
     }
@@ -133,10 +143,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
             s.DefaultDaemonAddress = (DefaultDaemonAddress ?? string.Empty).Trim();
             s.DefaultNetworkIndex = NetworkIndex;
             s.AutoRefreshSeconds = AutoRefreshSeconds;
+            s.AutoLockMinutes = AutoLockMinutes;
             AppServices.Instance.SaveSettings();
 
             // Reflect any clamping back into the fields.
             AutoRefreshSeconds = s.AutoRefreshSeconds;
+            AutoLockMinutes = s.AutoLockMinutes;
             SavedMessage = "Settings saved.";
             Log.Info("Settings saved.");
         }
@@ -144,6 +156,58 @@ public sealed partial class SettingsViewModel : ViewModelBase
         {
             SavedMessage = "Couldn't save settings: " + ex.Message;
             Log.Error("Saving settings failed", ex);
+        }
+    }
+
+    [RelayCommand]
+    private void ChangePassword()
+    {
+        ChangePasswordResult = string.Empty;
+        ChangePasswordOk = false;
+
+        if (string.IsNullOrEmpty(CurrentPassword) || string.IsNullOrEmpty(NewPassword))
+        {
+            ChangePasswordResult = "Enter your current and new password.";
+            return;
+        }
+
+        if (NewPassword != NewPasswordConfirm)
+        {
+            ChangePasswordResult = "New passwords don't match.";
+            return;
+        }
+
+        if (NewPassword == CurrentPassword)
+        {
+            ChangePasswordResult = "New password must differ from the current one.";
+            return;
+        }
+
+        try
+        {
+            VaultManager mgr = VaultManager.Load(AppServices.Instance.VaultPath);
+            using var cur = SecureBuffer.FromPassword(CurrentPassword.ToCharArray());
+            using var next = SecureBuffer.FromPassword(NewPassword.ToCharArray());
+
+            // ChangeMainPassword only succeeds for the REAL slot; the duress password is rejected.
+            if (mgr.ChangeMainPassword(cur, next))
+            {
+                ChangePasswordOk = true;
+                ChangePasswordResult = "Password changed.";
+                CurrentPassword = NewPassword = NewPasswordConfirm = string.Empty;
+                Log.Info("Master password changed.");
+            }
+            else
+            {
+                ChangePasswordOk = false;
+                ChangePasswordResult = "That current password didn't unlock the real wallet.";
+            }
+        }
+        catch (Exception ex)
+        {
+            ChangePasswordOk = false;
+            ChangePasswordResult = "Couldn't change password: " + ex.Message;
+            Log.Error("Change password failed", ex);
         }
     }
 

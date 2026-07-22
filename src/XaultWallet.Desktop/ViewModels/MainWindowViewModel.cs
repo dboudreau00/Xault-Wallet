@@ -33,6 +33,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         return vm;
     }
 
+    /// <summary>Forwarded from the window on any input; defers auto-lock while a wallet is open.</summary>
+    public void NotifyActivity() => _wallet?.NotifyActivity();
+
     private CreateWalletViewModel BuildCreate()
     {
         var vm = new CreateWalletViewModel();
@@ -68,11 +71,23 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         settings.Closed += () =>
         {
             SettingsOpen = false;
-            if (_beforeSettings is not null)
+
+            // If a wallet is open, return to it unchanged. Otherwise rebuild the create/unlock
+            // screen fresh so it picks up any node/network default just changed in Settings
+            // (the pre-settings instance would still hold the old default).
+            if (_wallet is not null && ReferenceEquals(_beforeSettings, _wallet))
             {
-                Current = _beforeSettings; // restore the exact screen (and its state) we left
-                _beforeSettings = null;
+                Current = _wallet;
             }
+            else if (VaultManager.Exists(AppServices.Instance.VaultPath))
+            {
+                Current = BuildUnlock();
+            }
+            else
+            {
+                Current = BuildCreate();
+            }
+            _beforeSettings = null;
         };
 
         SettingsOpen = true;

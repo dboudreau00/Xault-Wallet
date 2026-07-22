@@ -46,6 +46,7 @@ public sealed class AppServices
     public int DefaultNetworkIndex => Settings.DefaultNetworkIndex;
 
     public int AutoRefreshSeconds => Settings.AutoRefreshSeconds;
+    public int AutoLockMinutes => Settings.AutoLockMinutes;
 
     public void SaveSettings() => Settings.Save(SettingsPath);
 

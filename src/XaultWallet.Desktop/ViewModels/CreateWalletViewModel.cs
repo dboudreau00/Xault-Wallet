@@ -37,6 +37,21 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
     /// <summary>True when the mainnet (real money) network is selected — drives the warning banner.</summary>
     public bool IsMainnet => NetworkIndex == 0;
 
+    /// <summary>Public node presets (same list as Settings). Selecting one fills daemon + network.</summary>
+    public IReadOnlyList<RemoteNode> PresetNodes => RemoteNodes.All;
+    [ObservableProperty] private RemoteNode? _selectedPreset;
+
+    partial void OnSelectedPresetChanged(RemoteNode? value)
+    {
+        if (value is null)
+        {
+            return;
+        }
+
+        DaemonAddress = value.Url;
+        NetworkIndex = value.NetworkIndex;
+    }
+
     // When the user flips network and their daemon is still a default localhost address, move the
     // port to the matching default (mainnet 18081 / stagenet 38081 / testnet 28081). A custom host
     // is left untouched.

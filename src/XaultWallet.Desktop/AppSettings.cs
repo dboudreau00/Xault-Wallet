@@ -21,6 +21,9 @@ public sealed class AppSettings
     /// <summary>How often the open wallet re-polls balance/height/history.</summary>
     public int AutoRefreshSeconds { get; set; } = 20;
 
+    /// <summary>Lock the wallet after this many minutes with no input. 0 = never.</summary>
+    public int AutoLockMinutes { get; set; } = 10;
+
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
     public static AppSettings Load(string path)
@@ -78,5 +81,9 @@ public sealed class AppSettings
         }
 
         AutoRefreshSeconds = Math.Clamp(AutoRefreshSeconds, 5, 600);
+        if (AutoLockMinutes != 0)
+        {
+            AutoLockMinutes = Math.Clamp(AutoLockMinutes, 1, 240);
+        }
     }
 }

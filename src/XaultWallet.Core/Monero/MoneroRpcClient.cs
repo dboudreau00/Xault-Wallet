@@ -260,4 +260,10 @@ public sealed class TransferEntry
     [JsonPropertyName("timestamp")] public ulong Timestamp { get; set; }
     [JsonPropertyName("type")] public string Type { get; set; } = "";
     [JsonPropertyName("address")] public string Address { get; set; } = "";
+
+    /// <summary>Local date/time of the transaction for display (empty if not yet timestamped).</summary>
+    [JsonIgnore]
+    public string Date => Timestamp == 0
+        ? ""
+        : DateTimeOffset.FromUnixTimeSeconds((long)Timestamp).ToLocalTime().ToString("yyyy-MM-dd HH:mm");
 }

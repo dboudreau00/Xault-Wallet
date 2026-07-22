@@ -36,6 +36,12 @@
                         </StackPanel>
                         <TextBlock Classes="muted"
                                    Text="{Binding UnlockedBalance, StringFormat='Spendable now: {0:0.############} XMR'}"/>
+                        <Border IsVisible="{Binding HasLocked}" Background="{StaticResource InsetBg}"
+                                BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="6"
+                                Padding="8,3" HorizontalAlignment="Left" Margin="0,2,0,0">
+                            <TextBlock Classes="mono" FontSize="11" Foreground="{StaticResource WarningBrush}"
+                                       Text="{Binding LockedBalance, StringFormat='⧗ {0:0.############} XMR maturing'}"/>
+                        </Border>
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
                         <Button Content="Refresh" Command="{Binding RefreshCommand}" IsEnabled="{Binding IsReady}"/>
@@ -114,7 +120,7 @@
                             </StackPanel>
                         </Grid>
                         <Button Content="Review &amp; send" Classes="accent" HorizontalAlignment="Left"
-                                Command="{Binding SendCommand}" IsEnabled="{Binding !Sending}"/>
+                                Command="{Binding ReviewSendCommand}" IsEnabled="{Binding !Sending}"/>
                         <ProgressBar IsIndeterminate="True" IsVisible="{Binding Sending}" Height="3"/>
                         <TextBlock Text="{Binding SendResult}" Classes="mono" FontSize="12" TextWrapping="Wrap"
                                    Foreground="{StaticResource TextSecondary}"
@@ -131,6 +137,10 @@
                                 <TextBox Classes="mono" FontSize="12" Text="{Binding LastTxId}" IsReadOnly="True" TextWrapping="Wrap"/>
                                 <TextBlock Text="Transaction key" Classes="eyebrow"/>
                                 <TextBox Classes="mono" FontSize="12" Text="{Binding LastTxKey}" IsReadOnly="True" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Content="Copy tx ID" Click="CopyLastTxId_Click"/>
+                                    <Button Content="Copy tx key" Click="CopyLastTxKey_Click"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
 
@@ -148,6 +158,8 @@
                                 <Button Content="Verify" Command="{Binding VerifyPaymentCommand}"/>
                                 <Button Content="Use last send" Command="{Binding PrefillVerifyFromLastCommand}"
                                         IsVisible="{Binding HasLastTx}"/>
+                                <Button Content="Fetch key from wallet" Command="{Binding FetchTxKeyCommand}"
+                                        ToolTip.Tip="Look up the tx key for a transaction this wallet sent"/>
                             </StackPanel>
                             <TextBlock Text="{Binding VerifyResult}" TextWrapping="Wrap" FontSize="12.5"
                                        IsVisible="{Binding VerifyResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
@@ -163,14 +175,35 @@
                           GridLinesVisibility="Horizontal" HeadersVisibility="Column"
                           RowHeight="38">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="90"/>
+                        <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="140"/>
+                        <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="80"/>
                         <DataGridTextColumn Header="Amount (XMR)"
                             Binding="{Binding Amount, Converter={x:Static conv:AtomicToXmrConverter.Instance}}" Width="150"/>
-                        <DataGridTextColumn Header="Height" Binding="{Binding Height}" Width="110"/>
+                        <DataGridTextColumn Header="Height" Binding="{Binding Height}" Width="100"/>
                         <DataGridTextColumn Header="Transaction" Binding="{Binding TxId}" Width="*"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </TabItem>
         </TabControl>
+
+        <!-- ===== Send confirmation overlay (Monero is irreversible; always confirm) ===== -->
+        <Border Grid.Row="0" Grid.RowSpan="3" IsVisible="{Binding ShowSendConfirm}" Background="#CC0D0D10">
+            <Border Classes="card" Width="480" Padding="26" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <StackPanel Spacing="14">
+                    <TextBlock Text="Confirm this send" Classes="h1"/>
+                    <TextBlock Text="{Binding SendSummary}" Classes="muted"/>
+                    <Border Background="{StaticResource InsetBg}" BorderBrush="{StaticResource BorderSubtle}"
+                            BorderThickness="1" CornerRadius="10" Padding="12">
+                        <TextBlock Classes="mono" FontSize="12" Text="{Binding SendAddress}" TextWrapping="Wrap"/>
+                    </Border>
+                    <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#E0A030"
+                               Text="Monero transactions are irreversible. Double-check the address — funds sent to a wrong address cannot be recovered. The network fee is determined at submission."/>
+                    <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+                        <Button Content="Cancel" Command="{Binding CancelSendCommand}"/>
+                        <Button Content="Send now" Classes="accent" Command="{Binding ConfirmSendCommand}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Border>
     </Grid>
 </UserControl>

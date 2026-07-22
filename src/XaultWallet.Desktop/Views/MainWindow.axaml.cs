@@ -6,7 +6,19 @@ namespace XaultWallet.Desktop.Views;
 
 public partial class MainWindow : Window
 {
-    public MainWindow() => InitializeComponent();
+    public MainWindow()
+    {
+        InitializeComponent();
+
+        // Reset the auto-lock inactivity timer on any pointer or keyboard input.
+        // Tunnel so we see the events regardless of what handles them downstream.
+        AddHandler(PointerMovedEvent, OnUserActivity, RoutingStrategies.Tunnel);
+        AddHandler(PointerPressedEvent, OnUserActivity, RoutingStrategies.Tunnel);
+        AddHandler(KeyDownEvent, OnUserActivity, RoutingStrategies.Tunnel);
+    }
+
+    private void OnUserActivity(object? sender, RoutedEventArgs e) =>
+        (DataContext as ViewModels.MainWindowViewModel)?.NotifyActivity();
 
     // Drag the window by its custom title bar.
     private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e)

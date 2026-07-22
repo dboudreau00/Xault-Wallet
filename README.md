@@ -1,33 +1,5 @@
 # XaultWallet
 
-<table>
-  <tr>
-    <td align="center">
-      <b>Xault</b><br>
-      <img src="https://github.com/user-attachments/assets/117e91aa-bcc5-4ce7-b7e4-81b3d92138eb" width="400" alt="First Screenshot">
-    </td>
-    <td align="center">
-      <b>Wallet</b><br>
-      <img src="https://github.com/user-attachments/assets/88a4349c-f2da-4287-99ef-409e035acd33" width="400" alt="Second Screenshot">
-    </td>
-    <td align="center">
-      <b>Core</b><br>
-      <img src="https://github.com/user-attachments/assets/004956c0-71fe-4f8d-a8ed-c9422a83fecc" width="400" alt="Third Screenshot">
-    </td>
-  </tr>
-</table>
-
-
-
-## Why this design
-
-The single most dangerous thing a wallet author can do is hand-roll Monero's cryptography
-(ring signatures, RingCT, bulletproofs, stealth addresses). This project deliberately does
-**not** do that. Instead it drives the official **`monero-wallet-rpc`** binary — the same
-crypto that Monero's own tools use — and focuses its own code on the part where correctness
-is achievable and verifiable: the encrypted vault, the KDF, and the duress logic.
-
-
 > ## ⚠️ Unaudited beta — do NOT use with real funds
 >
 > This is an **educational, work-in-progress** Monero wallet. It has **not** had a professional
@@ -50,7 +22,13 @@ MVVM). It is **password-protected**, **encrypted at rest with AES-256-GCM**, and
 > This is a solid, reviewable foundation with a fully-implemented, unit-tested security core —
 > but it has **not** been independently audited. Any wallet that holds meaningful money should be.
 
+## Why this design
 
+The single most dangerous thing a wallet author can do is hand-roll Monero's cryptography
+(ring signatures, RingCT, bulletproofs, stealth addresses). This project deliberately does
+**not** do that. Instead it drives the official **`monero-wallet-rpc`** binary — the same
+crypto that Monero's own tools use — and focuses its own code on the part where correctness
+is achievable and verifiable: the encrypted vault, the KDF, and the duress logic.
 
 ## Architecture
 

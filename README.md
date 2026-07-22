@@ -3,8 +3,7 @@
 
 
 <img width="1070" height="756" alt="Screenshot 2026-07-22 135058" src="https://github.com/user-attachments/assets/5dd0fce3-0940-40a7-8f77-2ee846520654" />
-<img width="1074" height="758" alt="Screenshot 2026-07-22 135007" src="https://github.com/user-attachments/assets/5a27f93f-3477-4fba-98a1-093bb667916a" />
-<img width="1072" height="752" alt="Screenshot 2026-07-22 135207" src="https://github.com/user-attachments/assets/86803c4a-e383-4145-a116-03956b5c0ded" />
+
 
 
 
@@ -221,3 +220,7 @@ Released under the **MIT License** — see [LICENSE](LICENSE). Provided as-is, w
 Built on the official Monero tools (`monerod`, `monero-wallet-rpc`) — this project drives them
 rather than reimplementing Monero's cryptography. UI built with [Avalonia](https://avaloniaui.net/).
 Brought to life in harmony — https://dboudreau.dev
+
+
+<img width="1074" height="758" alt="Screenshot 2026-07-22 135007" src="https://github.com/user-attachments/assets/5a27f93f-3477-4fba-98a1-093bb667916a" />
+<img width="1072" height="752" alt="Screenshot 2026-07-22 135207" src="https://github.com/user-attachments/assets/86803c4a-e383-4145-a116-03956b5c0ded" />

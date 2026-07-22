@@ -1,5 +1,34 @@
 # XaultWallet
 
+
+
+<img width="1070" height="756" alt="Screenshot 2026-07-22 135058" src="https://github.com/user-attachments/assets/5dd0fce3-0940-40a7-8f77-2ee846520654" />
+<img width="1074" height="758" alt="Screenshot 2026-07-22 135007" src="https://github.com/user-attachments/assets/5a27f93f-3477-4fba-98a1-093bb667916a" />
+<img width="1072" height="752" alt="Screenshot 2026-07-22 135207" src="https://github.com/user-attachments/assets/86803c4a-e383-4145-a116-03956b5c0ded" />
+
+
+
+A desktop Monero (XMR) wallet, structured after **Wasabi Wallet** (.NET + Avalonia +
+MVVM). It is **password-protected**, **encrypted at rest with AES-256-GCM**, and supports a
+**duress password** that opens a decoy wallet (and can optionally wipe the real one).
+
+> This is a solid, reviewable foundation with a fully-implemented, unit-tested security core —
+> but it has **not** been independently audited. Any wallet that holds meaningful money should be.
+
+
+
+
+
+## Why this design
+
+The single most dangerous thing a wallet author can do is hand-roll Monero's cryptography
+(ring signatures, RingCT, bulletproofs, stealth addresses). This project deliberately does
+**not** do that. Instead it drives the official **`monero-wallet-rpc`** binary — the same
+crypto that Monero's own tools use — and focuses its own code on the part where correctness
+is achievable and verifiable: the encrypted vault, the KDF, and the duress logic.
+
+
+
 > ## ⚠️ Unaudited beta — do NOT use with real funds
 >
 > This is an **educational, work-in-progress** Monero wallet. It has **not** had a professional
@@ -15,20 +44,6 @@
 > (e.g. the official Monero GUI/CLI, Feather, or Cake). Read [SECURITY.md](SECURITY.md) in full
 > before doing anything with this project.
 
-A desktop Monero (XMR) wallet, structured after **Wasabi Wallet** (.NET + Avalonia +
-MVVM). It is **password-protected**, **encrypted at rest with AES-256-GCM**, and supports a
-**duress password** that opens a decoy wallet (and can optionally wipe the real one).
-
-> This is a solid, reviewable foundation with a fully-implemented, unit-tested security core —
-> but it has **not** been independently audited. Any wallet that holds meaningful money should be.
-
-## Why this design
-
-The single most dangerous thing a wallet author can do is hand-roll Monero's cryptography
-(ring signatures, RingCT, bulletproofs, stealth addresses). This project deliberately does
-**not** do that. Instead it drives the official **`monero-wallet-rpc`** binary — the same
-crypto that Monero's own tools use — and focuses its own code on the part where correctness
-is achievable and verifiable: the encrypted vault, the KDF, and the duress logic.
 
 ## Architecture
 

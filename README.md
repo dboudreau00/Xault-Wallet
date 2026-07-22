@@ -187,8 +187,7 @@ This build has had a dedicated hardening pass. Notable behaviour:
 This is at a **beta-on-stagenet** bar, **not** a "trust it with savings" bar. It was written
 carefully but, being a wallet, still needs the following before mainnet use:
 
-1. A clean `dotnet restore && dotnet test` and manual compile on your machine (the author's
-   environment could not compile it).
+1. A clean `dotnet restore && dotnet test` and manual compile on your machine.
 2. End-to-end testing against **stagenet**: generate a wallet, receive, send, restart, restore,
    and exercise the duress password — with a real `monero-wallet-rpc` and daemon.
 3. A **professional third-party security audit**. Do not skip this for a wallet.
@@ -209,11 +208,6 @@ For anything security-sensitive, please follow the private reporting process in
 
 Released under the **MIT License** — see [LICENSE](LICENSE). Provided as-is, with no warranty.
 
-> Prefer copyleft? MIT was chosen here mainly so the license text could be included exactly and
-> correctly. If you'd rather use **GPLv3** (which better matches Monero's own ethos and keeps
-> derivatives open source), swap it on GitHub: **Add file → Create new file →** name it
-> `LICENSE` → **Choose a license template → GNU GPLv3**. GitHub inserts the canonical, verbatim
-> license text for you. Update this section to match if you do.
 
 ## Acknowledgements
 

@@ -3,15 +3,15 @@
 <table>
   <tr>
     <td align="center">
-      <b>Before</b><br>
+      <b>Xault</b><br>
       <img src="https://github.com/user-attachments/assets/117e91aa-bcc5-4ce7-b7e4-81b3d92138eb" width="400" alt="First Screenshot">
     </td>
     <td align="center">
-      <b>After</b><br>
+      <b>Wallet</b><br>
       <img src="https://github.com/user-attachments/assets/88a4349c-f2da-4287-99ef-409e035acd33" width="400" alt="Second Screenshot">
     </td>
     <td align="center">
-      <b>After</b><br>
+      <b>Core</b><br>
       <img src="https://github.com/user-attachments/assets/004956c0-71fe-4f8d-a8ed-c9422a83fecc" width="400" alt="Third Screenshot">
     </td>
   </tr>

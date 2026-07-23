@@ -10,7 +10,7 @@ namespace XaultWallet.Desktop.ViewModels;
 public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
 {
     private readonly WalletSecrets _secrets;
-    private readonly MoneroWalletService _wallet;
+    private MoneroWalletService _wallet;
     private readonly CancellationTokenSource _cts = new();
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private Task? _autoRefreshLoop;
@@ -69,6 +69,13 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
 
     public event Action? Locked;
 
+    /// <summary>Raised when the user asks to open Settings from the wallet screen (e.g. the
+    /// startup-failure banner). The shell (MainWindowViewModel) handles the actual navigation.</summary>
+    public event Action? SettingsRequested;
+
+    [RelayCommand]
+    private void OpenSettings() => SettingsRequested?.Invoke();
+
     public WalletViewModel(WalletSecrets secrets)
     {
         _secrets = secrets ?? throw new ArgumentNullException(nameof(secrets));
@@ -112,6 +119,11 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         {
             return;
         }
+
+        // Rebuild the wallet service so a monero-wallet-rpc path (or default node) just changed in
+        // Settings actually takes effect — the service captures the binary path at construction.
+        try { await _wallet.DisposeAsync(); } catch { /* best effort */ }
+        _wallet = AppServices.Instance.CreateWalletService();
 
         await InitializeAsync();
     }

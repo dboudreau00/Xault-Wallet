@@ -28,6 +28,38 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty] private string _changePasswordResult = string.Empty;
     [ObservableProperty] private bool _changePasswordOk;
 
+    // Change THIS wallet's node (repoint an existing vault's daemon address)
+    [ObservableProperty] private string _repointNodeAddress = string.Empty;
+    [ObservableProperty] private string _repointPassword = string.Empty;
+    [ObservableProperty] private string _repointResult = string.Empty;
+    [ObservableProperty] private bool _repointOk;
+    [ObservableProperty] private string _repointTestResult = string.Empty;
+    [ObservableProperty] private bool _repointTestOk;
+
+    /// <summary>Selecting a preset fills the repoint address field below (network is unchanged).</summary>
+    [ObservableProperty] private RemoteNode? _selectedRepointPreset;
+
+    /// <summary>Only show the repoint card when there's actually a wallet to repoint.</summary>
+    public bool VaultExists { get; } = VaultManager.Exists(AppServices.Instance.VaultPath);
+
+    partial void OnSelectedRepointPresetChanged(RemoteNode? value)
+    {
+        if (value is null)
+        {
+            return;
+        }
+
+        RepointNodeAddress = value.Url;
+        RepointResult = string.Empty;
+        RepointTestResult = string.Empty;
+    }
+
+    partial void OnRepointNodeAddressChanged(string value)
+    {
+        RepointResult = string.Empty;
+        RepointTestResult = string.Empty;
+    }
+
     /// <summary>Selecting a preset fills the daemon address and network below.</summary>
     [ObservableProperty] private RemoteNode? _selectedPreset;
 
@@ -208,6 +240,81 @@ public sealed partial class SettingsViewModel : ViewModelBase
             ChangePasswordOk = false;
             ChangePasswordResult = "Couldn't change password: " + ex.Message;
             Log.Error("Change password failed", ex);
+        }
+    }
+
+    [RelayCommand]
+    private async Task TestRepointNodeAsync()
+    {
+        Busy = true;
+        RepointTestOk = false;
+        RepointTestResult = "Contacting node…";
+        try
+        {
+            ulong height = await MoneroDiagnostics.ProbeDaemonAsync(RepointNodeAddress);
+            RepointTestOk = true;
+            RepointTestResult = $"OK — node at height {height}.";
+        }
+        catch (Exception ex)
+        {
+            RepointTestOk = false;
+            RepointTestResult = ex.Message;
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    [RelayCommand]
+    private void RepointNode()
+    {
+        RepointResult = string.Empty;
+        RepointOk = false;
+
+        if (string.IsNullOrWhiteSpace(RepointNodeAddress))
+        {
+            RepointResult = "Enter the new node address.";
+            return;
+        }
+
+        if (string.IsNullOrEmpty(RepointPassword))
+        {
+            RepointResult = "Enter your wallet password to confirm the change.";
+            return;
+        }
+
+        try
+        {
+            VaultManager mgr = VaultManager.Load(AppServices.Instance.VaultPath);
+            using var pw = SecureBuffer.FromPassword(RepointPassword.ToCharArray());
+
+            // ChangeDaemonAddress repoints whichever profile the password opens (real or duress),
+            // so the wording here stays neutral and never hints at a second wallet.
+            if (mgr.ChangeDaemonAddress(pw, RepointNodeAddress.Trim()))
+            {
+                RepointOk = true;
+                RepointResult = "Node updated. Lock and unlock your wallet for the change to take effect.";
+                RepointPassword = string.Empty;
+                // Deliberately not logging the address — which node you use is not something the log needs.
+                Log.Info("Wallet daemon address repointed.");
+            }
+            else
+            {
+                RepointOk = false;
+                RepointResult = "That password didn't unlock a wallet in this vault.";
+            }
+        }
+        catch (ArgumentException ex)
+        {
+            RepointOk = false;
+            RepointResult = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            RepointOk = false;
+            RepointResult = "Couldn't update the node: " + ex.Message;
+            Log.Error("Repoint node failed", ex);
         }
     }
 

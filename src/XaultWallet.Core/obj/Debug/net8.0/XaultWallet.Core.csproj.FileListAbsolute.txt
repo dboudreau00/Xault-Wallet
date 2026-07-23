@@ -1,0 +1,12 @@
+C:\Users\vmwar\OneDrive\Desktop\Claude\XaultWallet\XaultWallet\src\XaultWallet.Core\bin\Debug\net8.0\XaultWallet.Core.deps.json
+C:\Users\vmwar\OneDrive\Desktop\Claude\XaultWallet\XaultWallet\src\XaultWallet.Core\bin\Debug\net8.0\XaultWallet.Core.dll
+C:\Users\vmwar\OneDrive\Desktop\Claude\XaultWallet\XaultWallet\src\XaultWallet.Core\bin\Debug\net8.0\XaultWallet.Core.pdb
+C:\Users\vmwar\OneDrive\Desktop\Claude\XaultWallet\XaultWallet\src\XaultWallet.Core\obj\Debug\net8.0\XaultWallet.Core.csproj.AssemblyReference.cache
+C:\Users\vmwar\OneDrive\Desktop\Claude\XaultWallet\XaultWallet\src\XaultWallet.Core\obj\Debug\net8.0\XaultWallet.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\vmwar\OneDrive\Desktop\Claude\XaultWallet\XaultWallet\src\XaultWallet.Core\obj\Debug\net8.0\XaultWallet.Core.AssemblyInfoInputs.cache
+C:\Users\vmwar\OneDrive\Desktop\Claude\XaultWallet\XaultWallet\src\XaultWallet.Core\obj\Debug\net8.0\XaultWallet.Core.AssemblyInfo.cs
+C:\Users\vmwar\OneDrive\Desktop\Claude\XaultWallet\XaultWallet\src\XaultWallet.Core\obj\Debug\net8.0\XaultWallet.Core.csproj.CoreCompileInputs.cache
+C:\Users\vmwar\OneDrive\Desktop\Claude\XaultWallet\XaultWallet\src\XaultWallet.Core\obj\Debug\net8.0\XaultWallet.Core.dll
+C:\Users\vmwar\OneDrive\Desktop\Claude\XaultWallet\XaultWallet\src\XaultWallet.Core\obj\Debug\net8.0\refint\XaultWallet.Core.dll
+C:\Users\vmwar\OneDrive\Desktop\Claude\XaultWallet\XaultWallet\src\XaultWallet.Core\obj\Debug\net8.0\XaultWallet.Core.pdb
+C:\Users\vmwar\OneDrive\Desktop\Claude\XaultWallet\XaultWallet\src\XaultWallet.Core\obj\Debug\net8.0\ref\XaultWallet.Core.dll

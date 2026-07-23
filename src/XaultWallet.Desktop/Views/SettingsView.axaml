@@ -98,6 +98,40 @@
 
                 <Separator/>
 
+                <!-- Change this wallet's node (repoint an existing vault) -->
+                <StackPanel Spacing="6" IsVisible="{Binding VaultExists}">
+                    <TextBlock Text="CHANGE THIS WALLET'S NODE" Classes="eyebrow"/>
+                    <TextBlock TextWrapping="Wrap" Classes="muted"
+                               Text="Repoints your EXISTING wallet at a different node. (The Default Node above only affects wallets you create later.) Only the node URL changes — your seed and network stay the same. Pick a node on the same network. Takes effect the next time you unlock."/>
+
+                    <ComboBox x:CompileBindings="False" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding PresetNodes}" SelectedItem="{Binding SelectedRepointPreset}"
+                              PlaceholderText="Pick a node (fills the address below)…">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Display}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <TextBox Classes="mono" FontSize="12.5" Watermark="http://host:port"
+                             Text="{Binding RepointNodeAddress}"/>
+                    <Button Content="Test node" Command="{Binding TestRepointNodeCommand}" IsEnabled="{Binding !Busy}"
+                            HorizontalAlignment="Left"/>
+                    <TextBlock Text="{Binding RepointTestResult}" TextWrapping="Wrap"
+                               IsVisible="{Binding RepointTestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               Foreground="{Binding RepointTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+
+                    <TextBox Watermark="Wallet password (confirms the change)" PasswordChar="&#9679;"
+                             Text="{Binding RepointPassword}"/>
+                    <Button Content="Update node" Command="{Binding RepointNodeCommand}" HorizontalAlignment="Left"/>
+                    <TextBlock Text="{Binding RepointResult}" TextWrapping="Wrap" FontSize="12.5"
+                               IsVisible="{Binding RepointResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               Foreground="{Binding RepointOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+                </StackPanel>
+
+                <Separator IsVisible="{Binding VaultExists}"/>
+
                 <!-- Change master password -->
                 <StackPanel Spacing="6">
                     <TextBlock Text="CHANGE MASTER PASSWORD" Classes="eyebrow"/>

@@ -68,10 +68,14 @@
         <!-- ============ Startup failure banner ============ -->
         <Border Grid.Row="1" IsVisible="{Binding StartupFailed}" Margin="0,14,0,0"
                 Background="#2A1414" BorderBrush="#7A2E2E" BorderThickness="1" CornerRadius="12" Padding="16">
-            <Grid ColumnDefinitions="*,Auto">
+            <Grid ColumnDefinitions="*,Auto,Auto">
                 <TextBlock Grid.Column="0" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="#F0B4B4"
-                           Text="The wallet backend didn't start. Check that monero-wallet-rpc is set in Settings and your node is reachable, then retry."/>
-                <Button Grid.Column="1" Content="Retry" Command="{Binding RetryStartupCommand}" VerticalAlignment="Center"/>
+                           Margin="0,0,12,0"
+                           Text="The wallet backend didn't start. Set the monero-wallet-rpc path in Settings and check your node is reachable, then retry."/>
+                <Button Grid.Column="1" Content="Open Settings" Command="{Binding OpenSettingsCommand}"
+                        VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <Button Grid.Column="2" Content="Retry" Classes="accent" Command="{Binding RetryStartupCommand}"
+                        VerticalAlignment="Center"/>
             </Grid>
         </Border>
 

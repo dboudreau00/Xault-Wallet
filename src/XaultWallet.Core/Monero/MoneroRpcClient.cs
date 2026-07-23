@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -7,9 +8,13 @@ namespace XaultWallet.Core.Monero;
 
 /// <summary>
 /// Thin JSON-RPC 2.0 client for a running monero-wallet-rpc instance.
-/// Authentication uses HTTP Digest (monero-wallet-rpc's default when launched
-/// with --rpc-login), which HttpClient negotiates automatically from the
-/// supplied NetworkCredential.
+///
+/// The app launches its wallet-rpc child with --disable-rpc-login (loopback-only
+/// binding makes RPC auth unnecessary), so no credentials are sent on the wire.
+/// The optional rpcUser/rpcPassword constructor parameters still wire up HTTP Digest
+/// via NetworkCredential for completeness, but note digest + a POST body can fail to
+/// replay after the 401 challenge — which is exactly why the ephemeral instance
+/// disables login rather than relying on it.
 ///
 /// Amounts are in atomic units: 1 XMR = 1e12 atomic units.
 /// </summary>
@@ -69,7 +74,7 @@ public sealed class MoneroRpcClient : IDisposable
     {
         // Build the JSON-RPC envelope by hand so there is zero ambiguity about what goes on the
         // wire (record + attribute serialization was producing requests monero-wallet-rpc rejected).
-        string id = Interlocked.Increment(ref _id).ToString();
+        string id = Interlocked.Increment(ref _id).ToString(CultureInfo.InvariantCulture);
         string paramsJson = @params is null ? "" : "," + "\"params\":" + JsonSerializer.Serialize(@params, RpcJson);
         string payload = $"{{\"jsonrpc\":\"2.0\",\"id\":\"{id}\",\"method\":\"{method}\"{paramsJson}}}";
 
@@ -90,10 +95,15 @@ public sealed class MoneroRpcClient : IDisposable
             string raw = "";
             try { raw = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false); } catch { }
 
+            // Never let the seed / seed_offset / password carried in the request (or a secret
+            // echoed in a response) reach an exception message — these propagate to the log file
+            // and the on-screen status. Redact both directions (hard rules #6 and #7).
+            string safePayload = SecretRedactor.Redact(payload);
+
             if (!resp.IsSuccessStatusCode)
             {
                 throw new MoneroRpcException((int)resp.StatusCode,
-                    $"HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}. Sent: {payload}. Got: {Trim(raw)}");
+                    $"HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}. Sent: {safePayload}. Got: {Trim(SecretRedactor.Redact(raw))}");
             }
 
             RpcResponse<T>? body;
@@ -103,22 +113,22 @@ public sealed class MoneroRpcClient : IDisposable
             }
             catch (System.Text.Json.JsonException ex)
             {
-                throw new MoneroRpcException(-32700, $"Bad response JSON: {ex.Message}. Sent: {payload}. Got: {Trim(raw)}");
+                throw new MoneroRpcException(-32700, $"Bad response JSON: {ex.Message}. Sent: {safePayload}. Got: {Trim(SecretRedactor.Redact(raw))}");
             }
 
             if (body is null)
             {
-                throw new MoneroRpcException(-32603, $"Empty response. Sent: {payload}. Got: {Trim(raw)}");
+                throw new MoneroRpcException(-32603, $"Empty response. Sent: {safePayload}. Got: {Trim(SecretRedactor.Redact(raw))}");
             }
 
             if (body.Error is { } err)
             {
-                throw new MoneroRpcException(err.Code, $"{err.Message}. Sent: {payload}");
+                throw new MoneroRpcException(err.Code, $"{err.Message}. Sent: {safePayload}");
             }
 
             if (body.Result is null)
             {
-                throw new MoneroRpcException(-32603, $"No result for '{method}'. Got: {Trim(raw)}");
+                throw new MoneroRpcException(-32603, $"No result for '{method}'. Got: {Trim(SecretRedactor.Redact(raw))}");
             }
 
             return body.Result;
@@ -178,6 +188,22 @@ public sealed class MoneroRpcClient : IDisposable
     /// with --wallet-dir and no wallet open. The wallet is left open afterwards.</summary>
     public Task CreateWalletAsync(string filename, string password, string language = "English", CancellationToken ct = default) =>
         CallAsync<JsonElement>("create_wallet", new { filename, password, language }, ct);
+
+    /// <summary>Restore a wallet from a 25-word seed on the already-running RPC server. This does
+    /// NOT require the daemon (scanning happens in the background afterward), so it decouples
+    /// wallet-open from the daemon connection.</summary>
+    public Task RestoreDeterministicWalletAsync(
+        string filename, string password, string seed, ulong restoreHeight,
+        string seedOffset = "", CancellationToken ct = default) =>
+        CallAsync<JsonElement>("restore_deterministic_wallet", new
+        {
+            filename,
+            password,
+            seed,
+            restore_height = restoreHeight,
+            seed_offset = seedOffset ?? "",
+            autosave_current = true,
+        }, ct);
 
     /// <summary>Retrieve a key from the currently open wallet. key_type is "mnemonic", "view_key" or "spend_key".</summary>
     public Task<QueryKeyResult> QueryKeyAsync(string keyType, CancellationToken ct = default) =>
@@ -265,5 +291,5 @@ public sealed class TransferEntry
     [JsonIgnore]
     public string Date => Timestamp == 0
         ? ""
-        : DateTimeOffset.FromUnixTimeSeconds((long)Timestamp).ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+        : DateTimeOffset.FromUnixTimeSeconds((long)Timestamp).ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
 }

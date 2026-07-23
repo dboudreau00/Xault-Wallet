@@ -160,6 +160,53 @@ public sealed class VaultManager
         }
     }
 
+    /// <summary>
+    /// Re-point the wallet that <paramref name="password"/> opens at a new daemon (node) address,
+    /// then re-seal that same slot. Unlike <see cref="ChangeMainPassword"/>, this deliberately
+    /// works for WHICHEVER slot the password unlocks — real OR duress — so the operation reveals
+    /// nothing about which profile is which: a coercer watching cannot tell a real-wallet repoint
+    /// from a decoy repoint. Changing a node is not a "master" action; each profile's own owner may
+    /// legitimately repoint it. The other slot's bytes are left untouched.
+    /// Returns false on a wrong password. Throws <see cref="ArgumentException"/> if the address is
+    /// not a valid http(s) URL.
+    /// </summary>
+    public bool ChangeDaemonAddress(SecureBuffer password, string newDaemonAddress)
+    {
+        // Validate before doing any KDF work. Address validity is independent of the password, so
+        // rejecting a bad URL up front leaks nothing and avoids a needless Argon2 derivation.
+        string trimmed = (newDaemonAddress ?? string.Empty).Trim();
+        if (!IsValidDaemonAddress(trimmed))
+        {
+            throw new ArgumentException(
+                $"Daemon address must be a valid http(s) URL: '{newDaemonAddress}'.", nameof(newDaemonAddress));
+        }
+
+        var hit = _file.TryUnlock(password);
+        if (hit is null)
+        {
+            return false;
+        }
+
+        (SecureBuffer plaintext, int slotIndex) = hit.Value;
+        try
+        {
+            var secrets = Deserialize(plaintext.Span);
+            secrets.DaemonAddress = trimmed;
+            _file.WriteSlot(slotIndex, password, Serialize(secrets));
+            Persist();
+            return true;
+        }
+        finally
+        {
+            plaintext.Dispose();
+        }
+    }
+
+    private static bool IsValidDaemonAddress(string address) =>
+        !string.IsNullOrWhiteSpace(address)
+        && Uri.TryCreate(address, UriKind.Absolute, out Uri? uri)
+        && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+
     private void Persist()
     {
         byte[] data = _file.Serialize();

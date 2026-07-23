@@ -27,6 +27,8 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
     [ObservableProperty] private bool _createNewDuress = true;
     [ObservableProperty] private string _duressMnemonic = string.Empty;
     [ObservableProperty] private bool _duressSeedGenerated;
+    /// <summary>Seed-offset passphrase for an IMPORTED decoy seed. Ignored for a generated decoy.</summary>
+    [ObservableProperty] private string _duressSeedOffset = string.Empty;
 
     // --- network / daemon ---
     [ObservableProperty]
@@ -70,6 +72,8 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
     // --- real wallet seed ---
     [ObservableProperty] private bool _createNewReal = true;        // generate vs import
     [ObservableProperty] private string _realMnemonic = string.Empty;
+    /// <summary>Seed-offset passphrase for an IMPORTED real seed. Ignored (forced empty) for a generated seed.</summary>
+    [ObservableProperty] private string _realSeedOffset = string.Empty;
     [ObservableProperty] private ulong _restoreHeight;
     [ObservableProperty] private bool _realSeedGenerated;           // true only after generation
     [ObservableProperty] private bool _realVerified;
@@ -95,6 +99,25 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
 
     /// <summary>The generated seed split into numbered words for the display grid.</summary>
     public System.Collections.ObjectModel.ObservableCollection<SeedWord> RealSeedWords { get; } = new();
+
+    // --- imported-seed address confirmation (hard stop before sealing an import) ---
+    [ObservableProperty] private bool _showAddressConfirm;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasConfirmRealAddress))]
+    private string _confirmRealAddress = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasConfirmDuressAddress))]
+    private string _confirmDuressAddress = string.Empty;
+
+    public bool HasConfirmRealAddress => !string.IsNullOrEmpty(ConfirmRealAddress);
+    public bool HasConfirmDuressAddress => !string.IsNullOrEmpty(ConfirmDuressAddress);
+
+    // Everything needed to seal, snapshotted in phase 1 so nothing the user touches under the
+    // address-confirm overlay (e.g. toggling the duress checkbox) can change what gets sealed.
+    private WalletSecrets? _pendingMain;
+    private WalletSecrets? _pendingDuress;
+    private char[]? _pendingMainPassword;
+    private char[]? _pendingDuressPassword;
 
     // --- status ---
     [ObservableProperty] private string _error = string.Empty;
@@ -124,6 +147,31 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
     {
         var (level, bits) = PasswordStrength.Evaluate(value);
         StrengthLabel = value.Length == 0 ? string.Empty : $"{level} (~{bits:0} bits)";
+    }
+
+    // Switching between Generate and Import must FULLY reset the seed state for that profile.
+    // Otherwise a seed left over from the other mode keeps its old provenance while the mode flips:
+    // e.g. generate a seed, switch to Import, then type an offset — CreateNewReal is now false, so
+    // SeedOffsetPolicy would seal that GENERATED seed WITH an offset and unlock would restore a
+    // different, empty wallet than the backup (silent fund loss). Clearing on switch guarantees
+    // CreateNewReal/CreateNewDuress always agree with what the seed actually is.
+    partial void OnCreateNewRealChanged(bool value)
+    {
+        RealMnemonic = string.Empty;
+        RealSeedOffset = string.Empty;
+        RealSeedGenerated = false;
+        RealVerified = false;
+        RealBackedUp = false;
+        RealSeedWords.Clear();
+        Error = string.Empty;
+    }
+
+    partial void OnCreateNewDuressChanged(bool value)
+    {
+        DuressMnemonic = string.Empty;
+        DuressSeedOffset = string.Empty;
+        DuressSeedGenerated = false;
+        Error = string.Empty;
     }
 
     // ============================ seed generation ============================
@@ -294,6 +342,13 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
     {
         Error = string.Empty;
 
+        // If an address confirmation is already pending, ignore a re-trigger (the form stays
+        // keyboard-reachable under the overlay). The pending seal is driven by the overlay buttons.
+        if (ShowAddressConfirm)
+        {
+            return;
+        }
+
         if (!IsValidDaemon(DaemonAddress))
         {
             Error = "Daemon address must be a valid http(s) URL, e.g. http://127.0.0.1:18081";
@@ -387,6 +442,9 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
                 Label = "Main",
                 Network = Network,
                 Mnemonic = RealMnemonic.Trim(),
+                // A generated seed NEVER carries an offset (that would restore a different, empty
+                // wallet = fund loss); an imported seed keeps exactly what the user supplied.
+                SeedOffset = SeedOffsetPolicy.ForSeed(wasGenerated: CreateNewReal, RealSeedOffset),
                 RestoreHeight = effectiveRestore,
                 DaemonAddress = DaemonAddress.Trim(),
                 EphemeralWalletPassword = Convert.ToHexString(VaultCrypto.RandomBytes(24)),
@@ -401,6 +459,7 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
                     Label = "Wallet",
                     Network = Network,
                     Mnemonic = DuressMnemonic.Trim(),
+                    SeedOffset = SeedOffsetPolicy.ForSeed(wasGenerated: CreateNewDuress, DuressSeedOffset),
                     RestoreHeight = effectiveRestore,
                     DaemonAddress = DaemonAddress.Trim(),
                     EphemeralWalletPassword = Convert.ToHexString(VaultCrypto.RandomBytes(24)),
@@ -408,40 +467,54 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
                 };
             }
 
-            // Validate imported seeds actually open a wallet BEFORE sealing them, so a typo
-            // can't produce an unopenable vault. Generated seeds are already known-good.
-            if (!CreateNewReal && !await ValidateImportedSeedAsync(main, "seed"))
+            // Validate imported seeds actually open a wallet BEFORE sealing them (a typo can't
+            // produce an unopenable vault) and capture the derived primary address to echo back.
+            // Generated seeds are already known-good and their seed was shown and backed up.
+            string? realAddr = null;
+            if (!CreateNewReal)
             {
-                return;
+                (bool ok, realAddr) = await ValidateImportedSeedAddressAsync(main, "seed");
+                if (!ok)
+                {
+                    return;
+                }
             }
 
-            if (EnableDuress && !CreateNewDuress && !await ValidateImportedSeedAsync(duress!, "decoy seed"))
+            string? duressAddr = null;
+            if (EnableDuress && !CreateNewDuress)
             {
-                return;
+                (bool ok, duressAddr) = await ValidateImportedSeedAddressAsync(duress!, "decoy seed");
+                if (!ok)
+                {
+                    return;
+                }
             }
 
+            // Hard stop for imports: a wrong seed or seed-offset opens a valid but DIFFERENT, empty
+            // wallet with no error. Echo the derived address(es) and require the user to confirm the
+            // match BEFORE sealing. If no address could be derived (binary missing) there is nothing
+            // to echo, so fall through and seal as before.
+            if (realAddr is not null || duressAddr is not null)
+            {
+                // Snapshot the seal inputs and clear the live password fields. Phase 2 seals from
+                // this snapshot only, so nothing changed under the overlay can affect the result.
+                _pendingMain = main;
+                _pendingDuress = duress;
+                _pendingMainPassword = MainPassword.ToCharArray();
+                _pendingDuressPassword = EnableDuress ? DuressPassword.ToCharArray() : null;
+                MainPassword = MainPasswordConfirm = DuressPassword = string.Empty;
+
+                ConfirmRealAddress = realAddr ?? string.Empty;
+                ConfirmDuressAddress = duressAddr ?? string.Empty;
+                ShowAddressConfirm = true;
+                return; // wait for ConfirmAddresses / CancelAddressConfirm
+            }
+
+            // Generated-only wallet: nothing to echo, seal directly from a fresh snapshot.
             char[] mainChars = MainPassword.ToCharArray();
             char[]? duressChars = EnableDuress ? DuressPassword.ToCharArray() : null;
             MainPassword = MainPasswordConfirm = DuressPassword = string.Empty;
-
-            await Task.Run(() =>
-            {
-                using var mainPw = SecureBuffer.FromPassword(mainChars);
-                SecureBuffer? duressPw = duressChars is null ? null : SecureBuffer.FromPassword(duressChars);
-                try
-                {
-                    VaultManager.Create(AppServices.Instance.VaultPath, mainPw, main, duressPw, duress);
-                }
-                finally
-                {
-                    duressPw?.Dispose();
-                }
-            });
-
-            // Wipe the seeds from the view model now that they're sealed in the vault.
-            RealMnemonic = DuressMnemonic = string.Empty;
-            XaultWallet.Core.Diagnostics.Log.Info("Vault created.");
-            Created?.Invoke();
+            await SealVaultAsync(main, duress, mainChars, duressChars);
         }
         catch (Exception ex)
         {
@@ -454,36 +527,128 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         }
     }
 
+    /// <summary>The user confirmed the echoed address matches — seal the validated, pending vault
+    /// from the phase-1 snapshot.</summary>
+    [RelayCommand]
+    private async Task ConfirmAddressesAsync()
+    {
+        ShowAddressConfirm = false;
+        WalletSecrets? main = _pendingMain;
+        WalletSecrets? duress = _pendingDuress;
+        char[]? mainChars = _pendingMainPassword;
+        char[]? duressChars = _pendingDuressPassword;
+
+        // Hand ownership of the password snapshot to the seal (it zeroes them). Never seal with a
+        // missing password snapshot.
+        _pendingMainPassword = null;
+        _pendingDuressPassword = null;
+        if (main is null || mainChars is null)
+        {
+            WipeChars(mainChars);
+            WipeChars(duressChars);
+            _pendingMain = _pendingDuress = null;
+            return; // nothing pending / snapshot lost — do not seal
+        }
+
+        Busy = true;
+        try
+        {
+            await SealVaultAsync(main, duress, mainChars, duressChars);
+        }
+        catch (Exception ex)
+        {
+            XaultWallet.Core.Diagnostics.Log.Error("Vault creation failed", ex);
+            Error = ex is IOException ? ex.Message : "Could not create the vault: " + ex.Message;
+        }
+        finally
+        {
+            Busy = false;
+            _pendingMain = null;
+            _pendingDuress = null;
+            ConfirmRealAddress = ConfirmDuressAddress = string.Empty;
+        }
+    }
+
+    /// <summary>The address did NOT match — abort without sealing. Seed fields are left intact so the
+    /// user can correct the seed/offset and try again; the password snapshot is wiped.</summary>
+    [RelayCommand]
+    private void CancelAddressConfirm()
+    {
+        ShowAddressConfirm = false;
+        _pendingMain = null;
+        _pendingDuress = null;
+        WipeChars(_pendingMainPassword);
+        WipeChars(_pendingDuressPassword);
+        _pendingMainPassword = null;
+        _pendingDuressPassword = null;
+        ConfirmRealAddress = ConfirmDuressAddress = string.Empty;
+    }
+
+    private static void WipeChars(char[]? chars)
+    {
+        if (chars is not null)
+        {
+            Array.Clear(chars);
+        }
+    }
+
+    /// <summary>Seal the already-validated secrets into the vault and signal completion. This is the
+    /// ONLY path to VaultManager.Create — reached directly for generated-only wallets, or after the
+    /// address-confirmation hard stop for imports. Consumes (and zeroes) the password char arrays.</summary>
+    private async Task SealVaultAsync(WalletSecrets main, WalletSecrets? duress, char[] mainChars, char[]? duressChars)
+    {
+        await Task.Run(() =>
+        {
+            using var mainPw = SecureBuffer.FromPassword(mainChars); // FromPassword zeroes mainChars
+            SecureBuffer? duressPw = duressChars is null ? null : SecureBuffer.FromPassword(duressChars);
+            try
+            {
+                VaultManager.Create(AppServices.Instance.VaultPath, mainPw, main, duressPw, duress);
+            }
+            finally
+            {
+                duressPw?.Dispose();
+            }
+        });
+
+        // Wipe the seeds and offsets from the view model now that they're sealed in the vault.
+        RealMnemonic = DuressMnemonic = string.Empty;
+        RealSeedOffset = DuressSeedOffset = string.Empty;
+        XaultWallet.Core.Diagnostics.Log.Info("Vault created.");
+        Created?.Invoke();
+    }
+
     /// <summary>
-    /// Returns true if the seed is acceptable. Prefers authoritative validation via
-    /// monero-wallet-rpc; if the binary isn't available, falls back to a word-count sanity check
-    /// and warns that full validation was skipped.
+    /// Validates an imported seed by actually opening it via monero-wallet-rpc, returning
+    /// (true, primaryAddress) so the caller can echo the address for a confirmation hard stop.
+    /// If the binary isn't available it degrades to a word-count check and returns (true, null) —
+    /// there is no address to echo. Returns (false, null) and sets Error on an invalid seed.
     /// </summary>
-    private async Task<bool> ValidateImportedSeedAsync(WalletSecrets secrets, string what)
+    private async Task<(bool ok, string? address)> ValidateImportedSeedAddressAsync(WalletSecrets secrets, string what)
     {
         try
         {
             await using var svc = AppServices.Instance.CreateWalletService();
-            await svc.ValidateSeedOpensAsync(secrets);
-            return true;
+            string address = await svc.ValidateSeedOpensAsync(secrets);
+            return (true, address);
         }
         catch (FileNotFoundException)
         {
-            // Binary not available — degrade gracefully to a structural check.
+            // Binary not available — degrade gracefully to a structural check (no address to echo).
             int words = secrets.Mnemonic.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
             if (words is 25 or 13)
             {
-                return true;
+                return (true, null);
             }
 
             Error = $"Your {what} has {words} words; a Monero seed is normally 25 words. " +
                     "Couldn't fully validate it (monero-wallet-rpc not found). Double-check it.";
-            return false;
+            return (false, null);
         }
         catch (Exception ex)
         {
             Error = $"That {what} doesn't appear to be valid: {ex.Message}";
-            return false;
+            return (false, null);
         }
     }
 

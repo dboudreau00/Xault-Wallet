@@ -64,6 +64,9 @@
                             <StackPanel Spacing="10" IsVisible="{Binding !CreateNewReal}">
                                 <TextBox Classes="mono" Watermark="Existing 25-word seed" Text="{Binding RealMnemonic}"
                                          AcceptsReturn="True" Height="64" TextWrapping="Wrap"/>
+                                <TextBox Classes="mono" Watermark="Seed offset passphrase (optional)" Text="{Binding RealSeedOffset}"/>
+                                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#E0A030"
+                                           Text="Only if this seed was created WITH an offset passphrase elsewhere. It is a SEPARATE secret — case- and space-sensitive — that you must back up alongside your 25 words. Enter it exactly: a wrong, missing, or mistyped offset silently opens a different, EMPTY wallet with no error, and it can never be recovered from the seed. Leave blank if you didn't use one."/>
                                 <TextBlock Text="SYNC FROM" Classes="eyebrow"/>
                                 <ComboBox SelectedIndex="{Binding RestoreMode}" HorizontalAlignment="Stretch">
                                     <ComboBoxItem>Full history — scan everything (safest, slowest)</ComboBoxItem>
@@ -104,6 +107,9 @@
                                 <StackPanel Spacing="8" IsVisible="{Binding !CreateNewDuress}">
                                     <TextBox Classes="mono" Watermark="Decoy 25-word seed" Text="{Binding DuressMnemonic}"
                                              AcceptsReturn="True" Height="52" TextWrapping="Wrap"/>
+                                    <TextBox Classes="mono" Watermark="Decoy seed offset passphrase (optional)" Text="{Binding DuressSeedOffset}"/>
+                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#E0A030"
+                                               Text="Only if your decoy seed uses an offset passphrase — a separate, case/space-sensitive secret you must back up with the decoy words. Wrong or missing silently opens a different, empty decoy."/>
                                 </StackPanel>
                                 <CheckBox Content="Wipe the real wallet on duress" IsChecked="{Binding WipeRealOnDuress}"/>
                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#E0A030"
@@ -194,6 +200,34 @@
                     <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
                         <Button Content="Cancel" Command="{Binding CloseVerifyCommand}"/>
                         <Button Content="Confirm" Classes="accent" Command="{Binding VerifyRealSeedCommand}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Border>
+
+        <!-- ===== Imported-seed address confirmation (hard stop before sealing) ===== -->
+        <Border IsVisible="{Binding ShowAddressConfirm}" Background="#CC0D0D10">
+            <Border Classes="card" Width="540" Padding="26" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <StackPanel Spacing="16">
+                    <StackPanel Spacing="3">
+                        <TextBlock Text="Confirm the wallet address" Classes="h1"/>
+                        <TextBlock Classes="muted" TextWrapping="Wrap"
+                                   Text="This is the address your imported seed opens — deposits will go here. Confirm it matches the wallet you meant to import. A wrong seed or offset opens a valid but DIFFERENT, empty wallet, and the app cannot tell the difference."/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="4" IsVisible="{Binding HasConfirmRealAddress}">
+                        <TextBlock Text="PRIMARY ADDRESS" Classes="eyebrow"/>
+                        <TextBlock Text="{Binding ConfirmRealAddress}" Classes="mono" FontSize="12" TextWrapping="Wrap"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="4" IsVisible="{Binding HasConfirmDuressAddress}">
+                        <TextBlock Text="DECOY WALLET ADDRESS" Classes="eyebrow"/>
+                        <TextBlock Text="{Binding ConfirmDuressAddress}" Classes="mono" FontSize="12" TextWrapping="Wrap"/>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+                        <Button Content="Cancel" Command="{Binding CancelAddressConfirmCommand}"/>
+                        <Button Content="Confirm &amp; create vault" Classes="accent" Command="{Binding ConfirmAddressesCommand}"/>
                     </StackPanel>
                 </StackPanel>
             </Border>

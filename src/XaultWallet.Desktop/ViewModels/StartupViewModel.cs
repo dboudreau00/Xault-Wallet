@@ -35,11 +35,9 @@ public sealed partial class StartupViewModel : ViewModelBase
             // 1. Locate the wallet RPC binary (reads Settings under the hood).
             Status = "Locating monero-wallet-rpc\u2026";
             string binary = AppServices.Instance.WalletRpcBinaryPath;
-            bool binaryOk = false;
             try
             {
                 string version = await MoneroDiagnostics.ProbeWalletRpcAsync(binary, _cts.Token);
-                binaryOk = true;
                 Detail = version;
                 Log.Info("Startup: wallet-rpc OK — " + version);
             }

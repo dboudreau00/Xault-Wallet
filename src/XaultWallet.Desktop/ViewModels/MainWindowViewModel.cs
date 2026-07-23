@@ -55,6 +55,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             _wallet = null;
             Current = BuildUnlock();
         };
+        // Let the wallet screen (e.g. its startup-failure banner) open Settings through the shell.
+        _wallet.SettingsRequested += OpenSettings;
         Current = _wallet;
     }
 

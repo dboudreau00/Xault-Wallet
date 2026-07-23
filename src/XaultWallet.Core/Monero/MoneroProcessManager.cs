@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using XaultWallet.Core.Diagnostics;
@@ -50,9 +51,9 @@ public sealed class MoneroProcessManager : IAsyncDisposable
     };
 
     /// <summary>
-    /// Restore a wallet from seed into a fresh temp dir and start monero-wallet-rpc
-    /// serving it. Uses --generate-from-json (NOT --wallet-dir; the two are mutually
-    /// exclusive). Returns once the RPC endpoint is reachable.
+    /// Restore a wallet from seed into a fresh temp dir. Starts monero-wallet-rpc with no wallet
+    /// open (so startup never blocks on the daemon), then restores via the
+    /// restore_deterministic_wallet RPC. The wallet syncs in the background afterward.
     /// </summary>
     public Task<MoneroRpcClient> StartFromSeedAsync(WalletSecrets secrets, CancellationToken ct = default)
     {
@@ -62,24 +63,42 @@ public sealed class MoneroProcessManager : IAsyncDisposable
             throw new ArgumentException("WalletSecrets.Mnemonic is empty.", nameof(secrets));
         }
 
-        return LaunchAsync(secrets.Network, secrets.DaemonAddress, (psi, tempDir) =>
+        return StartFromSeedInternalAsync(secrets, ct);
+    }
+
+    private async Task<MoneroRpcClient> StartFromSeedInternalAsync(WalletSecrets secrets, CancellationToken ct)
+    {
+        // Start the RPC server with NO wallet open (--wallet-dir), exactly like the generation
+        // path. This does not connect to the daemon, so the server becomes ready quickly even
+        // when the node is slow or still syncing. We then restore the wallet via the
+        // restore_deterministic_wallet RPC (which doesn't need the daemon); scanning proceeds in
+        // the background afterward. This fixes the open-path timeout caused by --generate-from-json
+        // blocking on the daemon handshake during startup.
+        MoneroRpcClient client = await LaunchAsync(secrets.Network, secrets.DaemonAddress, (psi, tempDir) =>
         {
-            // Write the seed to a restore file consumed via --generate-from-json so the
-            // seed never appears on the command line (which is visible in the process table).
-            string restoreJsonPath = Path.Combine(tempDir, "restore.json");
-            var restore = new
-            {
-                version = 1,
-                filename = Path.Combine(tempDir, "w"),
-                scan_from_height = secrets.RestoreHeight,
-                password = secrets.EphemeralWalletPassword,
-                seed = secrets.Mnemonic.Trim(),
-                seed_passphrase = secrets.SeedOffset,
-            };
-            File.WriteAllText(restoreJsonPath, System.Text.Json.JsonSerializer.Serialize(restore));
-            psi.ArgumentList.Add("--generate-from-json"); psi.ArgumentList.Add(restoreJsonPath);
-            return restoreJsonPath; // securely deleted once the server is up
-        }, ct);
+            psi.ArgumentList.Add("--wallet-dir"); psi.ArgumentList.Add(tempDir);
+            return null;
+        }, ct).ConfigureAwait(false);
+
+        try
+        {
+            await client.RestoreDeterministicWalletAsync(
+                filename: "w",
+                password: secrets.EphemeralWalletPassword,
+                seed: secrets.Mnemonic.Trim(),
+                restoreHeight: secrets.RestoreHeight,
+                seedOffset: secrets.SeedOffset ?? string.Empty,
+                ct).ConfigureAwait(false);
+
+            Log.Info($"Wallet restored on RPC; syncing against {secrets.DaemonAddress} from height {secrets.RestoreHeight}.");
+        }
+        catch
+        {
+            await StopAsync().ConfigureAwait(false); // don't leak the process/temp dir on failure
+            throw;
+        }
+
+        return client;
     }
 
     /// <summary>
@@ -94,9 +113,9 @@ public sealed class MoneroProcessManager : IAsyncDisposable
         }, ct);
 
     /// <summary>
-    /// Shared launcher. <paramref name="configureMode"/> adds the mutually-exclusive wallet-mode
-    /// args (--generate-from-json OR --wallet-dir) and optionally returns a scratch file to shred
-    /// once the server is up. Cleans up fully if anything fails.
+    /// Shared launcher. <paramref name="configureMode"/> adds the wallet-mode args (both callers
+    /// use --wallet-dir so the server starts without opening a wallet) and may return a scratch
+    /// file to shred once the server is up. Cleans up fully if anything fails.
     /// </summary>
     private async Task<MoneroRpcClient> LaunchAsync(
         MoneroNetwork network,
@@ -133,7 +152,7 @@ public sealed class MoneroProcessManager : IAsyncDisposable
             RedirectStandardError = true,
             CreateNoWindow = true,
         };
-        psi.ArgumentList.Add("--rpc-bind-port"); psi.ArgumentList.Add(port.ToString());
+        psi.ArgumentList.Add("--rpc-bind-port"); psi.ArgumentList.Add(port.ToString(CultureInfo.InvariantCulture));
         psi.ArgumentList.Add("--rpc-bind-ip"); psi.ArgumentList.Add("127.0.0.1");
         // The RPC server is bound to loopback on a random port for a few seconds and is not
         // reachable off-machine. Digest --rpc-login breaks POSTs with a body (the request

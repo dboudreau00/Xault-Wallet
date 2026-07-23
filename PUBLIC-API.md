@@ -17,7 +17,12 @@ monero-wallet-rpc orchestration without the Avalonia desktop app.
     opens (real or duress), or null. **No plaintext password comparison exists anywhere** — a
     password "matches" only by successfully authenticating a slot's AES-GCM tag.
   - `ChangeMainPassword(current, new)` — re-encrypts the real slot (rejects the duress
-    password). *Available in the API, not yet exposed in the desktop UI.*
+    password). Exposed in the desktop Settings screen.
+  - `ChangeDaemonAddress(password, newDaemonAddress)` — repoints an existing wallet at a new
+    node and re-seals **whichever slot the password opens** (real *or* duress), so the operation
+    reveals nothing about which profile is which. Returns false on a wrong password; throws if the
+    address isn't a valid http(s) URL. Exposed in the desktop Settings screen ("Change this
+    wallet's node"). Takes effect on the next unlock.
 - **`VaultCrypto`** — Argon2id key derivation (bounded params) + AES-256-GCM encrypt/decrypt,
   `RandomBytes`.
 - **`VaultFile`** — the on-disk format (magic `XVLT`, v1, two equal padded slots, randomized
@@ -29,7 +34,12 @@ monero-wallet-rpc orchestration without the Avalonia desktop app.
 - **`WalletSecrets`** — everything one wallet profile needs: `Mnemonic`, `RestoreHeight`,
   `DaemonAddress`, `Network`, `Kind` (`Real`/`Duress`), `DuressWipeReal`, `Label`,
   `EphemeralWalletPassword`, and `SeedOffset` (Monero seed-offset passphrase — honored by the
-  restore pipeline; not yet surfaced in the desktop UI).
+  restore pipeline; surfaced in the desktop create UI on the **import path only**).
+- **`SeedOffsetPolicy`** — `ForSeed(wasGenerated, userOffset)` → the offset that is safe to seal.
+  Empty for a generated seed (which must never carry an offset — that would restore a different,
+  empty wallet), or the user's offset **byte-for-byte** for an imported seed (the offset is
+  `cn_slow_hash`'d raw, so it is case- and whitespace-sensitive and must not be trimmed). This is
+  the single choke point enforcing "an offset only ever accompanies an imported seed."
 - **`MoneroNetwork`** — `Mainnet` / `Stagenet` / `Testnet`.
 
 ### `XaultWallet.Core.Monero`

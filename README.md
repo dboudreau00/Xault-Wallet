@@ -391,3 +391,7 @@ public issue.
 Built on the official Monero tools (`monerod`, `monero-wallet-rpc`) — this project drives them
 rather than reimplementing Monero's cryptography. UI built with [Avalonia](https://avaloniaui.net/).
 Brought to life in harmony — <https://dboudreau.dev>
+
+
+
+XaultWallet is client-only: No service, no fee, no churning or mixing. It drives the official Monero binary and nothing more.

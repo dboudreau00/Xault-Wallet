@@ -82,8 +82,7 @@ public static class MoneroDiagnostics
     /// <summary>GET {daemon}/get_height and return the daemon's block height. Throws on failure.</summary>
     public static async Task<ulong> ProbeDaemonAsync(string daemonAddress, CancellationToken ct = default)
     {
-        if (!Uri.TryCreate(daemonAddress?.Trim(), UriKind.Absolute, out Uri? baseUri) ||
-            (baseUri.Scheme != Uri.UriSchemeHttp && baseUri.Scheme != Uri.UriSchemeHttps))
+        if (!DaemonAddress.TryParse(daemonAddress, out Uri baseUri))
         {
             throw new ArgumentException("Daemon address must be a valid http(s) URL.", nameof(daemonAddress));
         }

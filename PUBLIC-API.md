@@ -48,7 +48,14 @@ monero-wallet-rpc orchestration without the Avalonia desktop app.
   - `ValidateSeedOpensAsync(secrets)` → opens a wallet once to confirm a seed is valid
   - `OpenAsync(secrets)` → restores into an ephemeral temp dir (shredded on close)
   - `GetBalanceAsync` / `GetHeightAsync` / `GetHistoryAsync` / `RefreshAsync`
-  - `SendAsync(address, amountXmr, priority)` → `TransferResult` (includes `TxKey`)
+  - `SendAsync(address, amountXmr, priority)` → `TransferResult` (includes `TxKey`) — builds AND
+    broadcasts in one step
+  - `PrepareSendAsync(address, amountXmr, priority)` → `TransferResult` with the **exact fee** and
+    `TxMetadata`; builds the signed tx WITHOUT broadcasting (`do_not_relay`). Discarding the result
+    cancels the send entirely — nothing touches the network until…
+  - `RelaySendAsync(txMetadata)` → tx hash. Broadcasts a previously prepared tx; the fee shown at
+    prepare time is baked into the signed tx and cannot change. (This prepare→confirm→relay pair is
+    what the desktop send-confirm dialog uses.)
   - `GetTxKeyAsync(txid)` / `CheckTxKeyAsync(txid, txKey, address)` — payment proofs
   - `NewSubaddressAsync(label)`
   - `CloseAsync` / `DisposeAsync` — always dispose; this shreds the temp wallet files.

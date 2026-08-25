@@ -111,6 +111,42 @@ public sealed class MoneroWalletService : IAsyncDisposable
 
     public async Task<TransferResult> SendAsync(string address, decimal xmr, uint priority, CancellationToken ct = default)
     {
+        (string addr, ulong atomic, uint prio) = ValidateSendArgs(address, xmr, priority);
+        return await Rpc.TransferAsync(addr, atomic, prio, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Build the transaction WITHOUT broadcasting it. Returns the exact fee (baked into the signed
+    /// tx) plus the tx metadata needed to broadcast it later with <see cref="RelaySendAsync"/>.
+    /// Nothing touches the network until relay; discarding the result cancels the send entirely.
+    /// </summary>
+    public async Task<TransferResult> PrepareSendAsync(string address, decimal xmr, uint priority, CancellationToken ct = default)
+    {
+        (string addr, ulong atomic, uint prio) = ValidateSendArgs(address, xmr, priority);
+        TransferResult r = await Rpc.PrepareTransferAsync(addr, atomic, prio, ct).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(r.TxMetadata))
+        {
+            throw new InvalidOperationException("The wallet backend did not return transaction metadata for the prepared send.");
+        }
+
+        return r;
+    }
+
+    /// <summary>Broadcast a transaction previously built by <see cref="PrepareSendAsync"/>.
+    /// Returns the transaction hash.</summary>
+    public async Task<string> RelaySendAsync(string txMetadata, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(txMetadata))
+        {
+            throw new ArgumentException("Transaction metadata is empty.", nameof(txMetadata));
+        }
+
+        RelayTxResult r = await Rpc.RelayTxAsync(txMetadata.Trim(), ct).ConfigureAwait(false);
+        return r.TxHash;
+    }
+
+    private static (string address, ulong atomic, uint priority) ValidateSendArgs(string address, decimal xmr, uint priority)
+    {
         if (string.IsNullOrWhiteSpace(address))
         {
             throw new ArgumentException("Destination address is empty.", nameof(address));
@@ -132,7 +168,7 @@ public sealed class MoneroWalletService : IAsyncDisposable
             throw new ArgumentException("Amount is below the smallest atomic unit.", nameof(xmr));
         }
 
-        return await Rpc.TransferAsync(address.Trim(), atomic, priority, ct).ConfigureAwait(false);
+        return (address.Trim(), atomic, priority);
     }
 
     public async Task<ulong> GetHeightAsync(CancellationToken ct = default) =>

@@ -110,6 +110,8 @@
                                     <TextBox Classes="mono" Watermark="Decoy seed offset passphrase (optional)" Text="{Binding DuressSeedOffset}"/>
                                     <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#E0A030"
                                                Text="Only if your decoy seed uses an offset passphrase — a separate, case/space-sensitive secret you must back up with the decoy words. Wrong or missing silently opens a different, empty decoy."/>
+                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource TextTertiary}"
+                                               Text="An imported decoy always scans the full chain history, so any funds it already holds are guaranteed to appear."/>
                                 </StackPanel>
                                 <CheckBox Content="Wipe the real wallet on duress" IsChecked="{Binding WipeRealOnDuress}"/>
                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#E0A030"

@@ -174,19 +174,29 @@
             </TabItem>
 
             <TabItem Header="History">
-                <DataGrid ItemsSource="{Binding History}" IsReadOnly="True" Margin="0,14,0,0"
-                          x:CompileBindings="False"
-                          GridLinesVisibility="Horizontal" HeadersVisibility="Column"
-                          RowHeight="38">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="140"/>
-                        <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="80"/>
-                        <DataGridTextColumn Header="Amount (XMR)"
-                            Binding="{Binding Amount, Converter={x:Static conv:AtomicToXmrConverter.Instance}}" Width="150"/>
-                        <DataGridTextColumn Header="Height" Binding="{Binding Height}" Width="100"/>
-                        <DataGridTextColumn Header="Transaction" Binding="{Binding TxId}" Width="*"/>
-                    </DataGrid.Columns>
-                </DataGrid>
+                <Grid Margin="0,14,0,0">
+                    <DataGrid ItemsSource="{Binding History}" IsReadOnly="True"
+                              x:CompileBindings="False"
+                              GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                              RowHeight="38">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="140"/>
+                            <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="80"/>
+                            <DataGridTextColumn Header="Amount (XMR)"
+                                Binding="{Binding Amount, Converter={x:Static conv:AtomicToXmrConverter.Instance}}" Width="150"/>
+                            <DataGridTextColumn Header="Height" Binding="{Binding Height}" Width="100"/>
+                            <DataGridTextColumn Header="Transaction" Binding="{Binding TxId}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <!-- Empty state: shown until the first transaction lands -->
+                    <StackPanel IsVisible="{Binding !HasHistory}" VerticalAlignment="Center"
+                                HorizontalAlignment="Center" Spacing="6" IsHitTestVisible="False">
+                        <TextBlock Text="No transactions yet" FontSize="15" FontWeight="SemiBold"
+                                   HorizontalAlignment="Center" Foreground="{StaticResource TextSecondary}"/>
+                        <TextBlock Classes="muted" FontSize="12" HorizontalAlignment="Center"
+                                   Text="Incoming and outgoing payments appear here once the wallet has scanned them."/>
+                    </StackPanel>
+                </Grid>
             </TabItem>
         </TabControl>
 
@@ -196,12 +206,27 @@
                 <StackPanel Spacing="14">
                     <TextBlock Text="Confirm this send" Classes="h1"/>
                     <TextBlock Text="{Binding SendSummary}" Classes="muted"/>
+                    <!-- Bound to the SNAPSHOT the prepared tx pays, never the live form field. -->
                     <Border Background="{StaticResource InsetBg}" BorderBrush="{StaticResource BorderSubtle}"
                             BorderThickness="1" CornerRadius="10" Padding="12">
-                        <TextBlock Classes="mono" FontSize="12" Text="{Binding SendAddress}" TextWrapping="Wrap"/>
+                        <TextBlock Classes="mono" FontSize="12" Text="{Binding ConfirmSendAddress}" TextWrapping="Wrap"/>
                     </Border>
+
+                    <!-- Exact cost: the tx is already built (unbroadcast); this fee cannot change. -->
+                    <Border Background="{StaticResource InsetBg}" BorderBrush="{StaticResource BorderSubtle}"
+                            BorderThickness="1" CornerRadius="10" Padding="12">
+                        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,6,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Network fee" Classes="muted" Margin="0,0,18,0"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" Classes="mono" FontSize="12.5"
+                                       HorizontalAlignment="Right" Text="{Binding SendFeeText}"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Total (amount + fee)" Classes="muted" Margin="0,0,18,0"/>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="mono" FontSize="12.5" FontWeight="SemiBold"
+                                       HorizontalAlignment="Right" Text="{Binding SendTotalText}"/>
+                        </Grid>
+                    </Border>
+
                     <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#E0A030"
-                               Text="Monero transactions are irreversible. Double-check the address — funds sent to a wrong address cannot be recovered. The network fee is determined at submission."/>
+                               Text="Monero transactions are irreversible. Double-check the address — funds sent to a wrong address cannot be recovered. This exact fee is locked into the transaction."/>
                     <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
                         <Button Content="Cancel" Command="{Binding CancelSendCommand}"/>
                         <Button Content="Send now" Classes="accent" Command="{Binding ConfirmSendCommand}"/>

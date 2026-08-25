@@ -50,6 +50,18 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     // Send confirmation overlay (irreversible action — always confirm)
     [ObservableProperty] private bool _showSendConfirm;
     [ObservableProperty] private string _sendSummary = string.Empty;
+    [ObservableProperty] private string _sendFeeText = string.Empty;
+    [ObservableProperty] private string _sendTotalText = string.Empty;
+
+    /// <summary>Snapshot of the destination the prepared tx actually pays. The overlay binds to
+    /// THIS, not the live SendAddress field — so nothing typed under the overlay can make the
+    /// display disagree with what Confirm broadcasts.</summary>
+    [ObservableProperty] private string _confirmSendAddress = string.Empty;
+
+    // Transaction built by ReviewSend (do_not_relay) and broadcast only on explicit confirm.
+    // Holds the exact fee; discarding it (Cancel) means nothing ever touches the network.
+    private TransferResult? _preparedTx;
+    private decimal _preparedAmount;
 
     // Payment proof (the tx key from the most recent send — safe to share for explorer verification)
     [ObservableProperty] private bool _hasLastTx;
@@ -64,6 +76,9 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private bool _verifyOk;
 
     public ObservableCollection<TransferEntry> History { get; } = new();
+
+    /// <summary>Drives the History tab's empty-state hint.</summary>
+    [ObservableProperty] private bool _hasHistory;
 
     public string WalletLabel => _secrets.Label;
 
@@ -207,6 +222,8 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
                 {
                     History.Add(t);
                 }
+
+                HasHistory = History.Count > 0;
             }
             catch (OperationCanceledException) { }
             catch (Exception ex)
@@ -285,11 +302,21 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         await SoftRefreshAsync();
     }
 
-    /// <summary>Step 1 of sending: validate the form, then open the confirmation overlay.
-    /// Monero transactions are irreversible, so a deliberate confirm step is required.</summary>
+    /// <summary>Step 1 of sending: validate the form, BUILD the transaction without broadcasting
+    /// (do_not_relay), and show the exact fee in the confirmation overlay. Monero transactions are
+    /// irreversible, so the user confirms with the real cost in front of them; problems like
+    /// "not enough money for amount + fee" surface here, before anything is committed.</summary>
     [RelayCommand]
-    private void ReviewSend()
+    private async Task ReviewSendAsync()
     {
+        // Re-entrancy guard: the form stays keyboard-reachable under the confirm overlay, and a
+        // second prepare racing a pending confirm can desync display from broadcast. One prepared
+        // tx at a time, driven only by the overlay's buttons.
+        if (Sending || ShowSendConfirm)
+        {
+            return;
+        }
+
         SendResult = string.Empty;
 
         if (!IsReady)
@@ -319,30 +346,79 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        string prio = SendPriority switch { 1 => "Low", 2 => "Medium", 3 => "High", _ => "Default" };
-        SendSummary = $"Send {SendAmount} XMR ({prio} priority) to:";
-        ShowSendConfirm = true;
+        Sending = true;
+        try
+        {
+            // Snapshot EVERYTHING the tx is built from BEFORE the await. The overlay displays only
+            // these snapshots — nothing typed into the form while the prepare is in flight (the
+            // fields stay editable) can make the display disagree with what the tx actually pays.
+            uint priority = (uint)Math.Clamp(SendPriority, 0, 3);
+            string destination = SendAddress.Trim();
+            decimal amount = SendAmount;
+            string prio = priority switch { 1 => "Low", 2 => "Medium", 3 => "High", _ => "Default" };
+
+            _preparedTx = await _wallet.PrepareSendAsync(destination, amount, priority, _cts.Token);
+            ConfirmSendAddress = destination;
+            _preparedAmount = amount;
+
+            decimal fee = MoneroRpcClient.AtomicToXmr(_preparedTx.Fee);
+            SendSummary = $"Send {amount} XMR ({prio} priority) to:";
+            SendFeeText = $"{fee:0.############} XMR";
+            SendTotalText = $"{amount + fee:0.############} XMR";
+            ShowSendConfirm = true;
+        }
+        catch (OperationCanceledException)
+        {
+            // wallet locked/closed mid-prepare; nothing to report
+        }
+        catch (Exception ex)
+        {
+            _preparedTx = null;
+            SendResult = "Couldn't prepare the transaction: " + Friendly(ex);
+        }
+        finally
+        {
+            Sending = false;
+        }
     }
 
+    /// <summary>Abort: throw away the prepared (never-broadcast) transaction.</summary>
     [RelayCommand]
-    private void CancelSend() => ShowSendConfirm = false;
+    private void CancelSend()
+    {
+        ShowSendConfirm = false;
+        _preparedTx = null;
+        ConfirmSendAddress = string.Empty;
+        _preparedAmount = 0m;
+    }
 
-    /// <summary>Step 2: the user explicitly confirmed. Actually submit the transfer.</summary>
+    /// <summary>Step 2: the user explicitly confirmed. Broadcast the ALREADY-BUILT transaction —
+    /// the fee shown in the overlay is baked into it and cannot change.</summary>
     [RelayCommand]
     private async Task ConfirmSendAsync()
     {
         ShowSendConfirm = false;
+        TransferResult? prepared = _preparedTx;
+        _preparedTx = null;
+        if (prepared is null)
+        {
+            // Never send blind — but an explicitly-clicked confirm must never LOOK like a send.
+            SendResult = "Nothing was broadcast — the prepared transaction was no longer available. " +
+                         "Review the send again.";
+            return;
+        }
+
         Sending = true;
         try
         {
-            uint priority = (uint)Math.Clamp(SendPriority, 0, 3);
-            TransferResult r = await _wallet.SendAsync(SendAddress.Trim(), SendAmount, priority, _cts.Token);
-            SendResult = $"Sent {SendAmount} XMR (fee {MoneroRpcClient.AtomicToXmr(r.Fee)} XMR).";
+            string txHash = await _wallet.RelaySendAsync(prepared.TxMetadata, _cts.Token);
+            decimal fee = MoneroRpcClient.AtomicToXmr(prepared.Fee);
+            SendResult = $"Sent {_preparedAmount} XMR (fee {fee:0.############} XMR).";
 
             // Surface the transaction key so the payment can be proven on an explorer.
-            LastTxId = r.TxHash;
-            LastTxKey = r.TxKey;
-            HasLastTx = !string.IsNullOrWhiteSpace(r.TxHash);
+            LastTxId = string.IsNullOrWhiteSpace(txHash) ? prepared.TxHash : txHash;
+            LastTxKey = prepared.TxKey;
+            HasLastTx = !string.IsNullOrWhiteSpace(LastTxId);
 
             Log.Info("Transfer submitted.");
             SendAddress = string.Empty;
@@ -351,14 +427,22 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
-            SendResult = "Send cancelled.";
+            // The broadcast request may already have reached the network before cancellation.
+            SendResult = "Send interrupted — the transaction MAY still have been broadcast. " +
+                         $"Check History for txid {prepared.TxHash} before sending again.";
         }
         catch (Exception ex)
         {
-            SendResult = "Failed: " + Friendly(ex);
+            // Honesty over reassurance: a failed-looking relay can still have reached the network,
+            // and retrying too early can double-pay with a second transaction. Give the txid so
+            // "check History" is actually actionable.
+            SendResult = "Broadcast failed: " + Friendly(ex) +
+                         $" The transaction may or may not have reached the network — check History for txid {prepared.TxHash} before sending again.";
         }
         finally
         {
+            ConfirmSendAddress = string.Empty;
+            _preparedAmount = 0m;
             Sending = false;
         }
     }
@@ -467,9 +551,54 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     {
         FileNotFoundException => "monero-wallet-rpc was not found. Set its path in Settings.",
         TimeoutException => "the wallet backend didn't respond in time.",
-        MoneroRpcClient.MoneroRpcException rpc => rpc.Message,
+        MoneroRpcClient.MoneroRpcException rpc => FriendlyRpc(rpc),
         _ => ex.Message,
     };
+
+    /// <summary>Map raw monero-wallet-rpc errors to human messages (matched on message text —
+    /// the numeric codes are less stable across releases). Unknown errors pass through, already
+    /// secret-redacted at the source.</summary>
+    private static string FriendlyRpc(MoneroRpcClient.MoneroRpcException rpc)
+    {
+        string m = rpc.Message;
+
+        if (Has(m, "not enough unlocked money") || Has(m, "not enough money"))
+        {
+            return "Not enough spendable balance to cover the amount plus the network fee. " +
+                   "Wait for incoming funds to unlock, or lower the amount.";
+        }
+
+        if (Has(m, "wrong address") || Has(m, "invalid address") || Has(m, "invalid destination"))
+        {
+            return "The destination address was rejected by the wallet backend. Re-check it.";
+        }
+
+        if (Has(m, "daemon is busy"))
+        {
+            return "The node is busy (likely still syncing). Try again in a moment.";
+        }
+
+        if (Has(m, "no connection to daemon") || Has(m, "connection to daemon"))
+        {
+            return "Lost connection to the node. Check the node in Settings, or try again shortly.";
+        }
+
+        if (Has(m, "double spend") || Has(m, "tx not possible") || Has(m, "transaction was rejected"))
+        {
+            return "The prepared transaction is no longer valid (the wallet state changed). " +
+                   "Review the send again to rebuild it.";
+        }
+
+        if (Has(m, "fee is too low") || Has(m, "fee too low"))
+        {
+            return "The network rejected the fee as too low. Try a higher priority.";
+        }
+
+        return m;
+    }
+
+    private static bool Has(string message, string fragment) =>
+        message.Contains(fragment, StringComparison.OrdinalIgnoreCase);
 
     public async ValueTask DisposeAsync()
     {

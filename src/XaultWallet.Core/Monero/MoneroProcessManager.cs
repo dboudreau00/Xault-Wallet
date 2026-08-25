@@ -135,7 +135,7 @@ public sealed class MoneroProcessManager : IAsyncDisposable
                 _walletRpcBinary);
         }
 
-        if (!IsValidDaemonAddress(daemonAddress))
+        if (!DaemonAddress.IsValid(daemonAddress))
         {
             throw new ArgumentException($"Daemon address is not a valid http(s) URL: '{daemonAddress}'.", nameof(daemonAddress));
         }
@@ -264,11 +264,6 @@ public sealed class MoneroProcessManager : IAsyncDisposable
         // Surface the last few lines only; keep it short and secret-free (rpc logs don't contain the seed).
         return "Last output: " + string.Join(" | ", lines[^Math.Min(4, lines.Length)..]);
     }
-
-    private static bool IsValidDaemonAddress(string address) =>
-        !string.IsNullOrWhiteSpace(address)
-        && Uri.TryCreate(address.Trim(), UriKind.Absolute, out Uri? uri)
-        && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
     public async Task StopAsync()
     {

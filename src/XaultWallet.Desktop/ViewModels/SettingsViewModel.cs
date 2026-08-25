@@ -152,7 +152,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         {
             ulong height = await MoneroDiagnostics.ProbeDaemonAsync(DefaultDaemonAddress);
             DaemonTestOk = true;
-            DaemonTestResult = $"OK \u2014 daemon at height {height}.";
+            DaemonTestResult = $"OK \u2014 node at height {height}.";
         }
         catch (Exception ex)
         {

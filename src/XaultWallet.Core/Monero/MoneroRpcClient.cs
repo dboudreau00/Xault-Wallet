@@ -167,6 +167,25 @@ public sealed class MoneroRpcClient : IDisposable
             get_tx_key = true,
         }, ct);
 
+    /// <summary>Build a transfer WITHOUT broadcasting it (do_not_relay). Returns the exact fee and
+    /// the signed tx metadata; nothing touches the network until <see cref="RelayTxAsync"/> is
+    /// called with that metadata. Used to show the real fee in the send-confirm dialog.</summary>
+    public Task<TransferResult> PrepareTransferAsync(string address, ulong atomicAmount, uint priority = 0, CancellationToken ct = default) =>
+        CallAsync<TransferResult>("transfer", new
+        {
+            destinations = new[] { new { amount = atomicAmount, address } },
+            account_index = 0u,
+            priority,
+            get_tx_key = true,
+            do_not_relay = true,
+            get_tx_metadata = true,
+        }, ct);
+
+    /// <summary>Broadcast a transaction previously built by <see cref="PrepareTransferAsync"/>.
+    /// The fee cannot change between prepare and relay — it is baked into the signed tx.</summary>
+    public Task<RelayTxResult> RelayTxAsync(string txMetadata, CancellationToken ct = default) =>
+        CallAsync<RelayTxResult>("relay_tx", new { hex = txMetadata }, ct);
+
     public Task<GetTransfersResult> GetTransfersAsync(bool @in = true, bool @out = true, bool pending = true, CancellationToken ct = default) =>
         CallAsync<GetTransfersResult>("get_transfers", new { @in, @out, pending, pool = pending }, ct);
 
@@ -267,6 +286,16 @@ public sealed class TransferResult
     [JsonPropertyName("tx_key")] public string TxKey { get; set; } = "";
     [JsonPropertyName("amount")] public ulong Amount { get; set; }
     [JsonPropertyName("fee")] public ulong Fee { get; set; }
+
+    /// <summary>Signed-tx metadata (only when requested via get_tx_metadata). Holding it lets the
+    /// caller broadcast later with relay_tx. Anyone with this blob can broadcast the tx, so it
+    /// stays in memory and is redacted from any error/log output.</summary>
+    [JsonPropertyName("tx_metadata")] public string TxMetadata { get; set; } = "";
+}
+
+public sealed class RelayTxResult
+{
+    [JsonPropertyName("tx_hash")] public string TxHash { get; set; } = "";
 }
 
 public sealed class GetTransfersResult

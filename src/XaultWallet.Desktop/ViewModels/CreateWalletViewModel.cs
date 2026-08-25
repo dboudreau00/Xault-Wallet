@@ -4,6 +4,8 @@ using CommunityToolkit.Mvvm.Input;
 using XaultWallet.Core.Models;
 using XaultWallet.Core.Monero;
 using XaultWallet.Core.Security;
+// The VM's DaemonAddress *property* shadows the Core helper class of the same name.
+using DaemonUrl = XaultWallet.Core.Monero.DaemonAddress;
 
 namespace XaultWallet.Desktop.ViewModels;
 
@@ -29,6 +31,11 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
     [ObservableProperty] private bool _duressSeedGenerated;
     /// <summary>Seed-offset passphrase for an IMPORTED decoy seed. Ignored for a generated decoy.</summary>
     [ObservableProperty] private string _duressSeedOffset = string.Empty;
+
+    /// <summary>Chain tip captured when the decoy seed was GENERATED — the decoy's own "newest
+    /// block only" starting point. A brand-new seed has no earlier history, so scanning from its
+    /// generation moment is always correct and avoids a pointless full-chain scan.</summary>
+    private ulong _duressRestoreHeight;
 
     // --- network / daemon ---
     [ObservableProperty]
@@ -67,6 +74,30 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         {
             DaemonAddress = $"http://127.0.0.1:{port}";
         }
+
+        // Chain-specific state must not survive a network switch. A generation tip captured on the
+        // OLD chain can sit far above the NEW chain's tip; sealing it would make incoming funds
+        // invisible until that chain grows past it (possibly never). Generated seeds must be
+        // re-generated on the new network (their backup .txt also names the network); typed import
+        // seeds are kept (a mnemonic is network-agnostic) but their height resets to full history.
+        RealSeedGenerated = false;
+        RealVerified = false;
+        RealBackedUp = false;
+        RealSeedWords.Clear();
+        if (CreateNewReal)
+        {
+            RealMnemonic = string.Empty;
+        }
+
+        DuressSeedGenerated = false;
+        if (CreateNewDuress)
+        {
+            DuressMnemonic = string.Empty;
+        }
+
+        _duressRestoreHeight = 0;
+        RestoreHeight = 0;
+        RestoreMode = 0;
     }
 
     // --- real wallet seed ---
@@ -80,9 +111,12 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
     [ObservableProperty] private bool _realBackedUp;
 
     // Import "sync from" mode: 0 = full history, 1 = from a specific block, 2 = from now.
+    // Defaults to FULL HISTORY — the safe choice for an imported seed, which may hold funds of any
+    // age; the faster options are a deliberate opt-in. (Generated seeds don't use this selector at
+    // all: they always scan from their own generation-time tip.)
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsSpecificHeight))]
-    private int _restoreMode = 1;
+    private int _restoreMode;
 
     public bool IsSpecificHeight => RestoreMode == 1;
 
@@ -163,6 +197,10 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         RealVerified = false;
         RealBackedUp = false;
         RealSeedWords.Clear();
+        // Height state belongs to the seed it was captured/typed for — reset with it, or a
+        // generation-time tip would leak into the import height box (and vice versa).
+        RestoreHeight = 0;
+        RestoreMode = 0;
         Error = string.Empty;
     }
 
@@ -171,6 +209,7 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         DuressMnemonic = string.Empty;
         DuressSeedOffset = string.Empty;
         DuressSeedGenerated = false;
+        _duressRestoreHeight = 0;
         Error = string.Empty;
     }
 
@@ -210,8 +249,9 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         try
         {
             await using var svc = AppServices.Instance.CreateWalletService();
-            (string mnemonic, ulong _) = await svc.GenerateNewSeedAsync(Network, DaemonAddress.Trim());
+            (string mnemonic, ulong height) = await svc.GenerateNewSeedAsync(Network, DaemonAddress.Trim());
             DuressMnemonic = mnemonic;
+            _duressRestoreHeight = height; // the decoy's OWN tip — not the real wallet's height
             DuressSeedGenerated = true;
         }
         catch (Exception ex)
@@ -319,7 +359,8 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
             return;
         }
 
-        string content = BackupText(DuressMnemonic, RestoreHeight, Network);
+        // The decoy backup records the DECOY's own generation height, not the real wallet's.
+        string content = BackupText(DuressMnemonic, _duressRestoreHeight, Network);
         await SaveBackupHandler(content, "xault-decoy-seed-backup.txt");
     }
 
@@ -349,7 +390,7 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
             return;
         }
 
-        if (!IsValidDaemon(DaemonAddress))
+        if (!DaemonUrl.IsValid(DaemonAddress))
         {
             Error = "Daemon address must be a valid http(s) URL, e.g. http://127.0.0.1:18081";
             return;
@@ -413,6 +454,15 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
                 return;
             }
 
+            // Mirror the real seed's provenance gate: in generate mode the decoy must actually
+            // have been generated (so its height/provenance state is consistent), not merely
+            // present in the text box.
+            if (CreateNewDuress && !DuressSeedGenerated)
+            {
+                Error = "Generate a decoy seed first.";
+                return;
+            }
+
             if (string.IsNullOrWhiteSpace(DuressMnemonic))
             {
                 Error = "Provide a decoy seed (generate or import) for the duress wallet.";
@@ -423,15 +473,35 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         Busy = true;
         try
         {
-            // For imports, resolve the "sync from" choice into a restore height. Generated
-            // wallets keep the tip height captured at generation (nothing before it to scan).
-            ulong effectiveRestore = RestoreHeight;
-            if (!CreateNewReal)
+            // Restore-height rules — consistent by seed provenance:
+            //   GENERATED seed (real or decoy): newest block only, from ITS OWN generation-time
+            //     tip. A brand-new seed cannot have earlier history, so this is always correct
+            //     and skips the pointless full-chain scan. If the daemon was unreachable at
+            //     generation (captured 0), re-probe now; a fresh seed created "blind" still has
+            //     no history before this moment.
+            //   IMPORTED real seed: the user chooses via the "sync from" selector.
+            //   IMPORTED decoy seed: always full history — it may hold funds older than anything
+            //     on this screen, and a decoy that silently hides its own balance is broken.
+            // One tip probe serves fallback, "from now", and a safety clamp: a generated seed's
+            // captured height must never exceed the chain's current tip (wallet-rpc can
+            // date-estimate above the real tip on test networks), or funds would be skipped.
+            bool needTip = CreateNewReal
+                           || (!CreateNewReal && RestoreMode == 2)
+                           || (EnableDuress && CreateNewDuress);
+            ulong tipNow = needTip ? await GetTipHeightAsync() : 0UL;
+            static ulong ClampToTip(ulong captured, ulong tip) => tip == 0 ? captured : Math.Min(captured, tip);
+
+            ulong realRestore;
+            if (CreateNewReal)
             {
-                effectiveRestore = RestoreMode switch
+                realRestore = RestoreHeight != 0 ? ClampToTip(RestoreHeight, tipNow) : tipNow;
+            }
+            else
+            {
+                realRestore = RestoreMode switch
                 {
-                    0 => 0UL,                                   // full history
-                    2 => await GetTipHeightAsync(),             // from now (fastest)
+                    0 => 0UL,                                   // full history (safest for imports)
+                    2 => tipNow,                                // from now (new seeds only)
                     _ => RestoreHeight,                         // from a specific block
                 };
             }
@@ -445,7 +515,7 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
                 // A generated seed NEVER carries an offset (that would restore a different, empty
                 // wallet = fund loss); an imported seed keeps exactly what the user supplied.
                 SeedOffset = SeedOffsetPolicy.ForSeed(wasGenerated: CreateNewReal, RealSeedOffset),
-                RestoreHeight = effectiveRestore,
+                RestoreHeight = realRestore,
                 DaemonAddress = DaemonAddress.Trim(),
                 EphemeralWalletPassword = Convert.ToHexString(VaultCrypto.RandomBytes(24)),
             };
@@ -453,6 +523,13 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
             WalletSecrets? duress = null;
             if (EnableDuress)
             {
+                // The decoy gets its OWN height, never the real wallet's: a generated decoy scans
+                // from its own generation tip (clamped to the current chain tip); an imported decoy
+                // scans full history so any existing funds are guaranteed to appear.
+                ulong duressRestore = CreateNewDuress
+                    ? (_duressRestoreHeight != 0 ? ClampToTip(_duressRestoreHeight, tipNow) : tipNow)
+                    : 0UL;
+
                 duress = new WalletSecrets
                 {
                     Kind = ProfileKind.Duress,
@@ -460,7 +537,7 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
                     Network = Network,
                     Mnemonic = DuressMnemonic.Trim(),
                     SeedOffset = SeedOffsetPolicy.ForSeed(wasGenerated: CreateNewDuress, DuressSeedOffset),
-                    RestoreHeight = effectiveRestore,
+                    RestoreHeight = duressRestore,
                     DaemonAddress = DaemonAddress.Trim(),
                     EphemeralWalletPassword = Convert.ToHexString(VaultCrypto.RandomBytes(24)),
                     DuressWipeReal = WipeRealOnDuress,
@@ -651,11 +728,6 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
             return (false, null);
         }
     }
-
-    private static bool IsValidDaemon(string address) =>
-        !string.IsNullOrWhiteSpace(address)
-        && Uri.TryCreate(address.Trim(), UriKind.Absolute, out Uri? uri)
-        && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
     /// <summary>Current daemon tip height, or 0 (full scan) if it can't be reached.</summary>
     private async Task<ulong> GetTipHeightAsync()

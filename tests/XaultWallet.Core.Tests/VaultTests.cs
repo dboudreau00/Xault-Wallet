@@ -170,6 +170,112 @@ public class VaultManagerTests : IDisposable
         Assert.Equal("real seed", reopened.Unlock(newpw)!.Secrets.Mnemonic);
     }
 
+    [Fact]
+    public void ChangeDaemonAddress_Repoints_Real_Wallet_And_Preserves_Secrets()
+    {
+        var main = new WalletSecrets
+        {
+            Label = "Main",
+            Mnemonic = "real seed",
+            Network = MoneroNetwork.Stagenet,
+            RestoreHeight = 12345,
+            DaemonAddress = "http://127.0.0.1:38081",
+        };
+        using (var mp = Pw("main-pass-123"))
+        {
+            VaultManager.Create(_path, mp, main, argon: FastArgon);
+        }
+
+        var mgr = VaultManager.Load(_path);
+        using (var mp = Pw("main-pass-123"))
+        {
+            Assert.True(mgr.ChangeDaemonAddress(mp, "http://node.example:38089"));
+        }
+
+        var reopened = VaultManager.Load(_path);
+        using var mp2 = Pw("main-pass-123");
+        WalletSecrets s = reopened.Unlock(mp2)!.Secrets;
+
+        Assert.Equal("http://node.example:38089", s.DaemonAddress);
+        // Everything else must survive the re-seal untouched.
+        Assert.Equal("real seed", s.Mnemonic);
+        Assert.Equal(MoneroNetwork.Stagenet, s.Network);
+        Assert.Equal(12345UL, s.RestoreHeight);
+    }
+
+    [Fact]
+    public void ChangeDaemonAddress_Wrong_Password_Returns_False()
+    {
+        var main = new WalletSecrets { Mnemonic = "real seed", DaemonAddress = "http://a:1" };
+        using (var mp = Pw("main-pass-123"))
+        {
+            VaultManager.Create(_path, mp, main, argon: FastArgon);
+        }
+
+        var mgr = VaultManager.Load(_path);
+        using var bad = Pw("not-the-password");
+        Assert.False(mgr.ChangeDaemonAddress(bad, "http://b:2"));
+    }
+
+    [Fact]
+    public void ChangeDaemonAddress_Repoints_Duress_Without_Touching_Real()
+    {
+        // Deniability: repointing via the DURESS password must change only the decoy's node and
+        // leave the real slot completely intact (and vice versa) — the operation reveals nothing.
+        var main = new WalletSecrets { Mnemonic = "real seed", DaemonAddress = "http://real:1" };
+        var decoy = new WalletSecrets { Mnemonic = "decoy seed", DaemonAddress = "http://decoy:1" };
+        using (var mp = Pw("main-pass-123"))
+        using (var dp = Pw("duress-pass-456"))
+        {
+            VaultManager.Create(_path, mp, main, dp, decoy, FastArgon);
+        }
+
+        var mgr = VaultManager.Load(_path);
+        using (var dp = Pw("duress-pass-456"))
+        {
+            Assert.True(mgr.ChangeDaemonAddress(dp, "http://decoy:2"));
+        }
+
+        var reopened = VaultManager.Load(_path);
+
+        // Duress side changed.
+        using (var dp = Pw("duress-pass-456"))
+        {
+            UnlockResult? r = reopened.Unlock(dp);
+            Assert.True(r!.WasDuress);
+            Assert.Equal("http://decoy:2", r.Secrets.DaemonAddress);
+            Assert.Equal("decoy seed", r.Secrets.Mnemonic);
+        }
+
+        // Real side untouched.
+        using (var mp = Pw("main-pass-123"))
+        {
+            UnlockResult? r = reopened.Unlock(mp);
+            Assert.False(r!.WasDuress);
+            Assert.Equal("http://real:1", r.Secrets.DaemonAddress);
+            Assert.Equal("real seed", r.Secrets.Mnemonic);
+        }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("not-a-url")]
+    [InlineData("ftp://node:18081")]
+    [InlineData("node.example:18081")]
+    public void ChangeDaemonAddress_Invalid_Address_Throws(string bad)
+    {
+        var main = new WalletSecrets { Mnemonic = "real seed", DaemonAddress = "http://a:1" };
+        using (var mp = Pw("main-pass-123"))
+        {
+            VaultManager.Create(_path, mp, main, argon: FastArgon);
+        }
+
+        var mgr = VaultManager.Load(_path);
+        using var mp2 = Pw("main-pass-123");
+        Assert.Throws<ArgumentException>(() => mgr.ChangeDaemonAddress(mp2, bad));
+    }
+
     public void Dispose()
     {
         if (File.Exists(_path))

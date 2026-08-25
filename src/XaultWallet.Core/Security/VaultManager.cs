@@ -175,7 +175,7 @@ public sealed class VaultManager
         // Validate before doing any KDF work. Address validity is independent of the password, so
         // rejecting a bad URL up front leaks nothing and avoids a needless Argon2 derivation.
         string trimmed = (newDaemonAddress ?? string.Empty).Trim();
-        if (!IsValidDaemonAddress(trimmed))
+        if (!Monero.DaemonAddress.IsValid(trimmed))
         {
             throw new ArgumentException(
                 $"Daemon address must be a valid http(s) URL: '{newDaemonAddress}'.", nameof(newDaemonAddress));
@@ -201,11 +201,6 @@ public sealed class VaultManager
             plaintext.Dispose();
         }
     }
-
-    private static bool IsValidDaemonAddress(string address) =>
-        !string.IsNullOrWhiteSpace(address)
-        && Uri.TryCreate(address, UriKind.Absolute, out Uri? uri)
-        && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
     private void Persist()
     {

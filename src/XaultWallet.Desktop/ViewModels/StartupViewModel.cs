@@ -57,7 +57,7 @@ public sealed partial class StartupViewModel : ViewModelBase
                 {
                     try
                     {
-                        ulong height = await MoneroDiagnostics.ProbeDaemonAsync(daemon, _cts.Token);
+                        ulong height = await MoneroDiagnostics.ProbeDaemonAsync(daemon, AppServices.Instance.Settings.ProxyAddress, _cts.Token);
                         Detail = $"Node reachable \u00b7 block {height:N0}";
                         Log.Info($"Startup: node OK at height {height}");
                         break;

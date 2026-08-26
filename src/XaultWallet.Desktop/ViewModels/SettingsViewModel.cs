@@ -186,7 +186,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         DaemonTestResult = "Contacting daemon\u2026";
         try
         {
-            ulong height = await MoneroDiagnostics.ProbeDaemonAsync(DefaultDaemonAddress);
+            // Probe through the proxy currently typed in this screen, saved or not: the test
+            // must exercise the same route the wallet will actually use.
+            ulong height = await MoneroDiagnostics.ProbeDaemonAsync(DefaultDaemonAddress, ProxyAddress);
             DaemonTestOk = true;
             DaemonTestResult = $"OK \u2014 node at height {height}.";
         }
@@ -340,7 +342,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         RepointTestResult = "Contacting node…";
         try
         {
-            ulong height = await MoneroDiagnostics.ProbeDaemonAsync(RepointNodeAddress);
+            ulong height = await MoneroDiagnostics.ProbeDaemonAsync(RepointNodeAddress, ProxyAddress);
             RepointTestOk = true;
             RepointTestResult = $"OK — node at height {height}.";
         }
@@ -458,12 +460,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
             BackupOk = true;
             BackupResult = "Encrypted vault backup saved. Store it somewhere safe — it stays " +
                            "protected by your password, but anyone holding it can try to brute-force it.";
-            Log.Info("Vault backup exported.");
+            // Deliberately NOT logged: a log line proving a backup exists outlives a later
+            // duress wipe and hands a coercer exactly the lead the wipe is meant to erase.
         }
         catch (Exception ex)
         {
             BackupResult = "Couldn't export the backup: " + ex.Message;
-            Log.Error("Vault export failed", ex);
         }
     }
 
@@ -520,21 +522,31 @@ public sealed partial class SettingsViewModel : ViewModelBase
             byte[] bytes = File.ReadAllBytes(source);
             VaultFile.Deserialize(bytes); // validate BEFORE touching the live vault
 
+            // Durable write of the replacement FIRST (flushed to disk), then a single atomic
+            // swap — matching VaultManager.Persist's discipline. The live vault path holds
+            // either the old vault or the new one at every instant, even across a crash or
+            // power loss; there is never a window with NO vault at the live path.
+            using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                fs.Write(bytes, 0, bytes.Length);
+                fs.Flush(flushToDisk: true);
+            }
+
             if (File.Exists(vaultPath))
             {
                 kept = vaultPath + $".replaced-{DateTime.Now:yyyyMMdd-HHmmss}";
-                File.Move(vaultPath, kept);
+                File.Replace(tmp, vaultPath, kept);
             }
-
-            // Write via temp + rename so a crash mid-restore can't leave a half-written vault.
-            File.WriteAllBytes(tmp, bytes);
-            File.Move(tmp, vaultPath);
+            else
+            {
+                File.Move(tmp, vaultPath);
+            }
 
             BackupOk = true;
             BackupResult = kept is null
                 ? "Backup restored. Close Settings to unlock it."
                 : $"Backup restored. The previous vault was kept as {Path.GetFileName(kept)}.";
-            Log.Info("Vault restored from backup.");
+            // Not logged — same deniability reasoning as export.
         }
         catch (InvalidDataException)
         {
@@ -545,7 +557,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
             // A failed restore must never leave the user with NO vault: put the original back.
             string recovery = TryRollbackRestore(vaultPath, kept, tmp);
             BackupResult = "Couldn't restore the backup: " + ex.Message + recovery;
-            Log.Error("Vault restore failed", ex);
         }
     }
 

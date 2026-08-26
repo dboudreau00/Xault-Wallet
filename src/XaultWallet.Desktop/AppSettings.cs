@@ -24,6 +24,18 @@ public sealed class AppSettings
     /// <summary>Lock the wallet after this many minutes with no input. 0 = never.</summary>
     public int AutoLockMinutes { get; set; } = 10;
 
+    /// <summary>Mask balances on the wallet screen until the user reveals them.</summary>
+    public bool HideBalances { get; set; }
+
+    /// <summary>Optional SOCKS proxy for the wallet backend's daemon traffic (e.g.
+    /// "127.0.0.1:9050" for Tor). Empty = direct connection. Passed to monero-wallet-rpc
+    /// as --proxy so the configured node never sees the user's real IP.</summary>
+    public string ProxyAddress { get; set; } = "";
+
+    /// <summary>True when the last Load found a corrupt settings file and fell back to
+    /// defaults (the corrupt file is preserved next to the original as *.bad).</summary>
+    public static bool RecoveredFromCorruptFile { get; private set; }
+
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
     public static AppSettings Load(string path)
@@ -42,7 +54,11 @@ public sealed class AppSettings
         }
         catch
         {
-            // A corrupt settings file must never block startup; fall back to defaults.
+            // A corrupt settings file must never block startup; fall back to defaults —
+            // but don't silently discard the user's node/binary configuration: keep the
+            // corrupt file for inspection and let the UI mention what happened.
+            RecoveredFromCorruptFile = true;
+            try { File.Copy(path, path + ".bad", overwrite: true); } catch { /* best effort */ }
         }
 
         return new AppSettings();
@@ -75,6 +91,7 @@ public sealed class AppSettings
     {
         WalletRpcBinaryPath ??= "";
         DefaultDaemonAddress ??= "";
+        ProxyAddress ??= "";
         if (DefaultNetworkIndex is < 0 or > 2)
         {
             DefaultNetworkIndex = 0;

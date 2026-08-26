@@ -5,16 +5,22 @@ using XaultWallet.Core.Monero;
 
 namespace XaultWallet.Desktop;
 
-/// <summary>true -> green, false -> amber. Used for the seed-verification status text.</summary>
+/// <summary>Bool-to-brush converters. OkWarn: true -> green, false -> amber (status text).
+/// MainnetBadge: true (mainnet, real funds) -> red, false (test networks) -> slate.</summary>
 public sealed class BoolToBrushConverter : IValueConverter
 {
     public static readonly BoolToBrushConverter OkWarn = new();
+    public static readonly BoolToBrushConverter MainnetBadge = new()
+    {
+        _whenTrue = new SolidColorBrush(Color.Parse("#8A3B3B")),
+        _whenFalse = new SolidColorBrush(Color.Parse("#3B5A6E")),
+    };
 
-    private static readonly IBrush Ok = new SolidColorBrush(Color.Parse("#4CAF7D"));
-    private static readonly IBrush Warn = new SolidColorBrush(Color.Parse("#E0A030"));
+    private IBrush _whenTrue = new SolidColorBrush(Color.Parse("#4CAF7D"));
+    private IBrush _whenFalse = new SolidColorBrush(Color.Parse("#E0A030"));
 
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-        => value is true ? Ok : Warn;
+        => value is true ? _whenTrue : _whenFalse;
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();
@@ -28,7 +34,9 @@ public sealed class AtomicToXmrConverter : IValueConverter
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
         => value is ulong atomic
             ? MoneroRpcClient.AtomicToXmr(atomic).ToString("0.############", culture)
-            : "0";
+            // A fund-display path must fail LOUD, not render 0: an unexpected type would
+            // silently show every transaction as zero XMR.
+            : Avalonia.AvaloniaProperty.UnsetValue;
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();

@@ -44,6 +44,7 @@ public sealed partial class StartupViewModel : ViewModelBase
             catch (Exception ex)
             {
                 Detail = "monero-wallet-rpc not found. You can set it in Settings.";
+                CanContinue = true; // a check failed — let the user skip ahead
                 Log.Warn("Startup: wallet-rpc check failed — " + ex.GetType().Name);
             }
 
@@ -64,6 +65,7 @@ public sealed partial class StartupViewModel : ViewModelBase
                     catch
                     {
                         Detail = $"Waiting for node at {daemon}\u2026 (attempt {attempt + 1}/5)";
+                        CanContinue = true; // don't make the user wait out all retries
                         await Task.Delay(1500, _cts.Token);
                     }
                 }
@@ -84,11 +86,21 @@ public sealed partial class StartupViewModel : ViewModelBase
         }
     }
 
+    private int _finished; // once-only: Continue racing RunAsync's own Finish must not fire Ready twice
+
     private void Finish()
     {
+        if (Interlocked.Exchange(ref _finished, 1) != 0)
+        {
+            return;
+        }
+
         Checking = false;
         Status = "Ready";
         Ready?.Invoke();
+        // _cts is deliberately NOT disposed here: Continue can race RunAsync, which still
+        // touches _cts.Token afterwards — a disposed CTS there would turn a benign skip into
+        // a logged startup error. One undisposed CTS per launch is the cheaper end of that trade.
     }
 
     /// <summary>Lets the user skip straight in if a check is slow or a node isn't up yet.</summary>

@@ -27,20 +27,30 @@
             <StackPanel Spacing="20">
                 <Grid ColumnDefinitions="*,Auto">
                     <StackPanel Grid.Column="0" Spacing="3">
-                        <TextBlock Text="TOTAL BALANCE" Classes="eyebrow"/>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="TOTAL BALANCE" Classes="eyebrow"/>
+                            <!-- Network badge: a real-funds mainnet wallet must never be mistaken for a test one -->
+                            <Border CornerRadius="5" Padding="6,1" VerticalAlignment="Center"
+                                    Background="{Binding IsMainnetWallet, Converter={x:Static conv:BoolToBrushConverter.MainnetBadge}}">
+                                <TextBlock Classes="mono" FontSize="10" FontWeight="SemiBold" Foreground="White"
+                                           Text="{Binding NetworkLabel}"/>
+                            </Border>
+                        </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <TextBlock Classes="mono" FontSize="36" FontWeight="Bold"
-                                       Text="{Binding Balance, StringFormat='{}{0:0.############}'}"/>
+                                       Text="{Binding BalanceDisplay}"/>
                             <TextBlock Text="XMR" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Bottom"
                                        Margin="0,0,0,8" Foreground="{StaticResource TextTertiary}"/>
+                            <Button Content="👁" FontSize="14" Padding="7,3" VerticalAlignment="Center"
+                                    Command="{Binding ToggleBalancesCommand}"
+                                    ToolTip.Tip="Hide / show balances"/>
                         </StackPanel>
-                        <TextBlock Classes="muted"
-                                   Text="{Binding UnlockedBalance, StringFormat='Spendable now: {0:0.############} XMR'}"/>
+                        <TextBlock Classes="muted" Text="{Binding UnlockedDisplay}"/>
                         <Border IsVisible="{Binding HasLocked}" Background="{StaticResource InsetBg}"
                                 BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="6"
                                 Padding="8,3" HorizontalAlignment="Left" Margin="0,2,0,0">
                             <TextBlock Classes="mono" FontSize="11" Foreground="{StaticResource WarningBrush}"
-                                       Text="{Binding LockedBalance, StringFormat='⧗ {0:0.############} XMR maturing'}"/>
+                                       Text="{Binding LockedDisplay}"/>
                         </Border>
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
@@ -96,6 +106,11 @@
                         <Button Content="Copy address" Click="CopyAddress_Click"/>
                         <Button Content="New subaddress" Command="{Binding NewAddressCommand}"/>
                     </StackPanel>
+                    <TextBlock Text="{Binding ReceiveNotice}" Classes="mono" FontSize="12" TextWrapping="Wrap"
+                               Foreground="{StaticResource WarningBrush}"
+                               IsVisible="{Binding ReceiveNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    <TextBlock Text="{Binding CopyNotice}" Classes="muted" FontSize="12"
+                               IsVisible="{Binding CopyNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                     <TextBlock Classes="muted" TextWrapping="Wrap"
                                Text="Share this address to receive XMR. A new subaddress gives you a fresh, unlinkable address for the same wallet."/>
                 </StackPanel>
@@ -123,8 +138,13 @@
                                 </ComboBox>
                             </StackPanel>
                         </Grid>
-                        <Button Content="Review &amp; send" Classes="accent" HorizontalAlignment="Left"
-                                Command="{Binding ReviewSendCommand}" IsEnabled="{Binding !Sending}"/>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="Review &amp; send" Classes="accent"
+                                    Command="{Binding ReviewSendCommand}" IsEnabled="{Binding !Sending}"/>
+                            <Button Content="Send max (sweep)"
+                                    Command="{Binding ReviewSendMaxCommand}" IsEnabled="{Binding !Sending}"
+                                    ToolTip.Tip="Sweep the entire spendable balance to the destination address. The exact amount and fee are shown for confirmation before anything is sent."/>
+                        </StackPanel>
                         <ProgressBar IsIndeterminate="True" IsVisible="{Binding Sending}" Height="3"/>
                         <TextBlock Text="{Binding SendResult}" Classes="mono" FontSize="12" TextWrapping="Wrap"
                                    Foreground="{StaticResource TextSecondary}"
@@ -174,8 +194,16 @@
             </TabItem>
 
             <TabItem Header="History">
-                <Grid Margin="0,14,0,0">
-                    <DataGrid ItemsSource="{Binding History}" IsReadOnly="True"
+                <Grid Margin="0,14,0,0" RowDefinitions="Auto,*">
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+                        <Button Content="Copy selected tx ID" Click="CopySelectedTxId_Click"
+                                ToolTip.Tip="Copy the transaction ID of the selected row"/>
+                        <Button Content="Export CSV" Click="ExportHistory_Click"
+                                ToolTip.Tip="Save the transaction list as a CSV file"/>
+                        <TextBlock Text="{Binding CopyNotice}" Classes="muted" FontSize="12" VerticalAlignment="Center"
+                                   IsVisible="{Binding CopyNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    </StackPanel>
+                    <DataGrid Grid.Row="1" x:Name="HistoryGrid" ItemsSource="{Binding History}" IsReadOnly="True"
                               x:CompileBindings="False"
                               GridLinesVisibility="Horizontal" HeadersVisibility="Column"
                               RowHeight="38">
@@ -189,7 +217,7 @@
                         </DataGrid.Columns>
                     </DataGrid>
                     <!-- Empty state: shown until the first transaction lands -->
-                    <StackPanel IsVisible="{Binding !HasHistory}" VerticalAlignment="Center"
+                    <StackPanel Grid.Row="1" IsVisible="{Binding !HasHistory}" VerticalAlignment="Center"
                                 HorizontalAlignment="Center" Spacing="6" IsHitTestVisible="False">
                         <TextBlock Text="No transactions yet" FontSize="15" FontWeight="SemiBold"
                                    HorizontalAlignment="Center" Foreground="{StaticResource TextSecondary}"/>
@@ -199,6 +227,18 @@
                 </Grid>
             </TabItem>
         </TabControl>
+
+        <!-- ===== Auto-lock countdown: the wallet never just vanishes mid-read ===== -->
+        <Border Grid.Row="0" Grid.RowSpan="3" IsVisible="{Binding LockImminent}" VerticalAlignment="Bottom"
+                Background="#2A2314" BorderBrush="#7A6A2E" BorderThickness="1" CornerRadius="10"
+                Padding="14,10" Margin="0,0,0,4">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" VerticalAlignment="Center" Foreground="#E8D9A0"
+                           Text="{Binding LockCountdownText}"/>
+                <Button Grid.Column="1" Content="Stay unlocked" Classes="accent"
+                        Command="{Binding StayUnlockedCommand}"/>
+            </Grid>
+        </Border>
 
         <!-- ===== Send confirmation overlay (Monero is irreversible; always confirm) ===== -->
         <Border Grid.Row="0" Grid.RowSpan="3" IsVisible="{Binding ShowSendConfirm}" Background="#CC0D0D10">
@@ -223,6 +263,12 @@
                             <TextBlock Grid.Row="2" Grid.Column="1" Classes="mono" FontSize="12.5" FontWeight="SemiBold"
                                        HorizontalAlignment="Right" Text="{Binding SendTotalText}"/>
                         </Grid>
+                    </Border>
+
+                    <Border IsVisible="{Binding SendFeeWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                            Background="#2A1414" BorderBrush="#7A2E2E" BorderThickness="1" CornerRadius="8" Padding="10">
+                        <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#F0B4B4"
+                                   Text="{Binding SendFeeWarning}"/>
                     </Border>
 
                     <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#E0A030"

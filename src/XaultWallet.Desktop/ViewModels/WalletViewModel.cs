@@ -22,10 +22,16 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LockedBalance))]
     [NotifyPropertyChangedFor(nameof(HasLocked))]
+    [NotifyPropertyChangedFor(nameof(BalanceDisplay))]
+    [NotifyPropertyChangedFor(nameof(UnlockedDisplay))]
+    [NotifyPropertyChangedFor(nameof(LockedDisplay))]
     private decimal _balance;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LockedBalance))]
     [NotifyPropertyChangedFor(nameof(HasLocked))]
+    [NotifyPropertyChangedFor(nameof(BalanceDisplay))]
+    [NotifyPropertyChangedFor(nameof(UnlockedDisplay))]
+    [NotifyPropertyChangedFor(nameof(LockedDisplay))]
     private decimal _unlockedBalance;
 
     /// <summary>Balance still maturing (total minus spendable). Never negative.</summary>
@@ -62,6 +68,58 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     // Holds the exact fee; discarding it (Cancel) means nothing ever touches the network.
     private TransferResult? _preparedTx;
     private decimal _preparedAmount;
+
+    // Prepared sweep-all (Send max): same do_not_relay contract, but may span several
+    // transactions. Mutually exclusive with _preparedTx — exactly one is non-null while the
+    // confirm overlay is up.
+    private SweepAllResult? _preparedSweep;
+
+    /// <summary>Set when the prepared fee is anomalously high relative to the amount —
+    /// a habituated user shouldn't be able to click through a fee spike unwarned.</summary>
+    [ObservableProperty] private string _sendFeeWarning = string.Empty;
+
+    // Auto-lock countdown: visible warning strip shortly before the inactivity lock fires.
+    [ObservableProperty] private bool _lockImminent;
+    [ObservableProperty] private string _lockCountdownText = string.Empty;
+
+    /// <summary>Masks balances on screen (shoulder-surfing). Persisted in settings.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BalanceDisplay))]
+    [NotifyPropertyChangedFor(nameof(UnlockedDisplay))]
+    [NotifyPropertyChangedFor(nameof(LockedDisplay))]
+    private bool _hideBalances = AppServices.Instance.Settings.HideBalances;
+
+    private const string Masked = "●●●●●";
+    public string BalanceDisplay => HideBalances ? Masked : Balance.ToString("0.############");
+    public string UnlockedDisplay => HideBalances ? $"Spendable now: {Masked}" : $"Spendable now: {UnlockedBalance:0.############} XMR";
+    public string LockedDisplay => HideBalances ? $"⧗ {Masked}" : $"⧗ {LockedBalance:0.############} XMR maturing";
+
+    [RelayCommand]
+    private void ToggleBalances()
+    {
+        HideBalances = !HideBalances;
+        try
+        {
+            AppServices.Instance.Settings.HideBalances = HideBalances;
+            AppServices.Instance.SaveSettings();
+        }
+        catch
+        {
+            // Persisting the preference is best-effort; the toggle itself already applied.
+        }
+    }
+
+    /// <summary>Which Monero network this wallet is on — shown as a badge so a real-funds
+    /// mainnet wallet is never mistaken for a test one (or vice versa).</summary>
+    public string NetworkLabel => _secrets.Network.ToString();
+    public bool IsMainnetWallet => _secrets.Network == Core.Models.MoneroNetwork.Mainnet;
+
+    /// <summary>Feedback line for the Receive tab (new-subaddress errors, copy feedback) —
+    /// kept OFF the Status line, which the sync tracker overwrites every few seconds.</summary>
+    [ObservableProperty] private string _receiveNotice = string.Empty;
+
+    /// <summary>Transient "Copied — clipboard clears in 30 s" feedback, set by the view.</summary>
+    [ObservableProperty] private string _copyNotice = string.Empty;
 
     // Payment proof (the tx key from the most recent send — safe to share for explorer verification)
     [ObservableProperty] private bool _hasLastTx;
@@ -152,24 +210,51 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     {
         try
         {
+            DateTime nextRefreshUtc = DateTime.UtcNow;
             while (!ct.IsCancellationRequested)
             {
-                await SoftRefreshAsync();
-
-                // Auto-lock after inactivity (0 = disabled).
-                int lockMinutes = AppServices.Instance.AutoLockMinutes;
-                if (lockMinutes > 0 && DateTime.UtcNow - _lastActivityUtc > TimeSpan.FromMinutes(lockMinutes))
+                if (DateTime.UtcNow >= nextRefreshUtc)
                 {
-                    Log.Info("Auto-locking after inactivity.");
-                    await LockAsync();
-                    return;
+                    await SoftRefreshAsync();
+
+                    // Snappy updates while the node is catching up; relaxed once synced.
+                    int delayMs = IsSynced
+                        ? Math.Clamp(AppServices.Instance.AutoRefreshSeconds, 5, 600) * 1000
+                        : 3000;
+                    nextRefreshUtc = DateTime.UtcNow.AddMilliseconds(delayMs);
                 }
 
-                // Snappy updates while the node is catching up; relaxed once synced.
-                int delayMs = IsSynced
-                    ? Math.Clamp(AppServices.Instance.AutoRefreshSeconds, 5, 600) * 1000
-                    : 3000;
-                await Task.Delay(delayMs, ct);
+                // Auto-lock after inactivity (0 = disabled), with a visible countdown for the
+                // last 30 seconds so the wallet never just vanishes mid-read.
+                int lockMinutes = AppServices.Instance.AutoLockMinutes;
+                if (lockMinutes > 0)
+                {
+                    TimeSpan remaining = TimeSpan.FromMinutes(lockMinutes) - (DateTime.UtcNow - _lastActivityUtc);
+                    if (remaining <= TimeSpan.Zero)
+                    {
+                        Log.Info("Auto-locking after inactivity.");
+                        LockImminent = false;
+                        // Fire-and-forget, then RETURN so this loop task can complete.
+                        // Awaiting LockAsync here would deadlock: it disposes the VM, which
+                        // awaits this very task — a task can never await itself finishing.
+                        _ = LockAsync();
+                        return;
+                    }
+
+                    LockImminent = remaining <= TimeSpan.FromSeconds(30);
+                    if (LockImminent)
+                    {
+                        LockCountdownText = $"Locking in {Math.Max(1, (int)remaining.TotalSeconds)} s due to inactivity";
+                    }
+                }
+                else
+                {
+                    LockImminent = false;
+                }
+
+                // Short tick so the countdown stays live; the RPC refresh above still runs on
+                // its own (much slower) cadence.
+                await Task.Delay(LockImminent ? 1000 : 3000, ct);
             }
         }
         catch (OperationCanceledException)
@@ -182,6 +267,14 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
+    /// <summary>The "Stay unlocked" button on the countdown strip — any activity defers the lock.</summary>
+    [RelayCommand]
+    private void StayUnlocked()
+    {
+        NotifyActivity();
+        LockImminent = false;
+    }
+
     /// <summary>Non-blocking refresh: reads current balance/height/history. Errors are soft. </summary>
     private async Task SoftRefreshAsync()
     {
@@ -190,8 +283,16 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        // Skip (don't queue) if a refresh is already in flight.
-        if (!await _refreshGate.WaitAsync(0))
+        // Skip (don't queue) if a refresh is already in flight. The gate can be disposed by a
+        // concurrent lock/close racing this call.
+        try
+        {
+            if (!await _refreshGate.WaitAsync(0))
+            {
+                return;
+            }
+        }
+        catch (ObjectDisposedException)
         {
             return;
         }
@@ -234,11 +335,25 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            SyncText = "Sync issue: " + Friendly(ex);
+            // Distinguish "backend process died" from "node is slow": repeated connection
+            // errors against a dead wallet-rpc would otherwise read as a sync hiccup forever.
+            // The startup-failure banner offers Retry, which rebuilds the whole service.
+            if (_wallet.BackendExited)
+            {
+                Log.Error("Wallet backend process exited unexpectedly.");
+                StartupFailed = true;
+                IsReady = false;
+                Status = "The wallet backend stopped unexpectedly. Use Retry to restart it.";
+            }
+            else
+            {
+                SyncText = "Sync issue: " + Friendly(ex);
+            }
         }
         finally
         {
-            _refreshGate.Release();
+            // The gate can be disposed by a concurrent lock/close racing a manual refresh.
+            try { _refreshGate.Release(); } catch (ObjectDisposedException) { }
         }
     }
 
@@ -365,6 +480,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             SendSummary = $"Send {amount} XMR ({prio} priority) to:";
             SendFeeText = $"{fee:0.############} XMR";
             SendTotalText = $"{amount + fee:0.############} XMR";
+            SendFeeWarning = FeeWarning(fee, amount);
             ShowSendConfirm = true;
         }
         catch (OperationCanceledException)
@@ -382,24 +498,110 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    /// <summary>Abort: throw away the prepared (never-broadcast) transaction.</summary>
+    /// <summary>Send Max: build transactions sweeping the ENTIRE spendable balance (do_not_relay)
+    /// through the same review→confirm→relay flow as a normal send. Removes the guess-the-fee
+    /// dance when emptying a wallet — the overlay shows the exact swept amount and total fee.</summary>
+    [RelayCommand]
+    private async Task ReviewSendMaxAsync()
+    {
+        if (Sending || ShowSendConfirm)
+        {
+            return;
+        }
+
+        SendResult = string.Empty;
+
+        if (!IsReady)
+        {
+            SendResult = "Wallet isn't ready yet.";
+            return;
+        }
+
+        if (MoneroAddress.Problem(SendAddress, _secrets.Network) is { } problem)
+        {
+            SendResult = problem;
+            return;
+        }
+
+        if (UnlockedBalance <= 0m)
+        {
+            SendResult = "Nothing is spendable right now.";
+            return;
+        }
+
+        Sending = true;
+        try
+        {
+            uint priority = (uint)Math.Clamp(SendPriority, 0, 3);
+            string destination = SendAddress.Trim();
+
+            SweepAllResult sweep = await _wallet.PrepareSweepAllAsync(destination, priority, _cts.Token);
+            _preparedSweep = sweep;
+            ConfirmSendAddress = destination;
+
+            decimal amount = MoneroRpcClient.AtomicToXmr((ulong)sweep.AmountList.Sum(a => (decimal)a));
+            decimal fee = MoneroRpcClient.AtomicToXmr((ulong)sweep.FeeList.Sum(f => (decimal)f));
+            _preparedAmount = amount;
+
+            string txNote = sweep.TxMetadataList.Count > 1 ? $" across {sweep.TxMetadataList.Count} transactions" : "";
+            SendSummary = $"Sweep ALL spendable funds ({amount:0.############} XMR{txNote}) to:";
+            SendFeeText = $"{fee:0.############} XMR";
+            SendTotalText = $"{amount + fee:0.############} XMR";
+            SendFeeWarning = FeeWarning(fee, amount);
+            ShowSendConfirm = true;
+        }
+        catch (OperationCanceledException)
+        {
+            // wallet locked/closed mid-prepare; nothing to report
+        }
+        catch (Exception ex)
+        {
+            _preparedSweep = null;
+            SendResult = "Couldn't prepare the sweep: " + Friendly(ex);
+        }
+        finally
+        {
+            Sending = false;
+        }
+    }
+
+    /// <summary>A fee wildly out of proportion to the amount usually means a misbehaving node's
+    /// fee estimate (or a unit mishap) — say so instead of letting habit click through it.</summary>
+    private static string FeeWarning(decimal fee, decimal amount) =>
+        amount > 0m && fee > 0.001m && fee > amount * 0.01m
+            ? $"This fee is unusually high ({fee / amount:P1} of the amount). If you didn't choose a high priority on purpose, cancel and check your node."
+            : string.Empty;
+
+    /// <summary>Abort: throw away the prepared (never-broadcast) transaction(s).</summary>
     [RelayCommand]
     private void CancelSend()
     {
         ShowSendConfirm = false;
         _preparedTx = null;
+        _preparedSweep = null;
         ConfirmSendAddress = string.Empty;
+        SendFeeWarning = string.Empty;
         _preparedAmount = 0m;
     }
 
-    /// <summary>Step 2: the user explicitly confirmed. Broadcast the ALREADY-BUILT transaction —
-    /// the fee shown in the overlay is baked into it and cannot change.</summary>
+    /// <summary>Step 2: the user explicitly confirmed. Broadcast the ALREADY-BUILT transaction(s) —
+    /// the fee shown in the overlay is baked into them and cannot change.</summary>
     [RelayCommand]
     private async Task ConfirmSendAsync()
     {
         ShowSendConfirm = false;
+        SendFeeWarning = string.Empty;
         TransferResult? prepared = _preparedTx;
+        SweepAllResult? sweep = _preparedSweep;
         _preparedTx = null;
+        _preparedSweep = null;
+
+        if (sweep is not null)
+        {
+            await ConfirmSweepAsync(sweep);
+            return;
+        }
+
         if (prepared is null)
         {
             // Never send blind — but an explicitly-clicked confirm must never LOOK like a send.
@@ -445,6 +647,76 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             _preparedAmount = 0m;
             Sending = false;
         }
+    }
+
+    /// <summary>Broadcast every transaction of a confirmed sweep, in order. On a mid-sweep
+    /// failure, reports EXACTLY which transactions went out — never pretends an ambiguous
+    /// state is a clean failure.</summary>
+    private async Task ConfirmSweepAsync(SweepAllResult sweep)
+    {
+        Sending = true;
+        int relayed = 0;
+        try
+        {
+            for (int i = 0; i < sweep.TxMetadataList.Count; i++)
+            {
+                string txHash = await _wallet.RelaySendAsync(sweep.TxMetadataList[i], _cts.Token);
+                if (string.IsNullOrWhiteSpace(txHash) && i < sweep.TxHashList.Count)
+                {
+                    txHash = sweep.TxHashList[i];
+                }
+
+                relayed++;
+                LastTxId = txHash;
+                LastTxKey = i < sweep.TxKeyList.Count ? sweep.TxKeyList[i] : string.Empty;
+            }
+
+            HasLastTx = !string.IsNullOrWhiteSpace(LastTxId);
+            decimal fee = MoneroRpcClient.AtomicToXmr((ulong)sweep.FeeList.Sum(f => (decimal)f));
+            string txNote = relayed > 1 ? $" in {relayed} transactions" : "";
+            SendResult = $"Swept {_preparedAmount:0.############} XMR{txNote} (total fee {fee:0.############} XMR).";
+            Log.Info("Sweep submitted.");
+            SendAddress = string.Empty;
+            SendAmount = 0;
+            await SoftRefreshAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || relayed > 0)
+        {
+            string done = relayed == 0
+                ? "No transaction is confirmed sent, but the first MAY still have reached the network."
+                : $"{relayed} of {sweep.TxMetadataList.Count} transactions were broadcast before the failure.";
+            SendResult = $"Sweep interrupted: {Friendly(ex)} {done} Check History before retrying — " +
+                         "re-running the sweep too early can conflict with the transactions already sent.";
+        }
+        catch (OperationCanceledException)
+        {
+            // wallet locked/closed before anything went out
+        }
+        finally
+        {
+            ConfirmSendAddress = string.Empty;
+            _preparedAmount = 0m;
+            Sending = false;
+        }
+    }
+
+    /// <summary>History as CSV (spreadsheet-friendly). The view handles the file picker.</summary>
+    public string BuildHistoryCsv()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("date,type,amount_xmr,fee_xmr,height,txid");
+        foreach (TransferEntry t in History)
+        {
+            // txid/type/date contain no commas or quotes (hex, fixed words, fixed format).
+            sb.Append(t.Date).Append(',')
+              .Append(t.Type).Append(',')
+              .Append(MoneroRpcClient.AtomicToXmr(t.Amount).ToString("0.############", System.Globalization.CultureInfo.InvariantCulture)).Append(',')
+              .Append(MoneroRpcClient.AtomicToXmr(t.Fee).ToString("0.############", System.Globalization.CultureInfo.InvariantCulture)).Append(',')
+              .Append(t.Height).Append(',')
+              .Append(t.TxId).AppendLine();
+        }
+
+        return sb.ToString();
     }
 
     /// <summary>Copy the last send's txid + tx key into the verify panel as a convenience.</summary>
@@ -532,11 +804,14 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
 
         try
         {
+            ReceiveNotice = string.Empty;
             PrimaryAddress = await _wallet.NewSubaddressAsync("", _cts.Token);
         }
         catch (Exception ex)
         {
-            Status = "Couldn't create a new address: " + Friendly(ex);
+            // NOT Status: the sync tracker overwrites Status every few seconds, so the
+            // failure would vanish before the user saw it.
+            ReceiveNotice = "Couldn't create a new address: " + Friendly(ex);
         }
     }
 
@@ -616,7 +891,17 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             try { await _autoRefreshLoop; } catch { }
         }
 
-        await _wallet.DisposeAsync();
+        try
+        {
+            await _wallet.DisposeAsync();
+        }
+        catch (Exception ex)
+        {
+            // A wedged monero-wallet-rpc during teardown must not make Lock appear to do
+            // nothing (or fault app shutdown) — the process kill is already best-effort.
+            Log.Warn("Wallet service dispose failed: " + ex.GetType().Name);
+        }
+
         _refreshGate.Dispose();
         _cts.Dispose();
     }

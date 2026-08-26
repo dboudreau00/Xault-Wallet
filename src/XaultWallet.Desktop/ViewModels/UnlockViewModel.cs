@@ -38,8 +38,11 @@ public sealed partial class UnlockViewModel : ViewModelBase
 
             UnlockResult? result = await Task.Run(() =>
             {
-                var mgr = VaultManager.Load(AppServices.Instance.VaultPath);
+                // Take ownership of the password chars FIRST (FromPassword zeroes them): if
+                // Load throws (missing/corrupt vault), the full password must not be left
+                // un-zeroed on the heap.
                 using var pw = SecureBuffer.FromPassword(chars);
+                var mgr = VaultManager.Load(AppServices.Instance.VaultPath);
                 return mgr.Unlock(pw);
             });
 

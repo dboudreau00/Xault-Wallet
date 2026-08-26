@@ -10,14 +10,24 @@ namespace XaultWallet.Core.Monero;
 public sealed class MoneroWalletService : IAsyncDisposable
 {
     private readonly string _walletRpcBinary;
+    private readonly string? _proxyAddress;
     private MoneroProcessManager? _proc;
     private MoneroRpcClient? _rpc;
 
     public bool IsOpen => _rpc is not null;
 
-    public MoneroWalletService(string walletRpcBinary)
+    /// <summary>True when the backend wallet-rpc process died underneath an open wallet
+    /// (crash, external kill). Distinguishes "backend is gone" from "node is slow" so the
+    /// UI can offer a restart instead of surfacing repeated connection errors.</summary>
+    public bool BackendExited => _proc?.HasProcessExited == true;
+
+    /// <param name="walletRpcBinary">Path to monero-wallet-rpc.</param>
+    /// <param name="proxyAddress">Optional SOCKS proxy ("host:port") for the backend's daemon
+    /// traffic; null/empty = direct connection.</param>
+    public MoneroWalletService(string walletRpcBinary, string? proxyAddress = null)
     {
         _walletRpcBinary = walletRpcBinary;
+        _proxyAddress = string.IsNullOrWhiteSpace(proxyAddress) ? null : proxyAddress.Trim();
     }
 
     /// <summary>
@@ -29,7 +39,7 @@ public sealed class MoneroWalletService : IAsyncDisposable
     public async Task<(string mnemonic, ulong restoreHeight)> GenerateNewSeedAsync(
         MoneroNetwork network, string daemonAddress, CancellationToken ct = default)
     {
-        await using var proc = new MoneroProcessManager(_walletRpcBinary);
+        await using var proc = new MoneroProcessManager(_walletRpcBinary, _proxyAddress);
         using MoneroRpcClient rpc = await proc.StartServerAsync(network, daemonAddress, ct).ConfigureAwait(false);
 
         string ephemeralPw = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(24));
@@ -66,7 +76,7 @@ public sealed class MoneroWalletService : IAsyncDisposable
     /// </summary>
     public async Task<string> ValidateSeedOpensAsync(WalletSecrets secrets, CancellationToken ct = default)
     {
-        await using var proc = new MoneroProcessManager(_walletRpcBinary);
+        await using var proc = new MoneroProcessManager(_walletRpcBinary, _proxyAddress);
         using MoneroRpcClient rpc = await proc.StartFromSeedAsync(secrets, ct).ConfigureAwait(false);
         GetAddressResult addr = await rpc.GetAddressAsync(0, ct).ConfigureAwait(false);
         try { await rpc.CloseWalletAsync(ct).ConfigureAwait(false); } catch { }
@@ -76,7 +86,7 @@ public sealed class MoneroWalletService : IAsyncDisposable
     public async Task OpenAsync(WalletSecrets secrets, CancellationToken ct = default)
     {
         await CloseAsync().ConfigureAwait(false);
-        var proc = new MoneroProcessManager(_walletRpcBinary);
+        var proc = new MoneroProcessManager(_walletRpcBinary, _proxyAddress);
         try
         {
             _rpc = await proc.StartFromSeedAsync(secrets, ct).ConfigureAwait(false);
@@ -143,6 +153,37 @@ public sealed class MoneroWalletService : IAsyncDisposable
 
         RelayTxResult r = await Rpc.RelayTxAsync(txMetadata.Trim(), ct).ConfigureAwait(false);
         return r.TxHash;
+    }
+
+    /// <summary>
+    /// Build transactions sweeping the ENTIRE spendable balance to <paramref name="address"/>
+    /// WITHOUT broadcasting (do_not_relay). Same contract as <see cref="PrepareSendAsync"/>:
+    /// the exact per-transaction fees come back baked into the signed txs, discarding the result
+    /// cancels everything, and each metadata entry is broadcast via <see cref="RelaySendAsync"/>.
+    /// A sweep may split into several transactions when the wallet holds many outputs.
+    /// </summary>
+    public async Task<SweepAllResult> PrepareSweepAllAsync(string address, uint priority, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(address))
+        {
+            throw new ArgumentException("Destination address is empty.", nameof(address));
+        }
+
+        if (priority > 3)
+        {
+            priority = 3;
+        }
+
+        SweepAllResult r = await Rpc.PrepareSweepAllAsync(address.Trim(), priority, ct).ConfigureAwait(false);
+        if (r.TxMetadataList.Count == 0
+            || r.TxMetadataList.Count != r.AmountList.Count
+            || r.TxMetadataList.Count != r.FeeList.Count
+            || r.TxMetadataList.Any(string.IsNullOrWhiteSpace))
+        {
+            throw new InvalidOperationException("The wallet backend returned an incomplete prepared sweep.");
+        }
+
+        return r;
     }
 
     private static (string address, ulong atomic, uint priority) ValidateSendArgs(string address, decimal xmr, uint priority)

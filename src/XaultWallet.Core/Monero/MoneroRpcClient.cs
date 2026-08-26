@@ -186,6 +186,21 @@ public sealed class MoneroRpcClient : IDisposable
     public Task<RelayTxResult> RelayTxAsync(string txMetadata, CancellationToken ct = default) =>
         CallAsync<RelayTxResult>("relay_tx", new { hex = txMetadata }, ct);
 
+    /// <summary>Build transactions sweeping the ENTIRE spendable balance to one address WITHOUT
+    /// broadcasting (do_not_relay). A sweep can span several transactions when the wallet holds
+    /// many outputs; each entry in the result lists gets its own relay. Same contract as
+    /// <see cref="PrepareTransferAsync"/>: discarding the result cancels everything.</summary>
+    public Task<SweepAllResult> PrepareSweepAllAsync(string address, uint priority = 0, CancellationToken ct = default) =>
+        CallAsync<SweepAllResult>("sweep_all", new
+        {
+            address,
+            account_index = 0u,
+            priority,
+            get_tx_keys = true,
+            do_not_relay = true,
+            get_tx_metadata = true,
+        }, ct);
+
     public Task<GetTransfersResult> GetTransfersAsync(bool @in = true, bool @out = true, bool pending = true, CancellationToken ct = default) =>
         CallAsync<GetTransfersResult>("get_transfers", new { @in, @out, pending, pool = pending }, ct);
 
@@ -233,7 +248,26 @@ public sealed class MoneroRpcClient : IDisposable
 
     public static decimal AtomicToXmr(ulong atomic) => atomic / (decimal)AtomicUnitsPerXmr;
 
-    public static ulong XmrToAtomic(decimal xmr) => (ulong)decimal.Round(xmr * AtomicUnitsPerXmr, 0);
+    /// <summary>Upper bound for amount input: at or below ulong.MaxValue in atomic units
+    /// (18,446,744.07... XMR) so the guarded range never reaches the raw decimal→ulong
+    /// OverflowException, and comfortably above the ~18.4M real emission — anything bigger
+    /// is a typo.</summary>
+    public const decimal MaxXmrAmount = 18_446_744m;
+
+    public static ulong XmrToAtomic(decimal xmr)
+    {
+        if (xmr < 0m)
+        {
+            throw new ArgumentOutOfRangeException(nameof(xmr), "Amount cannot be negative.");
+        }
+
+        if (xmr > MaxXmrAmount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(xmr), "Amount exceeds the total Monero supply — check for a typo.");
+        }
+
+        return (ulong)decimal.Round(xmr * AtomicUnitsPerXmr, 0);
+    }
 
     public void Dispose() => _http.Dispose();
 }
@@ -296,6 +330,17 @@ public sealed class TransferResult
 public sealed class RelayTxResult
 {
     [JsonPropertyName("tx_hash")] public string TxHash { get; set; } = "";
+}
+
+/// <summary>Result of sweep_all: parallel lists, one entry per transaction the sweep was split
+/// into. With do_not_relay + get_tx_metadata, each metadata blob is broadcast separately.</summary>
+public sealed class SweepAllResult
+{
+    [JsonPropertyName("tx_hash_list")] public List<string> TxHashList { get; set; } = new();
+    [JsonPropertyName("tx_key_list")] public List<string> TxKeyList { get; set; } = new();
+    [JsonPropertyName("amount_list")] public List<ulong> AmountList { get; set; } = new();
+    [JsonPropertyName("fee_list")] public List<ulong> FeeList { get; set; } = new();
+    [JsonPropertyName("tx_metadata_list")] public List<string> TxMetadataList { get; set; } = new();
 }
 
 public sealed class GetTransfersResult

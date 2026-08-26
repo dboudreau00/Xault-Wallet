@@ -79,15 +79,25 @@ public static class MoneroDiagnostics
         }
     }
 
-    /// <summary>GET {daemon}/get_height and return the daemon's block height. Throws on failure.</summary>
-    public static async Task<ulong> ProbeDaemonAsync(string daemonAddress, CancellationToken ct = default)
+    /// <summary>GET {daemon}/get_height and return the daemon's block height. Throws on failure.
+    /// When <paramref name="proxyAddress"/> ("host:port") is set, the probe goes through that
+    /// SOCKS5 proxy — the probe MUST take the same route as the wallet backend's traffic, or a
+    /// Tor user's real IP would hit the node on every probe while the wallet syncs via Tor.</summary>
+    public static async Task<ulong> ProbeDaemonAsync(string daemonAddress, string? proxyAddress, CancellationToken ct = default)
     {
         if (!DaemonAddress.TryParse(daemonAddress, out Uri baseUri))
         {
             throw new ArgumentException("Daemon address must be a valid http(s) URL.", nameof(daemonAddress));
         }
 
-        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        using var handler = new SocketsHttpHandler();
+        if (!string.IsNullOrWhiteSpace(proxyAddress))
+        {
+            handler.Proxy = new System.Net.WebProxy("socks5://" + proxyAddress.Trim());
+            handler.UseProxy = true;
+        }
+
+        using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
 
         HttpResponseMessage resp;
         try

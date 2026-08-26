@@ -51,7 +51,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _wallet = new WalletViewModel(secrets);
         _wallet.Locked += () =>
         {
-            _ = _wallet.DisposeAsync();
+            // Locked can fire twice when a manual Lock click races the inactivity auto-lock
+            // (both call LockAsync; DisposeAsync is idempotent but each raises the event).
+            WalletViewModel? w = _wallet;
+            if (w is null)
+            {
+                return;
+            }
+
+            _ = w.DisposeAsync();
             _wallet = null;
 
             // If the auto-lock fires while Settings is open, close the Settings state too —

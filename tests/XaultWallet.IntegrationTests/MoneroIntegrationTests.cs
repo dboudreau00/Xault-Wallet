@@ -59,7 +59,7 @@ public sealed class MoneroIntegrationTests
     {
         if (Skip()) { return; }
 
-        ulong height = await MoneroDiagnostics.ProbeDaemonAsync(IntegrationEnv.Daemon!);
+        ulong height = await MoneroDiagnostics.ProbeDaemonAsync(IntegrationEnv.Daemon!, proxyAddress: null);
         _out.WriteLine("daemon height: " + height);
         Assert.True(height > 0);
     }

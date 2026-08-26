@@ -20,8 +20,11 @@ public partial class App : Application
 
         // A previous session that crashed or was killed may have left a restored wallet in
         // temp. Safe to sweep here: the single-instance guard in Program.Main guarantees no
-        // other live session owns one of these directories.
-        XaultWallet.Core.Monero.MoneroProcessManager.ShredOrphanedTempDirs();
+        // other live session owns one of these directories. Off the UI thread — shredding a
+        // large orphaned wallet cache (random-overwrite + per-file fsync) must not stall the
+        // first paint. A dir the sweep is mid-shredding can't collide with a NEW wallet dir:
+        // fresh dirs fail the sweep's 15-minute quiet-period check.
+        _ = Task.Run(XaultWallet.Core.Monero.MoneroProcessManager.ShredOrphanedTempDirs);
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {

@@ -67,6 +67,7 @@ public sealed class AppSettings
     public void Save(string path)
     {
         Clamp();
+        RecoveredFromCorruptFile = false; // a successful save writes a valid file again
         string tmp = path + ".tmp";
         try
         {

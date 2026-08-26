@@ -305,7 +305,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             // Node sync tracker: compare the wallet's scanned height against the daemon's tip.
             try
             {
-                DaemonHeight = await MoneroDiagnostics.ProbeDaemonAsync(_secrets.DaemonAddress, _cts.Token);
+                DaemonHeight = await MoneroDiagnostics.ProbeDaemonAsync(_secrets.DaemonAddress, AppServices.Instance.Settings.ProxyAddress, _cts.Token);
             }
             catch
             {

@@ -758,7 +758,7 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
     {
         try
         {
-            return await MoneroDiagnostics.ProbeDaemonAsync(DaemonAddress.Trim());
+            return await MoneroDiagnostics.ProbeDaemonAsync(DaemonAddress.Trim(), AppServices.Instance.Settings.ProxyAddress);
         }
         catch
         {

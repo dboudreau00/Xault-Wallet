@@ -311,8 +311,14 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
     private void VerifyRealSeed()
     {
         string[] words = RealMnemonic.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (_verifyIndices.Length != 3)
+
+        // The create form stays keyboard-reachable under this overlay: flipping the network or
+        // the generate/import toggle clears RealMnemonic but leaves _verifyIndices populated,
+        // so the indices can point past the (now empty) word list.
+        if (_verifyIndices.Length != 3 || _verifyIndices.Any(i => i >= words.Length))
         {
+            VerifyMessage = "The seed changed — generate it again before verifying.";
+            RealVerified = false;
             return;
         }
 
@@ -468,6 +474,15 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
                 Error = "Provide a decoy seed (generate or import) for the duress wallet.";
                 return;
             }
+
+            // Same seed in both slots = the "decoy" opens the real funds, silently defeating
+            // the entire duress feature. (VaultManager.Create enforces this too; catching it
+            // here gives a friendlier message before any RPC work.)
+            if (NormalizeMnemonic(DuressMnemonic) == NormalizeMnemonic(RealMnemonic))
+            {
+                Error = "The decoy seed must be different from the real wallet's seed.";
+                return;
+            }
         }
 
         Busy = true;
@@ -486,7 +501,7 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
             // captured height must never exceed the chain's current tip (wallet-rpc can
             // date-estimate above the real tip on test networks), or funds would be skipped.
             bool needTip = CreateNewReal
-                           || (!CreateNewReal && RestoreMode == 2)
+                           || (!CreateNewReal && RestoreMode is 1 or 2)
                            || (EnableDuress && CreateNewDuress);
             ulong tipNow = needTip ? await GetTipHeightAsync() : 0UL;
             static ulong ClampToTip(ulong captured, ulong tip) => tip == 0 ? captured : Math.Min(captured, tip);
@@ -504,6 +519,14 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
                     2 => tipNow,                                // from now (new seeds only)
                     _ => RestoreHeight,                         // from a specific block
                 };
+
+                // A typo'd restore height above the chain tip scans NOTHING: zero balance, no
+                // error, and the user concludes the seed is bad. Catch it while the tip is known.
+                if (RestoreMode == 1 && tipNow > 0 && RestoreHeight > tipNow)
+                {
+                    Error = $"Restore height {RestoreHeight:N0} is beyond the current chain tip ({tipNow:N0}). Check for a typo.";
+                    return;
+                }
             }
 
             var main = new WalletSecrets
@@ -691,6 +714,7 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         // Wipe the seeds and offsets from the view model now that they're sealed in the vault.
         RealMnemonic = DuressMnemonic = string.Empty;
         RealSeedOffset = DuressSeedOffset = string.Empty;
+        RealSeedWords.Clear(); // the numbered-word display grid holds the full seed too
         XaultWallet.Core.Diagnostics.Log.Info("Vault created.");
         Created?.Invoke();
     }

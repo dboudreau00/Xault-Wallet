@@ -53,6 +53,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             _ = _wallet.DisposeAsync();
             _wallet = null;
+
+            // If the auto-lock fires while Settings is open, close the Settings state too —
+            // otherwise its Closed handler later re-navigates over whatever screen is showing
+            // (and the gear button stays hidden on the unlock screen).
+            SettingsOpen = false;
+            _beforeSettings = null;
+
             Current = BuildUnlock();
         };
         // Let the wallet screen (e.g. its startup-failure banner) open Settings through the shell.
@@ -69,7 +76,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
 
         _beforeSettings = Current;
-        var settings = new SettingsViewModel();
+        var settings = new SettingsViewModel(walletOpen: _wallet is not null);
         settings.Closed += () =>
         {
             SettingsOpen = false;

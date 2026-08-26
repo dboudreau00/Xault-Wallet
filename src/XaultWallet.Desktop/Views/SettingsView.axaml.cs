@@ -17,7 +17,50 @@ public partial class SettingsView : UserControl
         if (DataContext is SettingsViewModel vm)
         {
             vm.BrowseHandler = BrowseForBinaryAsync;
+            vm.ExportPickHandler = PickBackupDestinationAsync;
+            vm.RestorePickHandler = PickBackupSourceAsync;
         }
+    }
+
+    private async Task<string?> PickBackupDestinationAsync(string suggestedName)
+    {
+        TopLevel? top = TopLevel.GetTopLevel(this);
+        if (top is null)
+        {
+            return null;
+        }
+
+        IStorageFile? file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export encrypted vault backup",
+            SuggestedFileName = suggestedName,
+            DefaultExtension = "xv",
+            FileTypeChoices = new[] { new FilePickerFileType("XaultWallet vault") { Patterns = new[] { "*.xv" } } },
+        });
+
+        return file?.Path.LocalPath;
+    }
+
+    private async Task<string?> PickBackupSourceAsync()
+    {
+        TopLevel? top = TopLevel.GetTopLevel(this);
+        if (top is null)
+        {
+            return null;
+        }
+
+        IReadOnlyList<IStorageFile> files = await top.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Restore vault from backup",
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("XaultWallet vault") { Patterns = new[] { "*.xv" } },
+                FilePickerFileTypes.All,
+            },
+        });
+
+        return files.Count > 0 ? files[0].Path.LocalPath : null;
     }
 
     private async Task<string?> BrowseForBinaryAsync()

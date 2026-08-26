@@ -96,6 +96,17 @@
                                Foreground="{StaticResource TextTertiary}" FontSize="11" TextWrapping="Wrap"/>
                 </StackPanel>
 
+                <StackPanel Spacing="6">
+                    <TextBlock Text="SOCKS PROXY (OPTIONAL)" Classes="eyebrow"/>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBox Classes="mono" FontSize="12.5" Width="220"
+                                 Watermark="127.0.0.1:9050" Text="{Binding ProxyAddress}"/>
+                        <TextBlock Text="host:port (blank = direct)" Classes="muted" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="Routes the wallet backend's node traffic through a SOCKS proxy (e.g. Tor on 127.0.0.1:9050), so the node never sees your real IP. Takes effect the next time a wallet is opened."
+                               Foreground="{StaticResource TextTertiary}" FontSize="11" TextWrapping="Wrap"/>
+                </StackPanel>
+
                 <Separator/>
 
                 <!-- Change this wallet's node (repoint an existing vault) -->
@@ -124,7 +135,8 @@
 
                     <TextBox Watermark="Wallet password (confirms the change)" PasswordChar="&#9679;"
                              Text="{Binding RepointPassword}"/>
-                    <Button Content="Update node" Command="{Binding RepointNodeCommand}" HorizontalAlignment="Left"/>
+                    <Button Content="Update node" Command="{Binding RepointNodeCommand}" IsEnabled="{Binding !Busy}"
+                            HorizontalAlignment="Left"/>
                     <TextBlock Text="{Binding RepointResult}" TextWrapping="Wrap" FontSize="12.5"
                                IsVisible="{Binding RepointResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                Foreground="{Binding RepointOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
@@ -139,11 +151,48 @@
                                Text="Re-encrypts the real wallet under a new password. Your seed does not change. The duress password (if set) is unaffected and cannot be used here."/>
                     <TextBox Watermark="Current password" PasswordChar="&#9679;" Text="{Binding CurrentPassword}"/>
                     <TextBox Watermark="New password" PasswordChar="&#9679;" Text="{Binding NewPassword}"/>
+                    <TextBlock Text="{Binding NewPasswordStrength}" FontSize="11" Foreground="{StaticResource TextTertiary}"
+                               IsVisible="{Binding NewPasswordStrength, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                     <TextBox Watermark="Confirm new password" PasswordChar="&#9679;" Text="{Binding NewPasswordConfirm}"/>
-                    <Button Content="Change password" Command="{Binding ChangePasswordCommand}" HorizontalAlignment="Left"/>
+                    <Button Content="Change password" Command="{Binding ChangePasswordCommand}" IsEnabled="{Binding !Busy}"
+                            HorizontalAlignment="Left"/>
                     <TextBlock Text="{Binding ChangePasswordResult}" TextWrapping="Wrap" FontSize="12.5"
                                IsVisible="{Binding ChangePasswordResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                Foreground="{Binding ChangePasswordOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+                </StackPanel>
+
+                <Separator/>
+
+                <!-- Vault backup: NOT gated on VaultExists — restoring from a backup when the
+                     vault file is lost is this feature's primary purpose. -->
+                <StackPanel Spacing="6">
+                    <TextBlock Text="VAULT BACKUP" Classes="eyebrow"/>
+                    <TextBlock TextWrapping="Wrap" Classes="muted"
+                               Text="Exports the encrypted vault file (your sealed seed). The copy stays protected by your password. If your vault file is ever lost or corrupted, restoring this backup brings the wallet back."/>
+                    <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextTertiary}" FontSize="11"
+                               Text="Careful where you keep it: a backup made before a duress wipe still contains the wiped wallet, so store it somewhere a coercer can't find. Restoring is only offered while no wallet is unlocked; the replaced vault is kept, never destroyed."/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Export backup&#8230;" Command="{Binding ExportVaultCommand}"
+                                IsEnabled="{Binding VaultExists}"/>
+                        <Button Content="Restore from backup&#8230;" Command="{Binding RestoreVaultCommand}"
+                                IsEnabled="{Binding CanRestoreVault}"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding BackupResult}" TextWrapping="Wrap" FontSize="12.5"
+                               IsVisible="{Binding BackupResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               Foreground="{Binding BackupOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+                </StackPanel>
+
+                <Separator/>
+
+                <!-- Folders -->
+                <StackPanel Spacing="6">
+                    <TextBlock Text="FOLDERS" Classes="eyebrow"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Open data folder" Command="{Binding OpenDataFolderCommand}"/>
+                        <Button Content="Open log folder" Command="{Binding OpenLogsFolderCommand}"/>
+                    </StackPanel>
+                    <TextBlock Text="The data folder holds the encrypted vault (vault.xv) and settings; the log folder holds diagnostic logs (no secrets are ever logged)."
+                               Foreground="{StaticResource TextTertiary}" FontSize="11" TextWrapping="Wrap"/>
                 </StackPanel>
 
                 <Separator/>

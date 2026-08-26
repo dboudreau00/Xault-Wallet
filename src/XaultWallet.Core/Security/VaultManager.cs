@@ -45,6 +45,38 @@ public sealed class VaultManager
             throw new IOException($"A vault already exists at {path}.");
         }
 
+        if (mainPassword.Length == 0)
+        {
+            throw new ArgumentException("The main password must not be empty.", nameof(mainPassword));
+        }
+
+        // A half-specified duress profile is a caller bug that would silently create a vault
+        // with NO decoy while the user believes one exists. Fail loudly instead.
+        if (duressPassword is null != duressSecrets is null)
+        {
+            throw new ArgumentException(
+                "Supply both a duress password and duress secrets, or neither.", nameof(duressSecrets));
+        }
+
+        if (duressPassword is not null && duressSecrets is not null)
+        {
+            // Identical passwords make every unlock a coin flip between the two slots — and with
+            // wipe-on-duress enabled, a "normal" unlock could permanently destroy the real wallet.
+            if (PasswordsEqual(mainPassword, duressPassword))
+            {
+                throw new ArgumentException(
+                    "The duress password must be different from the main password.", nameof(duressPassword));
+            }
+
+            // The same seed in both slots means the "decoy" opens the real funds, silently
+            // defeating the entire duress feature.
+            if (MnemonicsEqual(mainSecrets.Mnemonic, duressSecrets.Mnemonic))
+            {
+                throw new ArgumentException(
+                    "The decoy seed must be different from the real wallet's seed.", nameof(duressSecrets));
+            }
+        }
+
         mainSecrets.Kind = ProfileKind.Real;
         var file = VaultFile.CreateEmpty(argon ?? VaultCrypto.Argon2Parameters.Default);
 
@@ -52,12 +84,12 @@ public sealed class VaultManager
         int realSlot = VaultCrypto.RandomBytes(1)[0] % VaultFile.SlotCount;
         int otherSlot = realSlot == 0 ? 1 : 0;
 
-        file.WriteSlot(realSlot, mainPassword, Serialize(mainSecrets));
+        WriteSlotZeroing(file, realSlot, mainPassword, mainSecrets);
 
         if (duressPassword is not null && duressSecrets is not null)
         {
             duressSecrets.Kind = ProfileKind.Duress;
-            file.WriteSlot(otherSlot, duressPassword, Serialize(duressSecrets));
+            WriteSlotZeroing(file, otherSlot, duressPassword, duressSecrets);
         }
         // else: otherSlot keeps its random filler from CreateEmpty.
 
@@ -123,7 +155,21 @@ public sealed class VaultManager
             // Overwrite whichever slot is NOT the one we just opened, then persist.
             int realSlot = slotIndex == 0 ? 1 : 0;
             _file.FillRandom(realSlot);
-            Persist();
+
+            // The wipe is best-effort: if the disk write fails (file locked by AV/backup
+            // software, read-only media, disk full), the decoy must STILL open normally.
+            // Surfacing an error here would make a duress unlock visibly different from a
+            // normal one — at exactly the moment indistinguishability matters most.
+            // Deliberately not logged either: a distinctive log line timestamped at the
+            // duress unlock would tell the same story to anyone reading the log.
+            try
+            {
+                Persist();
+            }
+            catch
+            {
+                try { Persist(); } catch { /* second attempt; then give up silently */ }
+            }
         }
 
         return new UnlockResult(secrets, wasDuress);
@@ -135,6 +181,11 @@ public sealed class VaultManager
     /// </summary>
     public bool ChangeMainPassword(SecureBuffer currentPassword, SecureBuffer newPassword)
     {
+        if (newPassword.Length == 0)
+        {
+            throw new ArgumentException("The new password must not be empty.", nameof(newPassword));
+        }
+
         var hit = _file.TryUnlock(currentPassword);
         if (hit is null)
         {
@@ -150,7 +201,24 @@ public sealed class VaultManager
                 return false; // Do not allow changing the main password via the duress password.
             }
 
-            _file.WriteSlot(slotIndex, newPassword, Serialize(secrets));
+            // Refuse a new password that also opens the OTHER slot: that would silently
+            // recreate the ambiguous-unlock hazard Create guards against (one password
+            // matching both slots — potentially triggering wipe-on-duress on a normal
+            // unlock). The message stays neutral so it never confirms a second wallet.
+            var collision = _file.TryUnlock(newPassword);
+            if (collision is not null)
+            {
+                (SecureBuffer otherPlain, int otherSlot) = collision.Value;
+                otherPlain.Dispose();
+                if (otherSlot != slotIndex)
+                {
+                    throw new ArgumentException(
+                        "That new password can't be used for this vault. Choose a different one.",
+                        nameof(newPassword));
+                }
+            }
+
+            WriteSlotZeroing(_file, slotIndex, newPassword, secrets);
             Persist();
             return true;
         }
@@ -177,8 +245,10 @@ public sealed class VaultManager
         string trimmed = (newDaemonAddress ?? string.Empty).Trim();
         if (!Monero.DaemonAddress.IsValid(trimmed))
         {
+            // Deliberately does NOT echo the typed value: exception messages end up in the log,
+            // and the node address is privacy-sensitive metadata (or worse, a mis-pasted secret).
             throw new ArgumentException(
-                $"Daemon address must be a valid http(s) URL: '{newDaemonAddress}'.", nameof(newDaemonAddress));
+                "Daemon address must be a valid http(s) URL, e.g. http://127.0.0.1:18081.", nameof(newDaemonAddress));
         }
 
         var hit = _file.TryUnlock(password);
@@ -192,7 +262,7 @@ public sealed class VaultManager
         {
             var secrets = Deserialize(plaintext.Span);
             secrets.DaemonAddress = trimmed;
-            _file.WriteSlot(slotIndex, password, Serialize(secrets));
+            WriteSlotZeroing(_file, slotIndex, password, secrets);
             Persist();
             return true;
         }
@@ -246,6 +316,36 @@ public sealed class VaultManager
     }
 
     private static byte[] Serialize(WalletSecrets s) => JsonSerializer.SerializeToUtf8Bytes(s, JsonOpts);
+
+    /// <summary>
+    /// Serialize the secrets, hand them to the slot, then ZERO the serialized JSON — it holds the
+    /// mnemonic in cleartext, and leaving it for the GC would undercut the SecureBuffer discipline
+    /// used everywhere else. (WriteSlot already zeroes its own padded copy.)
+    /// </summary>
+    private static void WriteSlotZeroing(VaultFile file, int slotIndex, SecureBuffer password, WalletSecrets secrets)
+    {
+        byte[] payload = Serialize(secrets);
+        try
+        {
+            file.WriteSlot(slotIndex, password, payload);
+        }
+        finally
+        {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(payload);
+        }
+    }
+
+    /// <summary>Constant-time password comparison (false for different lengths).</summary>
+    private static bool PasswordsEqual(SecureBuffer a, SecureBuffer b) =>
+        System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(a.Span, b.Span);
+
+    /// <summary>Whitespace- and case-insensitive mnemonic comparison.</summary>
+    private static bool MnemonicsEqual(string? a, string? b)
+    {
+        static string Norm(string? m) => string.Join(' ',
+            (m ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).ToLowerInvariant();
+        return Norm(a) == Norm(b);
+    }
 
     private static WalletSecrets Deserialize(ReadOnlySpan<byte> data)
     {

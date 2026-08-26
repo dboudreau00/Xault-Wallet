@@ -92,7 +92,12 @@ public static class MoneroDiagnostics
         HttpResponseMessage resp;
         try
         {
-            resp = await http.GetAsync(new Uri(baseUri, "/get_height"), ct).ConfigureAwait(false);
+            // Relative (not rooted) so a daemon behind a path prefix (e.g. https://host/monero)
+        // is probed at the same URL wallet-rpc will actually use via --daemon-address.
+        Uri probeUri = baseUri.AbsolutePath.EndsWith('/')
+            ? new Uri(baseUri, "get_height")
+            : new Uri(baseUri + "/get_height");
+        resp = await http.GetAsync(probeUri, ct).ConfigureAwait(false);
         }
         catch (HttpRequestException ex)
         {

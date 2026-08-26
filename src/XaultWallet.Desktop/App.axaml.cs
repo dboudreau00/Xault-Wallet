@@ -18,6 +18,11 @@ public partial class App : Application
         Log.Info("XaultWallet starting.");
         InstallGlobalExceptionHandlers();
 
+        // A previous session that crashed or was killed may have left a restored wallet in
+        // temp. Safe to sweep here: the single-instance guard in Program.Main guarantees no
+        // other live session owns one of these directories.
+        XaultWallet.Core.Monero.MoneroProcessManager.ShredOrphanedTempDirs();
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var mainVm = new MainWindowViewModel();

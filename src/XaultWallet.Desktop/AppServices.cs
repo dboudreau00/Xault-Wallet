@@ -50,7 +50,7 @@ public sealed class AppServices
 
     public void SaveSettings() => Settings.Save(SettingsPath);
 
-    public MoneroWalletService CreateWalletService() => new(WalletRpcBinaryPath);
+    public MoneroWalletService CreateWalletService() => new(WalletRpcBinaryPath, Settings.ProxyAddress);
 
     private static string ResolveDefaultWalletRpcBinary()
     {

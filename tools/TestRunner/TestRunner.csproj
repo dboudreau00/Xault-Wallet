@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Reflection-based console runner for the unit tests. Exists because some
+    environments (e.g. Windows Smart App Control) block the VSTest host so
+    "dotnet test" discovers zero tests. The test SOURCES are compiled directly
+    into this executable, which then runs every [Fact]/[Theory] itself.
+    Usage: tools/run-tests.ps1 (or "dotnet run" with this project)
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!-- Test sources live outside the project dir; default globbing must not double-include. -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <!-- Recursive so tests in subfolders are picked up too; obj/bin hold generated files. -->
+    <Compile Include="..\..\tests\XaultWallet.Core.Tests\**\*.cs"
+             Exclude="..\..\tests\XaultWallet.Core.Tests\obj\**;..\..\tests\XaultWallet.Core.Tests\bin\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.assert" Version="2.9.2" />
+    <PackageReference Include="xunit.core" Version="2.9.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\XaultWallet.Core\XaultWallet.Core.csproj" />
+  </ItemGroup>
+
+</Project>

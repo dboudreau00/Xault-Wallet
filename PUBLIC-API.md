@@ -11,13 +11,18 @@ monero-wallet-rpc orchestration without the Avalonia desktop app.
 
 ### `XaultWallet.Core.Security`
 - **`VaultManager`** — create/load/unlock the two-slot vault file.
-  - `Create(path, mainPassword, mainSecrets, duressPassword?, duressSecrets?)`
+  - `Create(path, mainPassword, mainSecrets, duressPassword?, duressSecrets?)` — rejects an
+    empty main password, a duress password equal to the main password, the same mnemonic in
+    both slots, and a half-specified duress profile (all `ArgumentException`): any of those
+    would silently break unlock determinism or the duress feature itself.
   - `Load(path)` / `Exists(path)`
   - `Unlock(password)` → returns the decrypted `WalletSecrets` for whichever slot the password
     opens (real or duress), or null. **No plaintext password comparison exists anywhere** — a
     password "matches" only by successfully authenticating a slot's AES-GCM tag.
   - `ChangeMainPassword(current, new)` — re-encrypts the real slot (rejects the duress
-    password). Exposed in the desktop Settings screen.
+    password). Throws `ArgumentException` if the new password would ALSO open the other slot —
+    that would recreate the ambiguous-unlock hazard `Create` guards against. Exposed in the
+    desktop Settings screen.
   - `ChangeDaemonAddress(password, newDaemonAddress)` — repoints an existing wallet at a new
     node and re-seals **whichever slot the password opens** (real *or* duress), so the operation
     reveals nothing about which profile is which. Returns false on a wrong password; throws if the
@@ -56,14 +61,27 @@ monero-wallet-rpc orchestration without the Avalonia desktop app.
   - `RelaySendAsync(txMetadata)` → tx hash. Broadcasts a previously prepared tx; the fee shown at
     prepare time is baked into the signed tx and cannot change. (This prepare→confirm→relay pair is
     what the desktop send-confirm dialog uses.)
+  - `PrepareSweepAllAsync(address, priority)` → `SweepAllResult` — builds transactions sweeping
+    the ENTIRE spendable balance WITHOUT broadcasting (`do_not_relay`). A sweep can split into
+    several transactions (parallel `AmountList`/`FeeList`/`TxMetadataList`); relay each metadata
+    entry with `RelaySendAsync`. Same discard-cancels contract as `PrepareSendAsync`.
+  - `BackendExited` — true when the wallet-rpc child died underneath an open wallet, so callers
+    can offer a restart instead of surfacing repeated connection errors.
   - `GetTxKeyAsync(txid)` / `CheckTxKeyAsync(txid, txKey, address)` — payment proofs
   - `NewSubaddressAsync(label)`
   - `CloseAsync` / `DisposeAsync` — always dispose; this shreds the temp wallet files.
 - **`MoneroProcessManager`** — lower-level: launches a loopback-only `monero-wallet-rpc`
   child on a random port with `--disable-rpc-login`, readiness-probes it, kills + shreds on
-  dispose. Use `MoneroWalletService` unless you need custom lifecycle control.
+  dispose. On Windows the child is tied to the parent via a kill-on-close Job Object, so a
+  crashed host can't leave wallet-rpc serving the open wallet. An optional constructor
+  `proxyAddress` ("host:port") routes daemon traffic through a SOCKS proxy (`--proxy`, e.g.
+  Tor). `ShredOrphanedTempDirs()` sweeps leftovers from a crashed previous session — call once
+  at startup, only under a single-instance guard. Use `MoneroWalletService` unless you need
+  custom lifecycle control.
 - **`MoneroRpcClient`** — thin JSON-RPC client (hand-built envelope; omits null `params`).
-  Typed wrappers for the methods above. `AtomicToXmr`/`XmrToAtomic` helpers.
+  Typed wrappers for the methods above. `AtomicToXmr`/`XmrToAtomic` helpers (`XmrToAtomic`
+  throws `ArgumentOutOfRangeException` for negative amounts or amounts above the total Monero
+  supply, instead of a raw `OverflowException`).
 - **`MoneroAddress`** — `Problem(address, network)` → null or a human-readable reason.
   Sanity-level only (charset/length/prefix); checksum authority stays with monero-wallet-rpc.
 - **`MoneroDiagnostics`** — `ProbeWalletRpcAsync(binaryPath)` (runs `--version`),

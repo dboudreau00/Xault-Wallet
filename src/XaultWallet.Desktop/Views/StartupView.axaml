@@ -99,7 +99,7 @@
                 <TextBlock Text="{Binding Detail}" Classes="eyebrow" HorizontalAlignment="Center"
                            TextWrapping="Wrap" TextAlignment="Center" MaxWidth="320"/>
                 <Button Content="Continue anyway" Command="{Binding ContinueCommand}"
-                        IsVisible="{Binding Checking}" HorizontalAlignment="Center"/>
+                        IsVisible="{Binding CanContinue}" HorizontalAlignment="Center"/>
             </StackPanel>
         </StackPanel>
     </Grid>

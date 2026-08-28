@@ -513,10 +513,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
         string tmp = vaultPath + ".tmp";
         try
         {
-            string? source = await RestorePickHandler();
+            string? source = RestorePickHandler is { } pick ? await pick() : null;
             if (string.IsNullOrWhiteSpace(source))
             {
-                return; // cancelled
+                return; // cancelled (or no picker wired)
             }
 
             byte[] bytes = File.ReadAllBytes(source);

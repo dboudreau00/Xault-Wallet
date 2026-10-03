@@ -97,5 +97,15 @@ A packaged `.exe` looks finished, but packaging changes nothing about the code's
   a node. The wallet never ships someone else's key-handling binary.
 - **Back up your seed** independently of the app.
 
-Version is stamped as `0.1.0-beta` in the project file — bump `<Version>` there for future
-builds.
+Version is stamped as `0.2.0-beta` in the project file — bump `<Version>` there for future
+builds (Settings → About reads it from the assembly).
+
+## Automated releases (GitHub Actions)
+
+Pushing a tag such as `v0.2.0-beta` runs `.github/workflows/release.yml`: unit tests, then
+single-file self-contained builds for `win-x64`, `linux-x64` and `osx-arm64`, attached with a
+`SHA256SUMS` file to a **draft** release for you to review and publish. The binaries are unsigned
+until a code-signing certificate is added to the workflow.
+
+`SelfContained` / `PublishSingleFile` apply only when publishing (`_IsPublishing`), so a plain
+`dotnet publish -r <rid>` produces the single file, while ordinary builds stay framework-dependent.

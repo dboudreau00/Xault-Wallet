@@ -270,6 +270,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
             return;
         }
 
+        if (PasswordStrength.Evaluate(NewPassword).level < PasswordStrength.MinimumAccepted)
+        {
+            ChangePasswordResult = "That new password is too easy to guess — choose something longer or less predictable.";
+            return;
+        }
+
         if (NewPassword != NewPasswordConfirm)
         {
             ChangePasswordResult = "New passwords don't match.";

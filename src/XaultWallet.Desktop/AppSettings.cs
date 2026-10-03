@@ -13,10 +13,12 @@ public sealed class AppSettings
     public string WalletRpcBinaryPath { get; set; } = "";
 
     /// <summary>Pre-fills the daemon field when creating a wallet.</summary>
-    public string DefaultDaemonAddress { get; set; } = "http://127.0.0.1:18081";
+    public string DefaultDaemonAddress { get; set; } = "http://127.0.0.1:38081";
 
-    /// <summary>0 = Mainnet, 1 = Stagenet, 2 = Testnet.</summary>
-    public int DefaultNetworkIndex { get; set; }
+    /// <summary>0 = Mainnet, 1 = Stagenet, 2 = Testnet. Defaults to STAGENET: this is unaudited beta
+    /// software, and a first wallet should never default to real funds. Mainnet stays one click away
+    /// (behind its warning) for those who choose it.</summary>
+    public int DefaultNetworkIndex { get; set; } = 1;
 
     /// <summary>How often the open wallet re-polls balance/height/history.</summary>
     public int AutoRefreshSeconds { get; set; } = 20;
@@ -95,7 +97,7 @@ public sealed class AppSettings
         ProxyAddress ??= "";
         if (DefaultNetworkIndex is < 0 or > 2)
         {
-            DefaultNetworkIndex = 0;
+            DefaultNetworkIndex = 1;
         }
 
         AutoRefreshSeconds = Math.Clamp(AutoRefreshSeconds, 5, 600);

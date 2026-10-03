@@ -126,7 +126,10 @@
                         <Grid ColumnDefinitions="*,12,Auto">
                             <StackPanel Grid.Column="0" Spacing="6">
                                 <TextBlock Text="AMOUNT (XMR)" Classes="eyebrow"/>
-                                <TextBox Classes="mono" Watermark="0.00" Text="{Binding SendAmount}"/>
+                                <TextBox Classes="mono" Watermark="0.00" Text="{Binding SendAmountText}"/>
+                                <TextBlock Classes="mono" FontSize="11.5" Text="{Binding SendAmountPreview}" TextWrapping="Wrap"
+                                           IsVisible="{Binding SendAmountPreview, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                           Foreground="{Binding SendAmountPreviewIsError, Converter={x:Static conv:BoolToBrushConverter.ErrorMuted}}"/>
                             </StackPanel>
                             <StackPanel Grid.Column="2" Spacing="6">
                                 <TextBlock Text="PRIORITY" Classes="eyebrow"/>

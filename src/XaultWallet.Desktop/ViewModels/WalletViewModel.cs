@@ -48,7 +48,37 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
 
     // Send tab
     [ObservableProperty] private string _sendAddress = string.Empty;
-    [ObservableProperty] private decimal _sendAmount;
+
+    /// <summary>The amount exactly as typed. Parsed by <see cref="XmrAmount"/> (culture-independent)
+    /// — never bound as a number, because culture-aware conversion turned "0,25" into 25 XMR.</summary>
+    [ObservableProperty] private string _sendAmountText = string.Empty;
+
+    /// <summary>Live read-back of how the typed amount is understood, e.g. "= 0.25 XMR".</summary>
+    [ObservableProperty] private string _sendAmountPreview = string.Empty;
+    [ObservableProperty] private bool _sendAmountPreviewIsError;
+
+    partial void OnSendAmountTextChanged(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            SendAmountPreview = string.Empty;
+            SendAmountPreviewIsError = false;
+            return;
+        }
+
+        if (XmrAmount.TryParse(value, out decimal xmr, out string? error))
+        {
+            SendAmountPreview = XmrAmount.LooksThousandsGrouped(value)
+                ? $"= {XmrAmount.Format(xmr)} XMR — the separator is read as a decimal point"
+                : $"= {XmrAmount.Format(xmr)} XMR";
+            SendAmountPreviewIsError = false;
+        }
+        else
+        {
+            SendAmountPreview = error ?? "Invalid amount.";
+            SendAmountPreviewIsError = true;
+        }
+    }
     [ObservableProperty] private int _sendPriority = 1;
     [ObservableProperty] private string _sendResult = string.Empty;
     [ObservableProperty] private bool _sending;
@@ -90,9 +120,9 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     private bool _hideBalances = AppServices.Instance.Settings.HideBalances;
 
     private const string Masked = "●●●●●";
-    public string BalanceDisplay => HideBalances ? Masked : Balance.ToString("0.############");
-    public string UnlockedDisplay => HideBalances ? $"Spendable now: {Masked}" : $"Spendable now: {UnlockedBalance:0.############} XMR";
-    public string LockedDisplay => HideBalances ? $"⧗ {Masked}" : $"⧗ {LockedBalance:0.############} XMR maturing";
+    public string BalanceDisplay => HideBalances ? Masked : XmrAmount.Format(Balance);
+    public string UnlockedDisplay => HideBalances ? $"Spendable now: {Masked}" : $"Spendable now: {XmrAmount.Format(UnlockedBalance)} XMR";
+    public string LockedDisplay => HideBalances ? $"⧗ {Masked}" : $"⧗ {XmrAmount.Format(LockedBalance)} XMR maturing";
 
     [RelayCommand]
     private void ToggleBalances()
@@ -316,10 +346,16 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             try
             {
                 IReadOnlyList<TransferEntry> entries = await _wallet.GetHistoryAsync(_cts.Token);
-                History.Clear();
-                foreach (TransferEntry t in entries)
+
+                // Rebuild only when something changed: clearing every refresh reset the user's row
+                // selection (mid "copy tx ID") and scroll position every 20 seconds.
+                if (!SameHistory(History, entries))
                 {
-                    History.Add(t);
+                    History.Clear();
+                    foreach (TransferEntry t in entries)
+                    {
+                        History.Add(t);
+                    }
                 }
 
                 HasHistory = History.Count > 0;
@@ -327,7 +363,11 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                Log.Info("Transaction history not ready yet: " + ex.Message);
+                if (!_historyNotReadyLogged)
+                {
+                    _historyNotReadyLogged = true; // once per session, not every few seconds
+                    Log.Info("Transaction history not ready yet: " + ex.Message);
+                }
             }
         }
         catch (OperationCanceledException) { }
@@ -355,6 +395,28 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
+    private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
+    private bool _historyNotReadyLogged;
+
+    private static bool SameHistory(IList<TransferEntry> shown, IReadOnlyList<TransferEntry> fresh)
+    {
+        if (shown.Count != fresh.Count)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < fresh.Count; i++)
+        {
+            TransferEntry a = shown[i], b = fresh[i];
+            if (a.TxId != b.TxId || a.Type != b.Type || a.Height != b.Height || a.Amount != b.Amount || a.Timestamp != b.Timestamp)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private void UpdateSyncStatus()
     {
         ulong wallet = Height;
@@ -373,14 +435,18 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         {
             IsSynced = true;
             SyncProgress = 100;
-            SyncText = $"Synced \u00b7 block {node:N0}";
+            SyncText = $"Synced \u00b7 block {node.ToString("N0", Inv)}";
         }
         else
         {
             IsSynced = false;
-            SyncProgress = Math.Clamp(100.0 * wallet / node, 0, 99.9);
+            // Progress over the part of the chain this wallet actually scans (restore height → tip),
+            // not from genesis: a wallet restored near the tip used to show "97%" while scanning.
+            ulong start = Math.Min(_secrets.RestoreHeight, node);
+            double done = wallet > start ? wallet - start : 0;
+            SyncProgress = Math.Clamp(100.0 * done / Math.Max(1, node - start), 0, 99.9);
             ulong behind = node - wallet;
-            SyncText = $"Syncing \u00b7 {SyncProgress:0.0}%  \u00b7  {wallet:N0} / {node:N0}  ({behind:N0} behind)";
+            SyncText = $"Syncing \u00b7 {SyncProgress.ToString("0.0", Inv)}%  \u00b7  {wallet.ToString("N0", Inv)} / {node.ToString("N0", Inv)}  ({behind.ToString("N0", Inv)} behind)";
         }
 
         Status = SyncText;
@@ -446,16 +512,16 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        if (SendAmount <= 0m)
+        if (!XmrAmount.TryParse(SendAmountText, out decimal amount, out string? amountError))
         {
-            SendResult = "Enter an amount greater than zero.";
+            SendResult = amountError ?? "Enter a valid amount.";
             return;
         }
 
-        if (SendAmount > UnlockedBalance)
+        if (amount > UnlockedBalance)
         {
-            SendResult = $"Amount exceeds your unlocked balance ({UnlockedBalance} XMR). " +
-                         "Note some balance may still be locked or needed for the fee.";
+            SendResult = $"Amount exceeds your spendable balance ({XmrAmount.Format(UnlockedBalance)} XMR). " +
+                         "Some balance may still be maturing, and the network fee comes on top.";
             return;
         }
 
@@ -467,7 +533,6 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             // fields stay editable) can make the display disagree with what the tx actually pays.
             uint priority = (uint)Math.Clamp(SendPriority, 0, 3);
             string destination = SendAddress.Trim();
-            decimal amount = SendAmount;
             string prio = priority switch { 1 => "Low", 2 => "Medium", 3 => "High", _ => "Default" };
 
             _preparedTx = await _wallet.PrepareSendAsync(destination, amount, priority, _cts.Token);
@@ -475,9 +540,9 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             _preparedAmount = amount;
 
             decimal fee = MoneroRpcClient.AtomicToXmr(_preparedTx.Fee);
-            SendSummary = $"Send {amount} XMR ({prio} priority) to:";
-            SendFeeText = $"{fee:0.############} XMR";
-            SendTotalText = $"{amount + fee:0.############} XMR";
+            SendSummary = $"Send {XmrAmount.Format(amount)} XMR ({prio} priority) to:";
+            SendFeeText = $"{XmrAmount.Format(fee)} XMR";
+            SendTotalText = $"{XmrAmount.Format(amount + fee)} XMR";
             SendFeeWarning = FeeWarning(fee, amount);
             ShowSendConfirm = true;
         }
@@ -542,9 +607,9 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             _preparedAmount = amount;
 
             string txNote = sweep.TxMetadataList.Count > 1 ? $" across {sweep.TxMetadataList.Count} transactions" : "";
-            SendSummary = $"Sweep ALL spendable funds ({amount:0.############} XMR{txNote}) to:";
-            SendFeeText = $"{fee:0.############} XMR";
-            SendTotalText = $"{amount + fee:0.############} XMR";
+            SendSummary = $"Sweep ALL spendable funds ({XmrAmount.Format(amount)} XMR{txNote}) to:";
+            SendFeeText = $"{XmrAmount.Format(fee)} XMR";
+            SendTotalText = $"{XmrAmount.Format(amount + fee)} XMR";
             SendFeeWarning = FeeWarning(fee, amount);
             ShowSendConfirm = true;
         }
@@ -567,7 +632,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     /// fee estimate (or a unit mishap) — say so instead of letting habit click through it.</summary>
     private static string FeeWarning(decimal fee, decimal amount) =>
         amount > 0m && fee > 0.001m && fee > amount * 0.01m
-            ? $"This fee is unusually high ({fee / amount:P1} of the amount). If you didn't choose a high priority on purpose, cancel and check your node."
+            ? $"This fee is unusually high ({(fee / amount).ToString("P1", System.Globalization.CultureInfo.InvariantCulture)} of the amount). If you didn't choose a high priority on purpose, cancel and check your node."
             : string.Empty;
 
     /// <summary>Abort: throw away the prepared (never-broadcast) transaction(s).</summary>
@@ -613,7 +678,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         {
             string txHash = await _wallet.RelaySendAsync(prepared.TxMetadata, _cts.Token);
             decimal fee = MoneroRpcClient.AtomicToXmr(prepared.Fee);
-            SendResult = $"Sent {_preparedAmount} XMR (fee {fee:0.############} XMR).";
+            SendResult = $"Sent {XmrAmount.Format(_preparedAmount)} XMR (fee {XmrAmount.Format(fee)} XMR).";
 
             // Surface the transaction key so the payment can be proven on an explorer.
             LastTxId = string.IsNullOrWhiteSpace(txHash) ? prepared.TxHash : txHash;
@@ -621,7 +686,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             HasLastTx = !string.IsNullOrWhiteSpace(LastTxId);
 
             SendAddress = string.Empty;
-            SendAmount = 0;
+            SendAmountText = string.Empty;
             await SoftRefreshAsync();
         }
         catch (OperationCanceledException)
@@ -671,9 +736,9 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             HasLastTx = !string.IsNullOrWhiteSpace(LastTxId);
             decimal fee = MoneroRpcClient.AtomicToXmr((ulong)sweep.FeeList.Sum(f => (decimal)f));
             string txNote = relayed > 1 ? $" in {relayed} transactions" : "";
-            SendResult = $"Swept {_preparedAmount:0.############} XMR{txNote} (total fee {fee:0.############} XMR).";
+            SendResult = $"Swept {XmrAmount.Format(_preparedAmount)} XMR{txNote} (total fee {XmrAmount.Format(fee)} XMR).";
             SendAddress = string.Empty;
-            SendAmount = 0;
+            SendAmountText = string.Empty;
             await SoftRefreshAsync();
         }
         catch (Exception ex) when (ex is not OperationCanceledException || relayed > 0)
@@ -780,7 +845,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             {
                 VerifyOk = true;
                 string status = inPool ? "in mempool (0 confirmations)" : $"{confirmations:N0} confirmation(s)";
-                VerifyResult = $"Verified: that address received {MoneroRpcClient.AtomicToXmr(received)} XMR — {status}.";
+                VerifyResult = $"Verified: that address received {XmrAmount.Format(received)} XMR — {status}.";
             }
         }
         catch (Exception ex)

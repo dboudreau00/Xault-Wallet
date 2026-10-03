@@ -30,7 +30,10 @@ internal static class Program
         string home = Directory.CreateTempSubdirectory("xw-ui-").FullName;
         Environment.SetEnvironmentVariable("HOME", home);
         Environment.SetEnvironmentVariable("APPDATA", home);
-        Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", home);
+        // Deliberately a config folder that does NOT exist yet (a fresh Linux account, a minimal
+        // install, a container): the data folder must still land inside it, never in the CWD.
+        string configRoot = Path.Combine(home, "config-not-created-yet");
+        Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", configRoot);
 
         AppBuilder.Configure<App>()
             .UseSkia()
@@ -81,6 +84,10 @@ internal static class Program
         }
 
         CheckHistoryRowSettles();
+        if (!OperatingSystem.IsWindows())
+        {
+            CheckDataFolderIsUnder(configRoot);
+        }
 
         try { Directory.Delete(home, recursive: true); } catch { /* temp only */ }
 
@@ -110,6 +117,21 @@ internal static class Program
     }
 
     private static readonly List<string> Failures = new();
+
+    /// <summary>The vault's folder must be absolute and under the user's config root, even when that
+    /// root didn't exist at startup (it used to resolve to "XaultWallet" in the current directory).</summary>
+    private static void CheckDataFolderIsUnder(string configRoot)
+    {
+        string data = AppServices.Instance.DataDirectory;
+        if (Path.IsPathFullyQualified(data) && data.StartsWith(configRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal) && Directory.Exists(data))
+        {
+            Console.WriteLine("Data folder ok: created under a config root that didn't exist yet.");
+        }
+        else
+        {
+            Failures.Add($"Data folder is '{data}', expected a folder under '{configRoot}'");
+        }
+    }
 
     /// <summary>
     /// A row that reaches its 10th confirmation must stop saying "9/10". The redraw is skipped for

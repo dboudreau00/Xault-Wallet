@@ -19,10 +19,12 @@ monero-wallet-rpc orchestration without the Avalonia desktop app.
     slots, a half-specified duress profile, and `WipeOtherSlotOnUnlock` on the main wallet (all
     `ArgumentException`).
   - `Load(path)` / `Exists(path)`
-  - `Unlock(password)` → `UnlockResult(Secrets)` for whichever slot the password opens, or null.
-    A password "matches" only by authenticating a slot's AES-GCM tag — no plaintext comparison exists.
-    Applies the opened slot's policy before returning: wipe-on-duress, and re-sealing a legacy (v1)
-    payload as v2. A plain unlock never writes the file.
+  - `Unlock(password)` → `UnlockResult(Secrets, UpgradedFromLegacyFormat)` for whichever slot the
+    password opens, or null. A password "matches" only by authenticating a slot's AES-GCM tag — no
+    plaintext comparison exists. Applies the opened slot's policy before returning: wipe-on-duress, and
+    re-sealing a legacy (v1) payload as v2. `UpgradedFromLegacyFormat` is true on the unlock that did
+    that re-seal, for either slot alike; show the same notice for both (see SECURITY.md → Upgrading from
+    0.1). A plain unlock never writes the file.
   - `ChangePassword(current, new)` — re-seals whichever slot `current` opens under `new`. Returns
     false on a wrong password; throws `ArgumentException` if `new` is empty or would also open the
     OTHER slot (neutral message).
@@ -40,6 +42,10 @@ monero-wallet-rpc orchestration without the Avalonia desktop app.
 - **`PasswordStrength`** — `Evaluate(password)` → `(StrengthLevel, bitsEstimate)`, discounting repeats,
   sequences, keyboard runs and very common passwords. `MinimumAccepted` is the floor the app enforces.
 - **`SecureBuffer`** — pinned, zero-on-dispose byte buffer for passwords/keys.
+- **`PrivateFiles`** — owner-only file I/O on Linux/macOS (no-op on Windows): `EnsureDirectory` (`0700`,
+  tightening an existing folder), `OpenWrite` / `WriteAllBytes` / `WriteAllText` (`0600`; an existing
+  file is tightened before it is written), `AppendAllText`, `Tighten`, and `TightenTree` (startup sweep;
+  never follows symlinks). The vault, settings and log writers all go through it.
 
 The sealed payload (internal `SlotPayload`) is identical in shape for every slot:
 `{"v":2,"network":…,"mnemonic":…,"seedOffset":…,"restoreHeight":…,"daemonAddress":…,"ephemeralWalletPassword":…,"wipeOther":…}`.
@@ -57,8 +63,10 @@ is refused with `InvalidDataException`.
 ### `XaultWallet.Core.Monero`
 - **`MoneroWalletService`** — the high-level entry point most integrators want.
   - `new MoneroWalletService(binary, proxyAddress?)` or `new MoneroWalletService(binary, WalletRpcOptions)`
-  - `GenerateNewSeedAsync(network, daemon)` → 25-word seed + restore height = the daemon's tip read
-    **before** the seed exists minus `GeneratedSeedRestoreMargin` (720), or 0 if the node is unreachable
+  - `GenerateNewSeedAsync(network, daemon)` → 25-word seed + restore height from the daemon's tip read
+    **before** the seed exists, via `RestoreHeights.ForNewSeed` (capped by the clock, minus
+    `GeneratedSeedRestoreMargin` = 720), or 0 if the node is unreachable. The backend's ownership is
+    checked before `create_wallet`.
   - `ValidateSeedOpensAsync(secrets)` → opens a wallet once and returns its primary address
   - `OpenAsync(secrets)` → restores into a private session directory (shredded on close)
   - `GetBalanceAsync` / `GetPrimaryAddressAsync` / `GetHeightAsync` / `GetHistoryAsync` / `RefreshAsync`
@@ -74,8 +82,11 @@ is refused with `InvalidDataException`.
 - **`MoneroProcessManager`** — lower level: launches `monero-wallet-rpc` on a random loopback port with
   per-session random **Digest credentials** (written to a `0600` `--config-file` in a `0700` session
   directory, shredded once ready — never on argv), `--log-file` and `--shared-ringdb-dir` inside that
-  directory, and `WorkingDirectory` set to it. Before returning a client it verifies the listening socket
-  belongs to the child (Linux, Windows); a 401 during readiness is a hard failure. On Windows the child
+  directory, and `WorkingDirectory` set to it. `EnsureBackendIsOurs()` throws unless the child is alive
+  and owns every listener that could answer on its port (Linux, Windows; fail-closed — "can't tell" is a
+  no). It runs when the server first answers and again right before the seed is sent; call it before
+  any other call that carries a secret. A 401 during readiness is a hard failure. The binary must be a
+  fully-qualified path (`ExecutableLocator.EnsureLaunchable`). On Windows the child
   is tied to the parent with a kill-on-close Job Object. `ShredOrphanedTempDirs()` sweeps leftovers from
   a crashed session — call once at startup under a single-instance guard.
 - **`WalletRpcOptions`** — `ProxyAddress` ("host:port" SOCKS for daemon traffic, e.g. Tor) and
@@ -88,11 +99,19 @@ is refused with `InvalidDataException`.
 - **`XmrAmount`** — `TryParse(text, out xmr, out error)`: culture-independent; `.` or `,` is always the
   decimal point, never grouping, so ambiguous input can only parse lower than intended. `LooksThousandsGrouped`,
   `Format` (invariant, up to 12 decimals).
-- **`BlockHeight`** — `TryParse(text, out height)`: digits with any grouping.
-- **`ExecutableLocator`** — `FindOnPath(fileName, pathVariable)` → absolute path or null (skips relative entries).
+- **`BlockHeight`** — `TryParse(text, out height)`: plain digits, or groups of three behind one kind
+  of separator (`3,150,000`, `3.150.000`, `3 150 000`); anything else (`3150000.0`, `31,50,000`) is refused.
+- **`RestoreHeights`** — `ApproximateTip(network, now)`: monero's clock-based chain estimate
+  (`wallet2::get_approximate_blockchain_height`, ported from upstream). `ForNewSeed(reportedTip, network, now)`
+  = `min(reportedTip, estimate) − SafetyMargin` (720), floored at 0: a node can't push a new seed's start
+  past the clock.
+- **`ExecutableLocator`** — `FindOnPath(fileName, pathVariable)` → absolute path or null (skips relative
+  entries). `ResolveConfigured(text, pathVariable)`: keeps a full path, looks a bare name up on PATH,
+  passes anything else through unchanged. `EnsureLaunchable(path)` throws `FileNotFoundException` unless
+  the path is fully qualified and exists.
 - **`MoneroAddress`** — `Problem(address, network)` → null or a human-readable reason (charset/length/prefix only).
 - **`DaemonAddress`** — the one definition of a valid node URL.
-- **`MoneroDiagnostics`** — `ProbeWalletRpcAsync(binaryPath)` (runs `--version`),
+- **`MoneroDiagnostics`** — `ProbeWalletRpcAsync(binaryPath)` (runs `--version`; same full-path rule as a launch),
   `ProbeDaemonAsync(daemonUrl, proxy)` (GET `/get_height`, same route as wallet-rpc: SOCKS or direct).
 - **`SecretRedactor`** — structural JSON redaction of seeds, passwords, keys and signed-tx blobs.
 

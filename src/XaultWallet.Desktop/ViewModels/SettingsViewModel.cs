@@ -129,8 +129,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _autoLockMinutes = s.AutoLockMinutes;
         _proxyAddress = s.ProxyAddress;
         CanRestoreVault = !walletOpen;
-        DefaultBinaryHint = "Leave blank to auto-detect. Currently resolves to: " +
-                            AppServices.Instance.ResolvedDefaultWalletRpcBinary;
+        string detected = AppServices.Instance.ResolvedDefaultWalletRpcBinary;
+        DefaultBinaryHint = detected.Length > 0
+            ? "Leave blank to auto-detect. Currently resolves to: " + detected
+            : "Leave blank to auto-detect (nothing found next to the app or on PATH yet), or enter the full path.";
 
         if (AppSettings.RecoveredFromCorruptFile)
         {
@@ -165,13 +167,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
         BinaryTestResult = "Testing\u2026";
         try
         {
+            // Exactly what a launch would use: blank = auto-detect, bare name = PATH lookup.
             string path = string.IsNullOrWhiteSpace(WalletRpcBinaryPath)
                 ? AppServices.Instance.ResolvedDefaultWalletRpcBinary
-                : WalletRpcBinaryPath.Trim();
+                : ExecutableLocator.ResolveConfigured(WalletRpcBinaryPath, Environment.GetEnvironmentVariable("PATH"));
 
             string version = await MoneroDiagnostics.ProbeWalletRpcAsync(path);
             BinaryTestOk = true;
-            BinaryTestResult = "OK \u2014 " + version;
+            BinaryTestResult = $"OK \u2014 {version} ({path})";
         }
         catch (Exception ex)
         {
@@ -470,7 +473,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
             byte[] bytes = File.ReadAllBytes(AppServices.Instance.VaultPath);
             VaultFile.Deserialize(bytes); // sanity: never export a corrupt vault as a "backup"
-            File.WriteAllBytes(dest, bytes);
+            PrivateFiles.WriteAllBytes(dest, bytes); // 0600, like the vault itself
             BackupOk = true;
             BackupResult = "Encrypted vault backup saved. Store it somewhere safe — it stays " +
                            "protected by your password, but anyone holding it can try to brute-force it.";
@@ -540,7 +543,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             // swap — matching VaultManager.Persist's discipline. The live vault path holds
             // either the old vault or the new one at every instant, even across a crash or
             // power loss; there is never a window with NO vault at the live path.
-            using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (FileStream fs = PrivateFiles.OpenWrite(tmp))
             {
                 fs.Write(bytes, 0, bytes.Length);
                 fs.Flush(flushToDisk: true);

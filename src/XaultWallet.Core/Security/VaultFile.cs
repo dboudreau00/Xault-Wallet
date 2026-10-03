@@ -144,36 +144,46 @@ public sealed class VaultFile
     public OpenedSlot? TryOpen(SecureBuffer password)
     {
         OpenedSlot? result = null;
-
-        for (int i = 0; i < SlotCount; i++)
+        try
         {
-            byte[] salt = _slots[i].AsSpan(0, VaultCrypto.SaltSizeBytes).ToArray();
-            ReadOnlySpan<byte> enc = _slots[i].AsSpan(VaultCrypto.SaltSizeBytes);
-
-            SecureBuffer key = VaultCrypto.DeriveKey(password, salt, Argon);
-            SecureBuffer? dec = VaultCrypto.TryDecrypt(key, enc, AssociatedData(i));
-            bool kept = false;
-            try
+            // Every slot is always tried (two full Argon2 derivations), so timing can't tell which
+            // slot matched or whether the other one holds anything.
+            for (int i = 0; i < SlotCount; i++)
             {
-                if (dec is not null && result is null)
+                byte[] salt = _slots[i].AsSpan(0, VaultCrypto.SaltSizeBytes).ToArray();
+                SecureBuffer key = VaultCrypto.DeriveKey(password, salt, Argon);
+                SecureBuffer? dec = null;
+                bool kept = false;
+                try
                 {
-                    // Unpad: first 4 bytes are the real length.
-                    uint len = BinaryPrimitives.ReadUInt32LittleEndian(dec.Span);
-                    if (len <= PaddedPlaintextBytes - 4)
+                    dec = VaultCrypto.TryDecrypt(key, _slots[i].AsSpan(VaultCrypto.SaltSizeBytes), AssociatedData(i));
+                    if (dec is not null && result is null)
                     {
-                        result = new OpenedSlot(i, new SecureBuffer(dec.Span.Slice(4, (int)len)), key, salt);
-                        kept = true;
+                        // Unpad: first 4 bytes are the real length.
+                        uint len = BinaryPrimitives.ReadUInt32LittleEndian(dec.Span);
+                        if (len <= PaddedPlaintextBytes - 4)
+                        {
+                            result = new OpenedSlot(i, new SecureBuffer(dec.Span.Slice(4, (int)len)), key, salt);
+                            kept = true;
+                        }
+                    }
+                }
+                finally
+                {
+                    dec?.Dispose();
+                    if (!kept)
+                    {
+                        key.Dispose();
                     }
                 }
             }
-            finally
-            {
-                dec?.Dispose();
-                if (!kept)
-                {
-                    key.Dispose();
-                }
-            }
+        }
+        catch
+        {
+            // A failure on a LATER slot (e.g. Argon2 running out of memory) must not strand an
+            // already-decrypted payload and its key outside any using block.
+            result?.Dispose();
+            throw;
         }
 
         return result;

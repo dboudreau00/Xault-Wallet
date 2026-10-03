@@ -69,7 +69,9 @@ dotnet test tests/XaultWallet.IntegrationTests -c Release
 On regtest the suite mines coins to a fresh wallet and runs a full money flow — prepare a send,
 check the exact fee, relay it, prove it with the tx key, check history, sweep everything back — plus
 the security checks: the backend refuses unauthenticated and cross-origin requests, keeps its files
-inside the shredded session folder, and never puts its password on the command line.
+inside the shredded session folder, and never puts its password on the command line. An impostor that
+grabs the backend's port first never receives the seed, both when it answers at once and when it
+waits for the real backend to die before answering.
 
 Against stagenet instead, point `XW_DAEMON` at a synced stagenet node and set `XW_NETWORK=stagenet`;
 the funds-flow tests are skipped (they need to mine). Without the variables every test no-ops with a

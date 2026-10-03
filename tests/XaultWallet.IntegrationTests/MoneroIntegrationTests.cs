@@ -160,6 +160,179 @@ public sealed class MoneroIntegrationTests
         Assert.InRange(height, expectedFloor, tipAfter);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Seed_Is_Never_Sent_To_An_Impostor_Holding_The_Backend_Port(bool patient)
+    {
+        if (Skip()) { return; }
+
+        // The attack: bind the backend's port before monero-wallet-rpc does and answer like a
+        // server. The real child then fails to bind; digest auth can't help (monero sends no
+        // rspauth, so the CLIENT never authenticates the server). The listener-ownership check must
+        // stop the app before restore_deterministic_wallet carries the seed to the impostor.
+        // A PATIENT impostor holds its first answer until the real child has exited and been reaped
+        // — the case where "whose socket is this?" can no longer be asked of the child at all.
+        using var impostor = new ImpostorServer(patient);
+        WalletRpcOptions options = IntegrationEnv.Options with { FixedPortForTesting = impostor.Port };
+        await using var svc = new MoneroWalletService(IntegrationEnv.WalletRpc!, options);
+
+        const string marker = "impostor-canary";
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.ValidateSeedOpensAsync(Secrets(marker + " seed words that must never leave", 0)));
+        _out.WriteLine($"{(patient ? "patient" : "prompt")} impostor; refused after {impostor.Bodies.Count} request(s): {ex.Message}");
+
+        Assert.NotEmpty(impostor.Bodies); // it really did answer the app...
+        Assert.DoesNotContain(impostor.Bodies, b => b.Contains("restore_deterministic_wallet", StringComparison.Ordinal));
+        Assert.DoesNotContain(impostor.Bodies, b => b.Contains(marker, StringComparison.Ordinal)); // ...and never got the seed
+    }
+
+    /// <summary>Answers every HTTP request with a plausible JSON-RPC result and records the bodies.</summary>
+    private sealed class ImpostorServer : IDisposable
+    {
+        private readonly System.Net.Sockets.TcpListener _listener = new(IPAddress.Loopback, 0);
+        private readonly CancellationTokenSource _cts = new();
+        private readonly System.Collections.Concurrent.ConcurrentQueue<string> _bodies = new();
+        private readonly bool _patient;
+
+        public ImpostorServer(bool patient)
+        {
+            _patient = patient;
+            _listener.Start();
+            _ = Task.Run(AcceptLoopAsync);
+        }
+
+        public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
+
+        public IReadOnlyCollection<string> Bodies => _bodies;
+
+        private async Task AcceptLoopAsync()
+        {
+            while (!_cts.IsCancellationRequested)
+            {
+                System.Net.Sockets.TcpClient client;
+                try
+                {
+                    client = await _listener.AcceptTcpClientAsync(_cts.Token);
+                }
+                catch
+                {
+                    return;
+                }
+
+                _ = Task.Run(() => ServeAsync(client));
+            }
+        }
+
+        private async Task ServeAsync(System.Net.Sockets.TcpClient client)
+        {
+            using (client)
+            {
+                try
+                {
+                    System.Net.Sockets.NetworkStream stream = client.GetStream();
+                    var head = new List<byte>();
+                    var one = new byte[1];
+                    while (head.Count < 16_384 && !EndsWithBlankLine(head) && await stream.ReadAsync(one) == 1)
+                    {
+                        head.Add(one[0]);
+                    }
+
+                    int length = 0;
+                    foreach (string line in Encoding.ASCII.GetString(head.ToArray()).Split("\r\n"))
+                    {
+                        if (line.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
+                        {
+                            length = int.Parse(line["Content-Length:".Length..].Trim(), System.Globalization.CultureInfo.InvariantCulture);
+                        }
+                    }
+
+                    byte[] body = new byte[length];
+                    int read = 0;
+                    while (read < length)
+                    {
+                        int n = await stream.ReadAsync(body.AsMemory(read));
+                        if (n == 0)
+                        {
+                            break;
+                        }
+
+                        read += n;
+                    }
+
+                    _bodies.Enqueue(Encoding.UTF8.GetString(body, 0, read));
+                    if (_patient)
+                    {
+                        await HoldUntilTheRealBackendIsGoneAsync();
+                    }
+
+                    byte[] json = Encoding.UTF8.GetBytes("{\"jsonrpc\":\"2.0\",\"id\":\"0\",\"result\":{\"version\":65562,\"release\":true}}");
+                    byte[] reply = Encoding.ASCII.GetBytes(
+                        $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {json.Length}\r\nConnection: close\r\n\r\n");
+                    await stream.WriteAsync(reply);
+                    await stream.WriteAsync(json);
+                }
+                catch
+                {
+                    // a dropped connection is fine; the test only cares what was received
+                }
+            }
+        }
+
+        /// <summary>Linux: wait for the wallet-rpc started for this port to exit AND be reaped
+        /// (its /proc entry gone). Elsewhere: a fixed wait long enough for the failed bind.</summary>
+        private async Task HoldUntilTheRealBackendIsGoneAsync()
+        {
+            if (!OperatingSystem.IsLinux())
+            {
+                await Task.Delay(TimeSpan.FromSeconds(3));
+                return;
+            }
+
+            string needle = "--rpc-bind-port\0" + Port.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\0";
+            DateTime deadline = DateTime.UtcNow.AddSeconds(15);
+            int? pid = null;
+            while (DateTime.UtcNow < deadline)
+            {
+                if (pid is null)
+                {
+                    foreach (string dir in Directory.EnumerateDirectories("/proc"))
+                    {
+                        try
+                        {
+                            if (int.TryParse(Path.GetFileName(dir), out int candidate) &&
+                                File.ReadAllText(Path.Combine(dir, "cmdline")).Contains(needle, StringComparison.Ordinal))
+                            {
+                                pid = candidate;
+                                break;
+                            }
+                        }
+                        catch
+                        {
+                            // processes come and go while we look
+                        }
+                    }
+                }
+                else if (!Directory.Exists($"/proc/{pid}"))
+                {
+                    return; // exited and reaped
+                }
+
+                await Task.Delay(25);
+            }
+        }
+
+        private static bool EndsWithBlankLine(List<byte> b) =>
+            b.Count >= 4 && b[^4] == '\r' && b[^3] == '\n' && b[^2] == '\r' && b[^1] == '\n';
+
+        public void Dispose()
+        {
+            _cts.Cancel();
+            _listener.Stop();
+            _cts.Dispose();
+        }
+    }
+
     [Fact]
     public async Task Generate_Then_Reopen_Seed_RoundTrip()
     {

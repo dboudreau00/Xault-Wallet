@@ -5,7 +5,12 @@ namespace XaultWallet.Core.Security;
 
 /// <summary>Outcome of a successful unlock. Deliberately carries no "was this the decoy?" flag:
 /// the vault itself cannot tell — that is the point of the design.</summary>
-public sealed record UnlockResult(WalletSecrets Secrets);
+/// <param name="Secrets">The opened wallet.</param>
+/// <param name="UpgradedFromLegacyFormat">The opened slot was in the 0.1 (v1) payload format and has
+/// just been re-sealed as v2. Set for EITHER slot alike, so it says nothing about which one opened —
+/// only that the vault predates 0.2, and that any other slot is still in the old format until its
+/// own password is used.</param>
+public sealed record UnlockResult(WalletSecrets Secrets, bool UpgradedFromLegacyFormat = false);
 
 /// <summary>
 /// Coordinates the vault file, its two slots and the duress policy. This class never compares
@@ -161,7 +166,7 @@ public sealed class VaultManager
                 ShredSiblingCopies();
             }
 
-            return new UnlockResult(hit.Secrets);
+            return new UnlockResult(hit.Secrets, hit.Migrated);
         }
     }
 
@@ -359,7 +364,7 @@ public sealed class VaultManager
         try
         {
             // Write + flush to disk so the bytes are durable before we swap the file in.
-            using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (FileStream fs = PrivateFiles.OpenWrite(tmp)) // 0600: the vault is offline-attackable
             {
                 fs.Write(data, 0, data.Length);
                 fs.Flush(flushToDisk: true);

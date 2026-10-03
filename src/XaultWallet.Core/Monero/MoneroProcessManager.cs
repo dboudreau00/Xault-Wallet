@@ -21,6 +21,10 @@ public sealed record WalletRpcOptions
     /// whose hard-fork schedule doesn't match its network — what a private <c>monerod --regtest</c>
     /// chain needs. Never enable it against a public network.</summary>
     public bool AllowMismatchedDaemonVersion { get; init; }
+
+    /// <summary>TESTING ONLY. Bind this port instead of a random free one, so a test can occupy it
+    /// first and play the process that grabbed the backend's port.</summary>
+    internal int? FixedPortForTesting { get; init; }
 }
 
 /// <summary>
@@ -42,6 +46,7 @@ public sealed class MoneroProcessManager : IAsyncDisposable
     private readonly string _walletRpcBinary;
     private readonly WalletRpcOptions _options;
     private Process? _process;
+    private int _port;
     private string? _tempDir;
     private readonly ConcurrentQueue<string> _stderrTail = new();
     private const int StderrTailMax = 60;
@@ -114,6 +119,7 @@ public sealed class MoneroProcessManager : IAsyncDisposable
 
         try
         {
+            EnsureBackendIsOurs(); // last check before the seed goes over the wire
             await client.RestoreDeterministicWalletAsync(
                 filename: WalletFileName,
                 password: secrets.EphemeralWalletPassword,
@@ -150,12 +156,7 @@ public sealed class MoneroProcessManager : IAsyncDisposable
             throw new InvalidOperationException("A wallet process is already running for this manager.");
         }
 
-        if (string.IsNullOrWhiteSpace(_walletRpcBinary) || !File.Exists(_walletRpcBinary))
-        {
-            throw new FileNotFoundException(
-                "monero-wallet-rpc binary not found. Download the official Monero CLI tools and set its path in Settings.",
-                _walletRpcBinary);
-        }
+        ExecutableLocator.EnsureLaunchable(_walletRpcBinary);
 
         if (!DaemonAddress.IsValid(daemonAddress))
         {
@@ -176,7 +177,8 @@ public sealed class MoneroProcessManager : IAsyncDisposable
         {
             WritePrivateFile(configFile, $"rpc-login={credential.UserName}:{credential.Password}\n");
 
-            int port = FreeLocalPort();
+            int port = _options.FixedPortForTesting ?? FreeLocalPort();
+            _port = port;
             Endpoint = new Uri($"http://127.0.0.1:{port}");
 
             var psi = new ProcessStartInfo
@@ -331,13 +333,7 @@ public sealed class MoneroProcessManager : IAsyncDisposable
 
             if (answered)
             {
-                if (_process is not null && LoopbackPortOwnership.IsListenerOwnedBy(_process.Id, port) == false)
-                {
-                    throw new InvalidOperationException(
-                        "Another program is answering on the wallet backend's port, so XaultWallet refused to send it " +
-                        "your wallet. Close other wallet software and try again.");
-                }
-
+                EnsureBackendIsOurs();
                 return;
             }
 
@@ -345,6 +341,29 @@ public sealed class MoneroProcessManager : IAsyncDisposable
         }
 
         throw new TimeoutException($"monero-wallet-rpc did not become ready in time. {LastStderr()}");
+    }
+
+    /// <summary>
+    /// Throw unless the server on our port is provably the child we started and that child is still
+    /// alive. Called when the server first answers AND right before the first call that carries a
+    /// secret. Fails closed: where ownership can be checked (Linux, Windows) only a definite "yes"
+    /// passes — a child that already died after losing the port to another process reads as "no".
+    /// </summary>
+    public void EnsureBackendIsOurs()
+    {
+        Process? p = _process;
+        if (p is null || HasProcessExited)
+        {
+            throw new InvalidOperationException(
+                $"monero-wallet-rpc is not running (it may have failed to start). {LastStderr()}");
+        }
+
+        if (!LoopbackPortOwnership.IsTrusted(LoopbackPortOwnership.IsListenerOwnedBy(p.Id, _port)) || HasProcessExited)
+        {
+            throw new InvalidOperationException(
+                "Another program is answering on the wallet backend's port, so XaultWallet refused to send it " +
+                "your wallet. Close other wallet software and try again.");
+        }
     }
 
     // Base58 runs of address length and 64-hex strings (keys, tx ids) are masked from anything the

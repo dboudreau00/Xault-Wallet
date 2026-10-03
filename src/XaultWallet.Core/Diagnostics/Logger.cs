@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace XaultWallet.Core.Diagnostics;
 
 /// <summary>
@@ -20,7 +18,7 @@ public static class Log
     {
         try
         {
-            Directory.CreateDirectory(directory);
+            Security.PrivateFiles.EnsureDirectory(directory);
             lock (Gate)
             {
                 _file = Path.Combine(directory, "xaultwallet.log");
@@ -56,7 +54,7 @@ public static class Log
                 }
 
                 RollIfNeeded();
-                File.AppendAllText(_file, line, Encoding.UTF8);
+                Security.PrivateFiles.AppendAllText(_file, line); // created 0600
             }
         }
         catch

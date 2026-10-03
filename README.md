@@ -113,7 +113,8 @@ so Windows SmartScreen / macOS Gatekeeper will ask before the first run.
 1. Run XaultWallet. The splash checks for the binary and a node; on a fresh machine the checks may
    fail — that's expected, choose **Continue anyway**.
 2. Open **Settings** (top-right) → **Wallet backend**: *Browse…* to `monero-wallet-rpc` (or leave it
-   blank if it's on your PATH — the resolved path is shown) → **Test**.
+   blank if it's on your PATH — the resolved path is shown) → **Test**. A typed path must be a full
+   path; a bare `monero-wallet-rpc` is looked up on PATH, and relative paths are refused.
 3. **Network & privacy**: pick a **stagenet** public node from the list (or your own `monerod
    --stagenet`) → **Test**. **Save changes**, then **Close**.
 
@@ -236,7 +237,7 @@ wallet is refused.
 
 | Seed | Scans from | Why |
 |---|---|---|
-| **Generated** (real or decoy) | The node's tip **just before the seed was created**, minus 720 blocks (~1 day) | A fresh seed cannot have earlier history; the margin absorbs a reorg or a node slightly ahead |
+| **Generated** (real or decoy) | The node's tip **just before the seed was created** (never more than the clock-based chain estimate), minus 720 blocks (~1 day) | A fresh seed cannot have earlier history; the margin absorbs a reorg or a node slightly ahead, and the cap stops a lying node from hiding incoming payments |
 | **Imported real** | **Your choice**: full history (default) / a specific block / now (minus the same margin) | You know your wallet's age; full history is the safe default |
 | **Imported decoy** | **Always full history** | A decoy that hides its own funds is a broken decoy |
 
@@ -252,6 +253,9 @@ syncs in seconds; one restored from full history takes as long as the node needs
 | `…\XaultWallet\settings.json` | Binary path, default node, refresh/auto-lock intervals, proxy | No secrets, plain JSON |
 | `…\XaultWallet\logs\` | Diagnostic log | Seeds/passwords/keys redacted; nothing per-wallet (no heights, nodes or send events) |
 | `%TEMP%\xaultwallet_*` (per session) | wallet-rpc's restored wallet files, its log, its ring database | **Shredded** (overwritten + deleted) on lock/exit; private to your user |
+
+On Linux/macOS the `XaultWallet` folder is `0700` and its files `0600` regardless of your umask (older
+installs are tightened at startup); exports and seed backups you save are written `0600` too.
 
 **Privacy notes:** a public node's operator can see your IP and the transactions you broadcast (not
 your balance or history). For privacy, run your own node or set a SOCKS proxy (Tor) in Settings.

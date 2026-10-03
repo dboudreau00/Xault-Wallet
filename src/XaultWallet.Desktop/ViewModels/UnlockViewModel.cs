@@ -1,6 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using XaultWallet.Core.Models;
 using XaultWallet.Core.Security;
 
 namespace XaultWallet.Desktop.ViewModels;
@@ -24,7 +23,7 @@ public sealed partial class UnlockViewModel : ViewModelBase
     private void ToggleReveal() => RevealPassword = !RevealPassword;
 
     /// <summary>Raised on a correct password. Carries no real/decoy signal — the vault has none.</summary>
-    public event Action<WalletSecrets>? Unlocked;
+    public event Action<UnlockResult>? Unlocked;
 
     [RelayCommand]
     private async Task UnlockAsync()
@@ -60,7 +59,7 @@ public sealed partial class UnlockViewModel : ViewModelBase
                 return;
             }
 
-            Unlocked?.Invoke(result.Secrets);
+            Unlocked?.Invoke(result);
         }
         catch (Exception ex)
         {

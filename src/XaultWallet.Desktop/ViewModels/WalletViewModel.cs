@@ -48,11 +48,13 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>What the Receive QR encodes: the standard Monero URI for the shown address.</summary>
     public string ReceiveUri => string.IsNullOrEmpty(PrimaryAddress) ? string.Empty : "monero:" + PrimaryAddress;
 
-    partial void OnHeightChanged(ulong value)
+    partial void OnHeightChanged(ulong oldValue, ulong newValue)
     {
         // Confirmation counts only change for rows still pending or confirming. Rebuilding on every
         // height change would reset the list's scroll position every few seconds while syncing.
-        if (_entries.Any(e => e.Height == 0 || e.Type is "pool" or "pending" || value < e.Height + HistoryRow.UnlockConfirmations))
+        // Judge "still confirming" at the OLD height: the change that takes a row from 9/10 to
+        // settled is exactly the one that must redraw it.
+        if (_entries.Any(e => e.Height == 0 || e.Type is "pool" or "pending" || oldValue < e.Height + HistoryRow.UnlockConfirmations))
         {
             RebuildHistoryRows();
         }
@@ -230,6 +232,21 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
 
     /// <summary>Drives the History tab's empty-state hint.</summary>
     [ObservableProperty] private bool _hasHistory;
+
+    /// <summary>Shown once, after a vault from 0.1 is opened and re-sealed in the current format.</summary>
+    internal const string LegacyUpgradeNotice =
+        "This vault was created by XaultWallet 0.1 and has been upgraded. Only the part this password " +
+        "opens was converted; any other password converts when it is next used. See \u201CUpgrading " +
+        "from 0.1\u201D in SECURITY.md (included in the download) before you use another password with this vault.";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasUpgradeNotice))]
+    private string _upgradeNotice = string.Empty;
+
+    public bool HasUpgradeNotice => UpgradeNotice.Length > 0;
+
+    [RelayCommand]
+    private void DismissUpgradeNotice() => UpgradeNotice = string.Empty;
 
     public event Action? Locked;
 
@@ -955,7 +972,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
 
     private static string Friendly(Exception ex) => ex switch
     {
-        FileNotFoundException => "monero-wallet-rpc was not found. Set its path in Settings.",
+        FileNotFoundException => "monero-wallet-rpc was not found at a full path. Set its full path in Settings.",
         TimeoutException => "the wallet backend didn't respond in time.",
         MoneroRpcClient.MoneroRpcException rpc => FriendlyRpc(rpc),
         _ => ex.Message,

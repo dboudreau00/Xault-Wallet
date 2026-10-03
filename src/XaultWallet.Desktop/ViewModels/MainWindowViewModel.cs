@@ -46,11 +46,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         return vm;
     }
 
-    private void OnUnlocked(WalletSecrets secrets)
+    private void OnUnlocked(UnlockResult result)
     {
         // The UI is identical whichever wallet was opened — by construction: the vault returns the
-        // same kind of secrets for both slots and nothing downstream could tell them apart.
-        _wallet = new WalletViewModel(secrets);
+        // same kind of secrets for both slots and nothing downstream could tell them apart. (The
+        // upgrade notice is reported for either slot alike — see UnlockResult.)
+        _wallet = new WalletViewModel(result.Secrets)
+        {
+            UpgradeNotice = result.UpgradedFromLegacyFormat ? WalletViewModel.LegacyUpgradeNotice : string.Empty,
+        };
         _wallet.Locked += () =>
         {
             // Locked can fire twice when a manual Lock click races the inactivity auto-lock

@@ -1,4 +1,5 @@
 using XaultWallet.Core.Monero;
+using XaultWallet.Core.Security;
 
 namespace XaultWallet.Desktop;
 
@@ -15,7 +16,9 @@ public sealed class AppServices
         DataDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "XaultWallet");
-        Directory.CreateDirectory(DataDirectory);
+        // 0700 folder, 0600 files — and tighten what an older version created with the umask.
+        PrivateFiles.EnsureDirectory(DataDirectory);
+        PrivateFiles.TightenTree(DataDirectory);
         LogsDirectory = Path.Combine(DataDirectory, "logs");
         VaultPath = Path.Combine(DataDirectory, "vault.xv");
         SettingsPath = Path.Combine(DataDirectory, "settings.json");
@@ -32,14 +35,17 @@ public sealed class AppServices
 
     public AppSettings Settings { get; }
 
-    /// <summary>What monero-wallet-rpc resolves to when the user hasn't set an explicit path.</summary>
+    /// <summary>What monero-wallet-rpc resolves to when the user hasn't set an explicit path
+    /// (empty when it is neither next to the app nor on PATH).</summary>
     public string ResolvedDefaultWalletRpcBinary => ResolveDefaultWalletRpcBinary();
 
-    /// <summary>The path actually used to launch monero-wallet-rpc (explicit override, else default).</summary>
+    /// <summary>The path actually used to launch monero-wallet-rpc (explicit override, else default).
+    /// A bare name typed in Settings is looked up on PATH; a relative path is passed through for the
+    /// launcher to refuse (see ExecutableLocator.EnsureLaunchable).</summary>
     public string WalletRpcBinaryPath =>
         string.IsNullOrWhiteSpace(Settings.WalletRpcBinaryPath)
             ? ResolveDefaultWalletRpcBinary()
-            : Settings.WalletRpcBinaryPath.Trim();
+            : ExecutableLocator.ResolveConfigured(Settings.WalletRpcBinaryPath, Environment.GetEnvironmentVariable("PATH"));
 
     public string DefaultDaemonAddress => Settings.DefaultDaemonAddress;
 
@@ -65,6 +71,6 @@ public sealed class AppServices
             return local;
         }
 
-        return ExecutableLocator.FindOnPath(exe, Environment.GetEnvironmentVariable("PATH")) ?? exe;
+        return ExecutableLocator.FindOnPath(exe, Environment.GetEnvironmentVariable("PATH")) ?? string.Empty;
     }
 }

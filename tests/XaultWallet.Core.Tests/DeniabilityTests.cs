@@ -257,6 +257,32 @@ public class DeniabilityTests : IDisposable
         Assert.Equal(Shape(real), Shape(Examine("duress-password-456").json));
     }
 
+    [Theory]
+    [InlineData("main-password-123")]
+    [InlineData("duress-password-456")]
+    public void Upgrade_Is_Reported_Once_And_Identically_For_Either_Slot(string password)
+    {
+        // The notice must not single out one slot: a notice only for v1 "real" slots would make the
+        // first decoy unlock after upgrading look different from the first real one.
+        WriteLegacyVault(decoyWipes: false);
+
+        using var pw = Pw(password);
+        Assert.True(VaultManager.Load(_path).Unlock(pw)!.UpgradedFromLegacyFormat);
+        Assert.False(VaultManager.Load(_path).Unlock(pw)!.UpgradedFromLegacyFormat); // already v2
+    }
+
+    [Fact]
+    public void A_Current_Format_Vault_Never_Reports_An_Upgrade()
+    {
+        using (var mp = Pw("main-password-123"))
+        {
+            VaultManager.Create(_path, mp, Secrets("real seed words"), argon: FastArgon);
+        }
+
+        using var again = Pw("main-password-123");
+        Assert.False(VaultManager.Load(_path).Unlock(again)!.UpgradedFromLegacyFormat);
+    }
+
     [Fact]
     public void Legacy_Decoy_With_Wipe_Still_Wipes_And_Is_Migrated()
     {

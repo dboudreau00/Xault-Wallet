@@ -22,17 +22,17 @@ You can point at a remote stagenet node instead, but a local one is simplest and
 
 Launch the app, click **Settings**, and:
 
-1. Set the **monero-wallet-rpc** path (or leave blank if it's on your PATH) and click
-   **Test binary** — you should see the version string.
-2. Set the **default daemon** to `http://127.0.0.1:38081`, choose **Stagenet**, and click
-   **Test daemon** — you should see the daemon's current height.
-3. **Save**.
+1. Under **Wallet backend**, set the **monero-wallet-rpc** path (or leave it blank if it's on your
+   PATH) and click **Test** — you should see the version string.
+2. Under **Network & privacy**, choose **Stagenet** with `http://127.0.0.1:38081` (or a stagenet
+   preset) and click **Test** — you should see the daemon's current height.
+3. **Save changes**.
 
 ## 4. Create a wallet
 
-1. On the create screen, keep **Create new wallet** selected and click **Generate new seed**.
-2. Write the 25 words down, then either pass the three-word **verification** or **download**
-   the backup. (The download is plaintext by design — treat it like cash.)
+1. On the create screen, keep **Create a new wallet** selected and click **Generate my seed**.
+2. Write the 25 words down, then either pass the three-word **verification** or **save the backup
+   file**. (The file is plaintext by design — treat it like cash.)
 3. Set a strong main password. Optionally set a duress password + decoy seed.
 4. **Create vault**, then unlock with your password.
 
@@ -50,20 +50,30 @@ Launch the app, click **Settings**, and:
   If you enabled "wipe real on duress", verify (with a *throwaway* vault) that the real slot
   is destroyed — this is irreversible, so test it only on a disposable vault.
 
-## 6. Automated integration tests (optional)
+## Automated integration tests (regtest)
 
-The `XaultWallet.IntegrationTests` project runs the same round-trips automatically. They are
-skipped unless configured:
+The `XaultWallet.IntegrationTests` project drives the real `monero-wallet-rpc`. The quickest
+setup is a **private regtest chain** — no download, no network, blocks mined on demand — which is
+exactly what CI runs on every push:
 
 ```bash
+monerod --regtest --offline --fixed-difficulty 1 --data-dir /tmp/xw-regtest \
+        --rpc-bind-ip 127.0.0.1 --rpc-bind-port 18081 --non-interactive --detach
+
 export XW_WALLET_RPC=/path/to/monero-wallet-rpc
-export XW_DAEMON=http://127.0.0.1:38081
-export XW_NETWORK=stagenet
-dotnet test tests/XaultWallet.IntegrationTests
+export XW_DAEMON=http://127.0.0.1:18081
+export XW_NETWORK=regtest
+dotnet test tests/XaultWallet.IntegrationTests -c Release
 ```
 
-Without those variables the tests no-op (they print a skip notice), so a green run with no
-node configured means "skipped", not "passed".
+On regtest the suite mines coins to a fresh wallet and runs a full money flow — prepare a send,
+check the exact fee, relay it, prove it with the tx key, check history, sweep everything back — plus
+the security checks: the backend refuses unauthenticated and cross-origin requests, keeps its files
+inside the shredded session folder, and never puts its password on the command line.
+
+Against stagenet instead, point `XW_DAEMON` at a synced stagenet node and set `XW_NETWORK=stagenet`;
+the funds-flow tests are skipped (they need to mine). Without the variables every test no-ops with a
+skip notice, so a green run with nothing configured means "skipped", not "passed".
 
 ## What still stands between this and mainnet
 

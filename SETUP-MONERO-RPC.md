@@ -39,8 +39,9 @@ Only proceed if the signature is good **and** your file's hash appears in `hashe
 ## 3. Extract and point XaultWallet at it
 
 Extract somewhere stable and **not** inside a cloud-synced folder (OneDrive/Dropbox will fight
-the daemon's data files). Then in XaultWallet: **Settings → monero-wallet-rpc executable →**
-paste the full path to `monero-wallet-rpc(.exe)` → **Test binary** (should report the version).
+the daemon's data files). Then in XaultWallet: **Settings → Wallet backend →** paste the full path
+to `monero-wallet-rpc(.exe)` (or leave it blank if it's on your PATH) → **Test** (should report the
+version) → **Save changes**.
 
 ## 4. Run a node for your network
 
@@ -55,10 +56,11 @@ monerod --stagenet
 monerod
 ```
 
-Default daemon addresses XaultWallet expects (auto-filled by the network picker):
+Default node addresses XaultWallet expects (auto-filled by the network picker; new wallets
+default to stagenet):
 `mainnet http://127.0.0.1:18081` · `stagenet http://127.0.0.1:38081` · `testnet http://127.0.0.1:28081`
 
-Use **Settings → Test daemon** to confirm it responds before creating a wallet. Let the node
+Use **Settings → Network & privacy → Test** to confirm it responds before creating a wallet. Let the node
 finish syncing (`SYNCHRONIZED OK`) so balances and sends work.
 
 ## 5. Choosing mainnet

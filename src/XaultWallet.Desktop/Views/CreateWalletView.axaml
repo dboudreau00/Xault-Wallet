@@ -74,7 +74,7 @@
                                     <ComboBoxItem>From now — newest blocks only (new seeds only)</ComboBoxItem>
                                 </ComboBox>
                                 <TextBox Classes="mono" Watermark="Block height (your wallet's creation height)"
-                                         Text="{Binding RestoreHeight}" IsVisible="{Binding IsSpecificHeight}"
+                                         Text="{Binding RestoreHeightText}" IsVisible="{Binding IsSpecificHeight}"
                                          HorizontalAlignment="Left" Width="280"/>
                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource TextTertiary}"
                                            Text="'From now' skips all past blocks — only use it for a brand-new seed with no history, or you may not see existing funds. If unsure, pick Full history."/>

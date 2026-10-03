@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
@@ -61,9 +62,49 @@ public partial class App : Application
             };
 
             desktop.MainWindow = window;
+            ListenForSecondLaunch(window);
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>A second launch signals this instance (see Program.Main): un-minimise and focus the
+    /// existing window instead of leaving the user wondering why nothing happened.</summary>
+    private static void ListenForSecondLaunch(Window window)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        try
+        {
+            var signal = new EventWaitHandle(false, EventResetMode.AutoReset, Program.ActivateEventName);
+            var thread = new Thread(() =>
+            {
+                while (signal.WaitOne())
+                {
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (window.WindowState == WindowState.Minimized)
+                        {
+                            window.WindowState = WindowState.Normal;
+                        }
+
+                        window.Activate();
+                    });
+                }
+            })
+            {
+                IsBackground = true,
+                Name = "XaultWallet.ActivateListener",
+            };
+            thread.Start();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Second-launch listener unavailable: " + ex.GetType().Name);
+        }
     }
 
     private static void InstallGlobalExceptionHandlers()

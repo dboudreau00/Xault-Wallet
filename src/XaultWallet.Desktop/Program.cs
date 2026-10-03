@@ -8,6 +8,10 @@ internal static class Program
     // Held for the process lifetime; released by the OS on exit.
     private static Mutex? _singleInstanceMutex;
 
+    /// <summary>Signalled by a second launch so the running instance brings its window forward
+    /// (Windows only: named events are not supported by .NET on other platforms).</summary>
+    internal const string ActivateEventName = @"Local\XaultWallet.Activate";
+
     [STAThread]
     public static int Main(string[] args)
     {
@@ -17,7 +21,15 @@ internal static class Program
         if (!createdNew)
         {
             Log.Initialize(AppServices.Instance.LogsDirectory);
-            Log.Warn("Another XaultWallet instance is already running; exiting.");
+            Log.Warn("Another XaultWallet instance is already running; asking it to come forward.");
+            if (OperatingSystem.IsWindows() && EventWaitHandle.TryOpenExisting(ActivateEventName, out EventWaitHandle? activate))
+            {
+                using (activate)
+                {
+                    activate.Set();
+                }
+            }
+
             return 2;
         }
 

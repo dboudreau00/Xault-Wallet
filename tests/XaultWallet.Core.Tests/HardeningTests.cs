@@ -153,4 +153,32 @@ public class PasswordStrengthTests
         StrengthLevel level = PasswordStrength.Evaluate("Tr0ub4dour&3xploreLongPhrase!").level;
         Assert.True(level is StrengthLevel.Strong or StrengthLevel.VeryStrong);
     }
+
+    [Theory]
+    [InlineData("password")]
+    [InlineData("Password123!")]   // a common word dressed up with the usual suffix
+    [InlineData("Monero2026")]
+    [InlineData("aaaaaaaaaaaa")]   // repeats
+    [InlineData("12345678")]       // sequence
+    [InlineData("abcdefghijk")]
+    [InlineData("qwertyuiop")]     // keyboard run
+    [InlineData("9876543210")]     // descending
+    [InlineData("11111111")]
+    public void Common_Patterns_Are_Very_Weak(string pw) =>
+        Assert.Equal(StrengthLevel.VeryWeak, PasswordStrength.Evaluate(pw).level);
+
+    [Theory]
+    [InlineData("correct horse battery staple")]
+    [InlineData("vT9#mQ2!xL4p")]
+    [InlineData("granite-otter-lantern-41")]
+    public void Real_Passphrases_Stay_Acceptable(string pw) =>
+        Assert.True(PasswordStrength.Evaluate(pw).level >= StrengthLevel.Fair);
+
+    [Fact]
+    public void Patterns_Cost_Bits_Compared_To_Random_Text_Of_The_Same_Shape()
+    {
+        double pattern = PasswordStrength.Evaluate("abcdefgh1234").bitsEstimate;
+        double random = PasswordStrength.Evaluate("hqzbwmte7391").bitsEstimate;
+        Assert.True(pattern < random / 2, $"pattern {pattern:0} vs random {random:0}");
+    }
 }

@@ -41,7 +41,10 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsMainnet))]
     private int _networkIndex;                 // 0 mainnet, 1 stagenet, 2 testnet
-    [ObservableProperty] private string _daemonAddress = "http://127.0.0.1:18081";
+    [ObservableProperty] private string _daemonAddress = DefaultLocalDaemon(1);
+
+    private static string DefaultLocalDaemon(int networkIndex) =>
+        $"http://127.0.0.1:{networkIndex switch { 1 => "38081", 2 => "28081", _ => "18081" }}";
 
     /// <summary>True when the mainnet (real money) network is selected — drives the warning banner.</summary>
     public bool IsMainnet => NetworkIndex == 0;
@@ -96,7 +99,8 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         }
 
         _duressRestoreHeight = 0;
-        RestoreHeight = 0;
+        _generatedRestoreHeight = 0;
+        RestoreHeightText = string.Empty;
         RestoreMode = 0;
     }
 
@@ -105,7 +109,13 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
     [ObservableProperty] private string _realMnemonic = string.Empty;
     /// <summary>Seed-offset passphrase for an IMPORTED real seed. Ignored (forced empty) for a generated seed.</summary>
     [ObservableProperty] private string _realSeedOffset = string.Empty;
-    [ObservableProperty] private ulong _restoreHeight;
+
+    /// <summary>Import "from a specific block": the height exactly as typed. Parsed strictly (digits,
+    /// optional thousands separators) — a culture-bound number box silently dropped "2.800.000".</summary>
+    [ObservableProperty] private string _restoreHeightText = string.Empty;
+
+    /// <summary>The generated real seed's own restore height (daemon tip before generation − margin).</summary>
+    private ulong _generatedRestoreHeight;
     [ObservableProperty] private bool _realSeedGenerated;           // true only after generation
     [ObservableProperty] private bool _realVerified;
     [ObservableProperty] private bool _realBackedUp;
@@ -166,8 +176,8 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
     {
         // Pre-fill from saved settings so the user configures the daemon/network once.
         string daemon = AppServices.Instance.DefaultDaemonAddress;
-        _daemonAddress = string.IsNullOrWhiteSpace(daemon) ? "http://127.0.0.1:18081" : daemon;
         _networkIndex = AppServices.Instance.DefaultNetworkIndex;
+        _daemonAddress = string.IsNullOrWhiteSpace(daemon) ? DefaultLocalDaemon(_networkIndex) : daemon;
     }
 
     private MoneroNetwork Network => NetworkIndex switch
@@ -199,7 +209,8 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         RealSeedWords.Clear();
         // Height state belongs to the seed it was captured/typed for — reset with it, or a
         // generation-time tip would leak into the import height box (and vice versa).
-        RestoreHeight = 0;
+        _generatedRestoreHeight = 0;
+        RestoreHeightText = string.Empty;
         RestoreMode = 0;
         Error = string.Empty;
     }
@@ -225,7 +236,7 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
             await using var svc = AppServices.Instance.CreateWalletService();
             (string mnemonic, ulong height) = await svc.GenerateNewSeedAsync(Network, DaemonAddress.Trim());
             RealMnemonic = mnemonic;
-            RestoreHeight = height;
+            _generatedRestoreHeight = height;
             RealSeedGenerated = true;
             RealVerified = false;
             RealBackedUp = false;
@@ -348,7 +359,7 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
             return;
         }
 
-        string content = BackupText(RealMnemonic, RestoreHeight, Network);
+        string content = BackupText(RealMnemonic, _generatedRestoreHeight, Network);
         bool saved = await SaveBackupHandler(content, "xault-seed-backup.txt");
         if (saved)
         {
@@ -408,6 +419,13 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
             return;
         }
 
+        if (PasswordStrength.Evaluate(MainPassword).level < PasswordStrength.MinimumAccepted)
+        {
+            Error = "That password is too easy to guess (a common word, sequence or repeated pattern). " +
+                    "Anyone who copies the vault file can try passwords offline — choose something longer or less predictable.";
+            return;
+        }
+
         if (MainPassword != MainPasswordConfirm)
         {
             Error = "Passwords do not match.";
@@ -460,6 +478,13 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
                 return;
             }
 
+            if (PasswordStrength.Evaluate(DuressPassword).level < PasswordStrength.MinimumAccepted)
+            {
+                Error = "The duress password is too easy to guess. It should look like a real password: " +
+                        "a guessable one lets anyone holding the vault file open the decoy.";
+                return;
+            }
+
             // Mirror the real seed's provenance gate: in generate mode the decoy must actually
             // have been generated (so its height/provenance state is consistent), not merely
             // present in the text box.
@@ -503,28 +528,40 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
             bool needTip = CreateNewReal
                            || (!CreateNewReal && RestoreMode is 1 or 2)
                            || (EnableDuress && CreateNewDuress);
+            ulong typedHeight = 0;
+            if (!CreateNewReal && RestoreMode == 1 && !BlockHeight.TryParse(RestoreHeightText, out typedHeight))
+            {
+                Error = "Enter the block height to scan from, e.g. 3150000.";
+                return;
+            }
+
             ulong tipNow = needTip ? await GetTipHeightAsync() : 0UL;
             static ulong ClampToTip(ulong captured, ulong tip) => tip == 0 ? captured : Math.Min(captured, tip);
+
+            // "Newest blocks only" never means the bare tip: back off the same safety margin the
+            // generator uses (absorbs a reorg or a node slightly ahead; costs seconds of scanning).
+            ulong margin = MoneroWalletService.GeneratedSeedRestoreMargin;
+            ulong recentStart = tipNow > margin ? tipNow - margin : 0;
 
             ulong realRestore;
             if (CreateNewReal)
             {
-                realRestore = RestoreHeight != 0 ? ClampToTip(RestoreHeight, tipNow) : tipNow;
+                realRestore = _generatedRestoreHeight != 0 ? ClampToTip(_generatedRestoreHeight, tipNow) : recentStart;
             }
             else
             {
                 realRestore = RestoreMode switch
                 {
                     0 => 0UL,                                   // full history (safest for imports)
-                    2 => tipNow,                                // from now (new seeds only)
-                    _ => RestoreHeight,                         // from a specific block
+                    2 => recentStart,                           // from now (new seeds only)
+                    _ => typedHeight,                           // from a specific block
                 };
 
                 // A typo'd restore height above the chain tip scans NOTHING: zero balance, no
                 // error, and the user concludes the seed is bad. Catch it while the tip is known.
-                if (RestoreMode == 1 && tipNow > 0 && RestoreHeight > tipNow)
+                if (RestoreMode == 1 && tipNow > 0 && typedHeight > tipNow)
                 {
-                    Error = $"Restore height {RestoreHeight:N0} is beyond the current chain tip ({tipNow:N0}). Check for a typo.";
+                    Error = $"Restore height {typedHeight:N0} is beyond the current chain tip ({tipNow:N0}). Check for a typo.";
                     return;
                 }
             }
@@ -548,7 +585,7 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
                 // from its own generation tip (clamped to the current chain tip); an imported decoy
                 // scans full history so any existing funds are guaranteed to appear.
                 ulong duressRestore = CreateNewDuress
-                    ? (_duressRestoreHeight != 0 ? ClampToTip(_duressRestoreHeight, tipNow) : tipNow)
+                    ? (_duressRestoreHeight != 0 ? ClampToTip(_duressRestoreHeight, tipNow) : recentStart)
                     : 0UL;
 
                 duress = new WalletSecrets

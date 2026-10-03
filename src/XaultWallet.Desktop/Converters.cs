@@ -10,6 +10,13 @@ namespace XaultWallet.Desktop;
 public sealed class BoolToBrushConverter : IValueConverter
 {
     public static readonly BoolToBrushConverter OkWarn = new();
+
+    /// <summary>true (an error) -> danger red, false -> muted secondary text.</summary>
+    public static readonly BoolToBrushConverter ErrorMuted = new()
+    {
+        _whenTrue = new SolidColorBrush(Color.Parse("#FF6B6B")),
+        _whenFalse = new SolidColorBrush(Color.Parse("#9C9CA7")),
+    };
     public static readonly BoolToBrushConverter MainnetBadge = new()
     {
         _whenTrue = new SolidColorBrush(Color.Parse("#8A3B3B")),

@@ -1,4 +1,4 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.8.34330.188
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -9,6 +9,12 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XaultWallet.Core.Tests", "tests\XaultWallet.Core.Tests\XaultWallet.Core.Tests.csproj", "{33333333-3333-3333-3333-333333333333}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XaultWallet.IntegrationTests", "tests\XaultWallet.IntegrationTests\XaultWallet.IntegrationTests.csproj", "{44444444-4444-4444-4444-444444444444}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{1D6DC87A-DE78-487C-A3A8-016938E70473}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestRunner", "tools\TestRunner\TestRunner.csproj", "{45B16D8E-0BD1-4556-8949-2F14BD3B5BD6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UiSnapshots", "tools\UiSnapshots\UiSnapshots.csproj", "{D54D2BB2-50A0-4823-B73C-1B3DC2529F19}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -32,11 +38,23 @@ Global
 		{44444444-4444-4444-4444-444444444444}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{44444444-4444-4444-4444-444444444444}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{44444444-4444-4444-4444-444444444444}.Release|Any CPU.Build.0 = Release|Any CPU
+		{45B16D8E-0BD1-4556-8949-2F14BD3B5BD6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{45B16D8E-0BD1-4556-8949-2F14BD3B5BD6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{45B16D8E-0BD1-4556-8949-2F14BD3B5BD6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{45B16D8E-0BD1-4556-8949-2F14BD3B5BD6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D54D2BB2-50A0-4823-B73C-1B3DC2529F19}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D54D2BB2-50A0-4823-B73C-1B3DC2529F19}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D54D2BB2-50A0-4823-B73C-1B3DC2529F19}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D54D2BB2-50A0-4823-B73C-1B3DC2529F19}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {0E9B3AED-9BE8-4A2C-84C4-2C4CF50D44ED}
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{45B16D8E-0BD1-4556-8949-2F14BD3B5BD6} = {1D6DC87A-DE78-487C-A3A8-016938E70473}
+		{D54D2BB2-50A0-4823-B73C-1B3DC2529F19} = {1D6DC87A-DE78-487C-A3A8-016938E70473}
 	EndGlobalSection
 EndGlobal

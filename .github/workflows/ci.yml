@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-and-test:
+    name: Build + unit tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows matters beyond the release target: it exercises the GetExtendedTcpTable
+        # port-ownership check and the kill-on-close job object.
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore XaultWallet.sln
+      - name: Build (warnings are errors)
+        run: dotnet build XaultWallet.sln -c Release --no-restore
+      - name: Unit tests (reflection runner; fails on zero discovered tests)
+        run: dotnet run -c Release --no-build --project tools/TestRunner
+      - name: Unit tests (xUnit)
+        run: dotnet test tests/XaultWallet.Core.Tests -c Release --no-build
+
+  regtest-integration:
+    name: Integration vs real monero-wallet-rpc (private regtest chain)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Install Monero from the Ubuntu archive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends monero
+          monero-wallet-rpc --version
+      - name: Start a private regtest node (no network, instant mining)
+        run: |
+          monerod --regtest --offline --fixed-difficulty 1 --data-dir "$RUNNER_TEMP/regtest" \
+                  --rpc-bind-ip 127.0.0.1 --rpc-bind-port 18081 --no-igd --hide-my-port \
+                  --non-interactive --detach
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:18081/get_height && exit 0; sleep 1; done
+          echo "monerod did not come up" >&2; exit 1
+      - name: Integration tests (RPC auth, artifact containment, funds flow, duress)
+        env:
+          XW_WALLET_RPC: /usr/bin/monero-wallet-rpc
+          XW_DAEMON: http://127.0.0.1:18081
+          XW_NETWORK: regtest
+        run: dotnet test tests/XaultWallet.IntegrationTests -c Release --logger "console;verbosity=normal"
+
+  ui-snapshots:
+    name: UI smoke test + screenshots
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Fonts and a QR decoder
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fonts-cascadia-code zbar-tools
+      - name: Render every screen (fails on any binding error or a QR/address mismatch)
+        run: dotnet run -c Release --project tools/UiSnapshots -- ui-snapshots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-snapshots
+          path: ui-snapshots/

@@ -25,9 +25,11 @@ public static class SecretRedactor
     private static readonly HashSet<string> SecretKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "seed", "seed_offset", "password", "key", "spend_key", "view_key", "tx_key", "mnemonic",
+        "spendkey", "viewkey", "tx_key_list",
         // Signed-tx blobs: anyone holding them can broadcast the transaction, and they are huge —
-        // keep them out of error messages and logs entirely.
-        "tx_metadata", "hex", "tx_blob",
+        // keep them out of error messages and logs entirely. sweep_all returns the *_list forms.
+        "tx_metadata", "hex", "tx_blob", "tx_metadata_list", "tx_blob_list",
+        "signed_txset", "unsigned_txset", "multisig_txset", "multisig_info",
     };
 
     public static string Redact(string? json)

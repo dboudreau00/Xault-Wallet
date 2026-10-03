@@ -10,7 +10,7 @@ namespace XaultWallet.Core.Monero;
 public sealed class MoneroWalletService : IAsyncDisposable
 {
     private readonly string _walletRpcBinary;
-    private readonly string? _proxyAddress;
+    private readonly WalletRpcOptions _options;
     private MoneroProcessManager? _proc;
     private MoneroRpcClient? _rpc;
 
@@ -25,38 +25,60 @@ public sealed class MoneroWalletService : IAsyncDisposable
     /// <param name="proxyAddress">Optional SOCKS proxy ("host:port") for the backend's daemon
     /// traffic; null/empty = direct connection.</param>
     public MoneroWalletService(string walletRpcBinary, string? proxyAddress = null)
+        : this(walletRpcBinary, new WalletRpcOptions { ProxyAddress = proxyAddress })
+    {
+    }
+
+    public MoneroWalletService(string walletRpcBinary, WalletRpcOptions options)
     {
         _walletRpcBinary = walletRpcBinary;
-        _proxyAddress = string.IsNullOrWhiteSpace(proxyAddress) ? null : proxyAddress.Trim();
+        ArgumentNullException.ThrowIfNull(options);
+        _options = options with
+        {
+            ProxyAddress = string.IsNullOrWhiteSpace(options.ProxyAddress) ? null : options.ProxyAddress.Trim(),
+        };
     }
 
     /// <summary>
-    /// Generate a brand-new Monero wallet and return its 25-word mnemonic plus a sensible
-    /// restore height. Runs a throwaway monero-wallet-rpc instance in its own temp dir,
-    /// creates a deterministic wallet, reads back the seed, then shreds everything. Nothing
-    /// touches persistent storage — the caller decides whether to seal the seed into the vault.
+    /// Blocks a freshly generated seed's restore height sits below the chain tip observed just
+    /// before generation (~1 day at 2-minute blocks). A brand-new address cannot have received
+    /// anything earlier; the margin only absorbs a reorg or a node a little ahead of its peers,
+    /// and costs seconds of extra scanning.
+    /// </summary>
+    public const ulong GeneratedSeedRestoreMargin = 720;
+
+    /// <summary>
+    /// Generate a brand-new Monero wallet and return its 25-word mnemonic plus a restore height.
+    /// Runs a throwaway monero-wallet-rpc instance in its own session dir, creates a deterministic
+    /// wallet, reads back the seed, then shreds everything. Nothing touches persistent storage —
+    /// the caller decides whether to seal the seed into the vault.
+    ///
+    /// The restore height comes from the DAEMON's tip, read BEFORE the seed exists (so no payment
+    /// to it can sit below that height), minus <see cref="GeneratedSeedRestoreMargin"/>. It is 0
+    /// (= full scan, always safe) when the daemon is unreachable. Note: wallet-rpc's own get_height
+    /// right after create_wallet reports its local chain (1 on a fresh wallet), not the tip —
+    /// sealing that made every unlock of a "new" wallet rescan the whole chain.
     /// </summary>
     public async Task<(string mnemonic, ulong restoreHeight)> GenerateNewSeedAsync(
         MoneroNetwork network, string daemonAddress, CancellationToken ct = default)
     {
-        await using var proc = new MoneroProcessManager(_walletRpcBinary, _proxyAddress);
+        ulong tip = 0;
+        try
+        {
+            tip = await MoneroDiagnostics.ProbeDaemonAsync(daemonAddress, _options.ProxyAddress, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Unreachable/odd daemon: fall back to 0 — a full scan later is slow but never loses funds.
+        }
+
+        await using var proc = new MoneroProcessManager(_walletRpcBinary, _options);
         using MoneroRpcClient rpc = await proc.StartServerAsync(network, daemonAddress, ct).ConfigureAwait(false);
 
         string ephemeralPw = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(24));
         await rpc.CreateWalletAsync("gen", ephemeralPw, "English", ct).ConfigureAwait(false);
 
         string mnemonic = (await rpc.QueryKeyAsync("mnemonic", ct).ConfigureAwait(false)).Key;
-
-        ulong height = 0;
-        try
-        {
-            height = (await rpc.GetHeightAsync(ct).ConfigureAwait(false)).Height;
-        }
-        catch (MoneroRpcClient.MoneroRpcException)
-        {
-            // If the daemon is unreachable at generation time we can't learn the tip height;
-            // a new wallet with height 0 simply costs an unnecessary (but harmless) rescan later.
-        }
 
         try { await rpc.CloseWalletAsync(ct).ConfigureAwait(false); } catch { /* closing is best-effort */ }
 
@@ -65,7 +87,7 @@ public sealed class MoneroWalletService : IAsyncDisposable
             throw new InvalidOperationException("monero-wallet-rpc returned an empty mnemonic.");
         }
 
-        return (mnemonic.Trim(), height);
+        return (mnemonic.Trim(), tip > GeneratedSeedRestoreMargin ? tip - GeneratedSeedRestoreMargin : 0);
     }
 
     /// <summary>
@@ -76,7 +98,7 @@ public sealed class MoneroWalletService : IAsyncDisposable
     /// </summary>
     public async Task<string> ValidateSeedOpensAsync(WalletSecrets secrets, CancellationToken ct = default)
     {
-        await using var proc = new MoneroProcessManager(_walletRpcBinary, _proxyAddress);
+        await using var proc = new MoneroProcessManager(_walletRpcBinary, _options);
         using MoneroRpcClient rpc = await proc.StartFromSeedAsync(secrets, ct).ConfigureAwait(false);
         GetAddressResult addr = await rpc.GetAddressAsync(0, ct).ConfigureAwait(false);
         try { await rpc.CloseWalletAsync(ct).ConfigureAwait(false); } catch { }
@@ -86,7 +108,7 @@ public sealed class MoneroWalletService : IAsyncDisposable
     public async Task OpenAsync(WalletSecrets secrets, CancellationToken ct = default)
     {
         await CloseAsync().ConfigureAwait(false);
-        var proc = new MoneroProcessManager(_walletRpcBinary, _proxyAddress);
+        var proc = new MoneroProcessManager(_walletRpcBinary, _options);
         try
         {
             _rpc = await proc.StartFromSeedAsync(secrets, ct).ConfigureAwait(false);
@@ -220,8 +242,14 @@ public sealed class MoneroWalletService : IAsyncDisposable
         await Rpc.RefreshAsync(ct).ConfigureAwait(false);
 
     /// <summary>Transaction private key for an outgoing tx — used to prove a payment on an explorer.</summary>
-    public async Task<string> GetTxKeyAsync(string txid, CancellationToken ct = default) =>
-        (await Rpc.GetTxKeyAsync(txid.Trim(), ct).ConfigureAwait(false)).Key;
+    /// <exception cref="InvalidOperationException">The backend answered without a key.</exception>
+    public async Task<string> GetTxKeyAsync(string txid, CancellationToken ct = default)
+    {
+        string key = (await Rpc.GetTxKeyAsync(txid.Trim(), ct).ConfigureAwait(false)).TxKey;
+        return string.IsNullOrWhiteSpace(key)
+            ? throw new InvalidOperationException("The wallet backend returned no key for that transaction.")
+            : key;
+    }
 
     /// <summary>Verify a payment given txid + tx key + address. Returns (received atomic, confirmations, inPool).</summary>
     public async Task<(ulong received, ulong confirmations, bool inPool)> CheckTxKeyAsync(

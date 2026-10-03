@@ -90,7 +90,10 @@ public static class MoneroDiagnostics
             throw new ArgumentException("Daemon address must be a valid http(s) URL.", nameof(daemonAddress));
         }
 
-        using var handler = new SocketsHttpHandler();
+        // Same route as wallet-rpc: the user's SOCKS proxy when set, otherwise a DIRECT connection.
+        // wallet-rpc ignores system/env proxies, so the probe must too — or it would reach the
+        // node over a different path (and from a different IP) than the wallet itself.
+        using var handler = new SocketsHttpHandler { UseProxy = false };
         if (!string.IsNullOrWhiteSpace(proxyAddress))
         {
             handler.Proxy = new System.Net.WebProxy("socks5://" + proxyAddress.Trim());
@@ -99,15 +102,16 @@ public static class MoneroDiagnostics
 
         using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
 
-        HttpResponseMessage resp;
-        try
-        {
-            // Relative (not rooted) so a daemon behind a path prefix (e.g. https://host/monero)
+        // Relative (not rooted) so a daemon behind a path prefix (e.g. https://host/monero)
         // is probed at the same URL wallet-rpc will actually use via --daemon-address.
         Uri probeUri = baseUri.AbsolutePath.EndsWith('/')
             ? new Uri(baseUri, "get_height")
             : new Uri(baseUri + "/get_height");
-        resp = await http.GetAsync(probeUri, ct).ConfigureAwait(false);
+
+        HttpResponseMessage resp;
+        try
+        {
+            resp = await http.GetAsync(probeUri, ct).ConfigureAwait(false);
         }
         catch (HttpRequestException ex)
         {

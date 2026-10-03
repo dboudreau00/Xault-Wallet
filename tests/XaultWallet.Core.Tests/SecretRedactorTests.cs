@@ -74,6 +74,17 @@ public class SecretRedactorTests
     }
 
     [Fact]
+    public void Redacts_The_List_Forms_Returned_By_Sweep_All()
+    {
+        string sweepResp = "{\"id\":\"5\",\"jsonrpc\":\"2.0\",\"result\":{\"amount_list\":[7],\"fee_list\":[1]," +
+                           "\"tx_hash_list\":[\"h1\"],\"tx_key_list\":[\"secretkey1\"],\"tx_metadata_list\":[\"metablob1\"]}}";
+        string red = SecretRedactor.Redact(sweepResp);
+        Assert.DoesNotContain("secretkey1", red);
+        Assert.DoesNotContain("metablob1", red);
+        Assert.Contains("h1", red); // tx hashes are public
+    }
+
+    [Fact]
     public void Redacts_Case_Insensitively_And_When_Nested()
     {
         string json = "{\"outer\":{\"Seed\":\"a b c\",\"note\":\"keep\"},\"list\":[{\"password\":\"pw\"}]}";

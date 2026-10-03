@@ -1,43 +1,83 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
+using System.Net;
 using System.Net.Sockets;
-using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using XaultWallet.Core.Diagnostics;
 using XaultWallet.Core.Models;
+using XaultWallet.Core.Security;
 
 namespace XaultWallet.Core.Monero;
 
+/// <summary>Launch options for the wallet-rpc child.</summary>
+public sealed record WalletRpcOptions
+{
+    /// <summary>SOCKS proxy ("host:port") for the backend's daemon traffic, e.g. Tor at
+    /// 127.0.0.1:9050. Null/empty = direct connection.</summary>
+    public string? ProxyAddress { get; init; }
+
+    /// <summary>TESTING ONLY. Passes --allow-mismatched-daemon-version so the wallet accepts a daemon
+    /// whose hard-fork schedule doesn't match its network — what a private <c>monerod --regtest</c>
+    /// chain needs. Never enable it against a public network.</summary>
+    public bool AllowMismatchedDaemonVersion { get; init; }
+}
+
 /// <summary>
-/// Launches and supervises a monero-wallet-rpc child process bound to a random
-/// localhost port with random RPC credentials. The wallet itself is restored from
-/// the seed into an EPHEMERAL temp directory, which is shredded on Stop(). Nothing
-/// about the real wallet persists to disk between sessions.
+/// Launches and supervises a monero-wallet-rpc child bound to a random loopback port.
+///
+/// Everything the child writes lives in ONE private session directory (0700), shredded on stop:
+/// <code>
+///   xaultwallet_*/wallet/          restored wallet files (--wallet-dir)
+///   xaultwallet_*/ringdb/          shared ring database (--shared-ringdb-dir; default is ~/.shared-ringdb)
+///   xaultwallet_*/wallet-rpc.log   wallet-rpc's own log  (--log-file; default is the process CWD)
+///   xaultwallet_*/rpc.conf         per-session RPC credentials (0600; shredded once the server is up)
+/// </code>
+/// The RPC server requires HTTP Digest auth with those random credentials, so a web page (CSRF or
+/// DNS rebinding) or another local process cannot drive the open wallet. Before any secret is sent,
+/// the listening socket is checked to belong to the child (where the OS allows it).
 /// </summary>
 public sealed class MoneroProcessManager : IAsyncDisposable
 {
     private readonly string _walletRpcBinary;
-    private readonly string? _proxyAddress;
+    private readonly WalletRpcOptions _options;
     private Process? _process;
     private string? _tempDir;
     private readonly ConcurrentQueue<string> _stderrTail = new();
     private const int StderrTailMax = 60;
 
+    private const string WalletFileName = "w";
+
     public Uri? Endpoint { get; private set; }
 
+    /// <summary>The live session directory (tests inspect what the child writes there).</summary>
+    internal string? SessionDirectory => _tempDir;
+
+    /// <summary>The child's PID while it runs (tests inspect its command line).</summary>
+    internal int? ProcessId => _process?.Id;
+
     public MoneroProcessManager(string walletRpcBinary, string? proxyAddress = null)
+        : this(walletRpcBinary, new WalletRpcOptions { ProxyAddress = proxyAddress })
+    {
+    }
+
+    public MoneroProcessManager(string walletRpcBinary, WalletRpcOptions options)
     {
         _walletRpcBinary = walletRpcBinary ?? throw new ArgumentNullException(nameof(walletRpcBinary));
-        _proxyAddress = string.IsNullOrWhiteSpace(proxyAddress) ? null : proxyAddress.Trim();
+        ArgumentNullException.ThrowIfNull(options);
+        _options = options with
+        {
+            ProxyAddress = string.IsNullOrWhiteSpace(options.ProxyAddress) ? null : options.ProxyAddress.Trim(),
+        };
     }
 
     private static int FreeLocalPort()
     {
-        var listener = new TcpListener(System.Net.IPAddress.Loopback, 0);
+        var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         try
         {
-            return ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+            return ((IPEndPoint)listener.LocalEndpoint).Port;
         }
         finally
         {
@@ -53,8 +93,8 @@ public sealed class MoneroProcessManager : IAsyncDisposable
     };
 
     /// <summary>
-    /// Restore a wallet from seed into a fresh temp dir. Starts monero-wallet-rpc with no wallet
-    /// open (so startup never blocks on the daemon), then restores via the
+    /// Restore a wallet from seed into a fresh session directory. Starts monero-wallet-rpc with no
+    /// wallet open (so startup never blocks on the daemon), then restores via the
     /// restore_deterministic_wallet RPC. The wallet syncs in the background afterward.
     /// </summary>
     public Task<MoneroRpcClient> StartFromSeedAsync(WalletSecrets secrets, CancellationToken ct = default)
@@ -70,34 +110,26 @@ public sealed class MoneroProcessManager : IAsyncDisposable
 
     private async Task<MoneroRpcClient> StartFromSeedInternalAsync(WalletSecrets secrets, CancellationToken ct)
     {
-        // Start the RPC server with NO wallet open (--wallet-dir), exactly like the generation
-        // path. This does not connect to the daemon, so the server becomes ready quickly even
-        // when the node is slow or still syncing. We then restore the wallet via the
-        // restore_deterministic_wallet RPC (which doesn't need the daemon); scanning proceeds in
-        // the background afterward. This fixes the open-path timeout caused by --generate-from-json
-        // blocking on the daemon handshake during startup.
-        MoneroRpcClient client = await LaunchAsync(secrets.Network, secrets.DaemonAddress, (psi, tempDir) =>
-        {
-            psi.ArgumentList.Add("--wallet-dir"); psi.ArgumentList.Add(tempDir);
-            return null;
-        }, ct).ConfigureAwait(false);
+        MoneroRpcClient client = await LaunchAsync(secrets.Network, secrets.DaemonAddress, ct).ConfigureAwait(false);
 
         try
         {
             await client.RestoreDeterministicWalletAsync(
-                filename: "w",
+                filename: WalletFileName,
                 password: secrets.EphemeralWalletPassword,
                 seed: secrets.Mnemonic.Trim(),
                 restoreHeight: secrets.RestoreHeight,
                 seedOffset: secrets.SeedOffset ?? string.Empty,
                 ct).ConfigureAwait(false);
 
-            Log.Info($"Wallet restored on RPC; syncing against {secrets.DaemonAddress} from height {secrets.RestoreHeight}.");
+            // Deliberately no node or height here: the log persists, and per-wallet details (a
+            // restore height is unique to a seed) would let it tell two wallets apart.
+            Log.Info("Wallet restored from seed; syncing in the background.");
         }
         catch
         {
             client.Dispose();
-            await StopAsync().ConfigureAwait(false); // don't leak the process/temp dir on failure
+            await StopAsync().ConfigureAwait(false); // don't leak the process/session dir on failure
             throw;
         }
 
@@ -105,26 +137,13 @@ public sealed class MoneroProcessManager : IAsyncDisposable
     }
 
     /// <summary>
-    /// Start monero-wallet-rpc with NO wallet open (--wallet-dir only), ready to accept
-    /// create_wallet / open_wallet. Used by the seed-generation flow.
+    /// Start monero-wallet-rpc with NO wallet open, ready to accept create_wallet / open_wallet.
+    /// Used by the seed-generation flow.
     /// </summary>
     public Task<MoneroRpcClient> StartServerAsync(MoneroNetwork network, string daemonAddress, CancellationToken ct = default) =>
-        LaunchAsync(network, daemonAddress, (psi, tempDir) =>
-        {
-            psi.ArgumentList.Add("--wallet-dir"); psi.ArgumentList.Add(tempDir);
-            return null;
-        }, ct);
+        LaunchAsync(network, daemonAddress, ct);
 
-    /// <summary>
-    /// Shared launcher. <paramref name="configureMode"/> adds the wallet-mode args (both callers
-    /// use --wallet-dir so the server starts without opening a wallet) and may return a scratch
-    /// file to shred once the server is up. Cleans up fully if anything fails.
-    /// </summary>
-    private async Task<MoneroRpcClient> LaunchAsync(
-        MoneroNetwork network,
-        string daemonAddress,
-        Func<ProcessStartInfo, string, string?> configureMode,
-        CancellationToken ct)
+    private async Task<MoneroRpcClient> LaunchAsync(MoneroNetwork network, string daemonAddress, CancellationToken ct)
     {
         if (_process is not null)
         {
@@ -140,52 +159,74 @@ public sealed class MoneroProcessManager : IAsyncDisposable
 
         if (!DaemonAddress.IsValid(daemonAddress))
         {
-            throw new ArgumentException($"Daemon address is not a valid http(s) URL: '{daemonAddress}'.", nameof(daemonAddress));
+            throw new ArgumentException("Daemon address is not a valid http(s) URL.", nameof(daemonAddress));
         }
 
-        _tempDir = Directory.CreateTempSubdirectory("xaultwallet_").FullName;
-        int port = FreeLocalPort();
-        Endpoint = new Uri($"http://127.0.0.1:{port}");
+        _tempDir = CreatePrivateDirectory();
+        string walletDir = Directory.CreateDirectory(Path.Combine(_tempDir, "wallet")).FullName;
+        string ringDbDir = Directory.CreateDirectory(Path.Combine(_tempDir, "ringdb")).FullName;
+        string configFile = Path.Combine(_tempDir, "rpc.conf");
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = _walletRpcBinary,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-        };
-        psi.ArgumentList.Add("--rpc-bind-port"); psi.ArgumentList.Add(port.ToString(CultureInfo.InvariantCulture));
-        psi.ArgumentList.Add("--rpc-bind-ip"); psi.ArgumentList.Add("127.0.0.1");
-        // The RPC server is bound to loopback on a random port for a few seconds and is not
-        // reachable off-machine. Digest --rpc-login breaks POSTs with a body (the request
-        // stream can't be replayed after the 401 challenge), so we disable RPC auth entirely
-        // here rather than fight the handshake. Security still comes from loopback-only binding.
-        psi.ArgumentList.Add("--disable-rpc-login");
-        psi.ArgumentList.Add("--daemon-address"); psi.ArgumentList.Add(daemonAddress.Trim());
-        if (_proxyAddress is not null)
-        {
-            // Route daemon traffic through the user's SOCKS proxy (e.g. Tor at 127.0.0.1:9050)
-            // so the configured node never learns the user's real IP.
-            psi.ArgumentList.Add("--proxy"); psi.ArgumentList.Add(_proxyAddress);
-        }
-        psi.ArgumentList.Add("--log-level"); psi.ArgumentList.Add("0");
-        string netFlag = NetworkFlag(network);
-        if (netFlag.Length > 0)
-        {
-            psi.ArgumentList.Add(netFlag);
-        }
-
-        string? scratchFile = configureMode(psi, _tempDir);
+        // Per-session random credentials, passed via a private config file rather than argv:
+        // other local users can read a process's command line (/proc/<pid>/cmdline).
+        var credential = new NetworkCredential(RandomHex(8), RandomHex(32));
 
         MoneroRpcClient? client = null;
         try
         {
+            WritePrivateFile(configFile, $"rpc-login={credential.UserName}:{credential.Password}\n");
+
+            int port = FreeLocalPort();
+            Endpoint = new Uri($"http://127.0.0.1:{port}");
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = _walletRpcBinary,
+                WorkingDirectory = _tempDir, // anything written relative to CWD lands in the shredded dir
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            };
+            void Arg(string name, string? value = null)
+            {
+                psi.ArgumentList.Add(name);
+                if (value is not null)
+                {
+                    psi.ArgumentList.Add(value);
+                }
+            }
+
+            Arg("--rpc-bind-ip", "127.0.0.1");
+            Arg("--rpc-bind-port", port.ToString(CultureInfo.InvariantCulture));
+            Arg("--config-file", configFile);
+            Arg("--wallet-dir", walletDir);
+            Arg("--daemon-address", daemonAddress.Trim());
+            if (_options.ProxyAddress is not null)
+            {
+                // Route daemon traffic through the user's SOCKS proxy (e.g. Tor at 127.0.0.1:9050)
+                // so the configured node never learns the user's real IP.
+                Arg("--proxy", _options.ProxyAddress);
+            }
+
+            Arg("--log-file", Path.Combine(_tempDir, "wallet-rpc.log"));
+            Arg("--log-level", "0");
+            Arg("--shared-ringdb-dir", ringDbDir);
+            string netFlag = NetworkFlag(network);
+            if (netFlag.Length > 0)
+            {
+                Arg(netFlag);
+            }
+
+            if (_options.AllowMismatchedDaemonVersion)
+            {
+                Arg("--allow-mismatched-daemon-version");
+            }
+
             _process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start monero-wallet-rpc.");
 
             // Tie the child to OUR lifetime: if XaultWallet crashes or is killed, the OS closes
-            // the job handle and takes wallet-rpc (and the open wallet) down with it. Otherwise
-            // the child would keep serving the wallet on an unauthenticated loopback port.
+            // the job handle and takes wallet-rpc (and the open wallet) down with it.
             WindowsChildJob.TryAssign(_process);
 
             // CRITICAL: drain both pipes, or a chatty child fills the pipe buffer and blocks.
@@ -209,13 +250,11 @@ public sealed class MoneroProcessManager : IAsyncDisposable
             _process.BeginOutputReadLine();
             _process.BeginErrorReadLine();
 
-            client = new MoneroRpcClient(Endpoint); // no auth: launched with --disable-rpc-login
-            await WaitUntilReadyAsync(client, ct).ConfigureAwait(false);
+            client = new MoneroRpcClient(Endpoint, credential);
+            await WaitUntilReadyAsync(client, port, ct).ConfigureAwait(false);
 
-            if (scratchFile is not null)
-            {
-                SecureDeleteFile(scratchFile);
-            }
+            // The server parsed its config at startup; the credentials now live only in memory.
+            SecureDelete.File(configFile);
 
             Log.Info($"monero-wallet-rpc ready on port {port}.");
             return client;
@@ -224,7 +263,7 @@ public sealed class MoneroProcessManager : IAsyncDisposable
         {
             Log.Error("monero-wallet-rpc launch failed", ex);
             client?.Dispose(); // don't leak the HttpClient/handler on a failed launch
-            await StopAsync().ConfigureAwait(false); // no leaked process / temp dir
+            await StopAsync().ConfigureAwait(false); // no leaked process / session dir
             throw;
         }
     }
@@ -247,11 +286,13 @@ public sealed class MoneroProcessManager : IAsyncDisposable
     }
 
     /// <summary>
-    /// Ready == the JSON-RPC server responds to anything. get_version works with or without an
-    /// open wallet, and even an RPC-level error means the server is up. Only connection-level
-    /// failures count as "not ready yet".
+    /// Ready == our child answers an authenticated request. get_version works with or without an
+    /// open wallet, and any RPC-level error also proves the server is up — except a 401, which
+    /// means the session credentials were refused. Only connection-level failures mean "not yet".
+    /// Before declaring ready, verify the listening socket belongs to the child: nothing
+    /// secret-bearing may go to a port some other process grabbed first.
     /// </summary>
-    private async Task WaitUntilReadyAsync(MoneroRpcClient client, CancellationToken ct)
+    private async Task WaitUntilReadyAsync(MoneroRpcClient client, int port, CancellationToken ct)
     {
         const int maxAttempts = 120; // ~60s at 500ms
         for (int attempt = 0; attempt < maxAttempts; attempt++)
@@ -264,14 +305,20 @@ public sealed class MoneroProcessManager : IAsyncDisposable
                     $"monero-wallet-rpc exited early (code {_process.ExitCode}). {LastStderr()}");
             }
 
+            bool answered;
             try
             {
                 await client.GetVersionAsync(ct).ConfigureAwait(false);
-                return; // responded successfully
+                answered = true;
+            }
+            catch (MoneroRpcClient.MoneroRpcException ex) when (ex.Code == 401)
+            {
+                throw new InvalidOperationException(
+                    "The wallet backend refused this session's credentials. Is another program using its port?");
             }
             catch (MoneroRpcClient.MoneroRpcException)
             {
-                return; // server responded with an error => it is up
+                answered = true; // server responded with an error => it is up
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -279,12 +326,34 @@ public sealed class MoneroProcessManager : IAsyncDisposable
             }
             catch
             {
-                await Task.Delay(500, ct).ConfigureAwait(false); // connection not up yet
+                answered = false; // connection not up yet
             }
+
+            if (answered)
+            {
+                if (_process is not null && LoopbackPortOwnership.IsListenerOwnedBy(_process.Id, port) == false)
+                {
+                    throw new InvalidOperationException(
+                        "Another program is answering on the wallet backend's port, so XaultWallet refused to send it " +
+                        "your wallet. Close other wallet software and try again.");
+                }
+
+                return;
+            }
+
+            await Task.Delay(500, ct).ConfigureAwait(false);
         }
 
         throw new TimeoutException($"monero-wallet-rpc did not become ready in time. {LastStderr()}");
     }
+
+    // Base58 runs of address length and 64-hex strings (keys, tx ids) are masked from anything the
+    // stderr tail feeds into: exception messages reach the screen and the persistent log.
+    private static readonly Regex AddressLike = new("[1-9A-HJ-NP-Za-km-z]{90,}", RegexOptions.Compiled);
+    private static readonly Regex HexBlobLike = new("[0-9a-fA-F]{64,}", RegexOptions.Compiled);
+
+    internal static string ScrubLine(string line) =>
+        HexBlobLike.Replace(AddressLike.Replace(line, "***"), "***");
 
     private string LastStderr()
     {
@@ -294,8 +363,7 @@ public sealed class MoneroProcessManager : IAsyncDisposable
             return "(no stderr captured)";
         }
 
-        // Surface the last few lines only; keep it short and secret-free (rpc logs don't contain the seed).
-        return "Last output: " + string.Join(" | ", lines[^Math.Min(4, lines.Length)..]);
+        return "Last output: " + string.Join(" | ", lines[^Math.Min(4, lines.Length)..].Select(ScrubLine));
     }
 
     public async Task StopAsync()
@@ -326,17 +394,18 @@ public sealed class MoneroProcessManager : IAsyncDisposable
 
         string? dir = _tempDir;
         _tempDir = null;
-        if (dir is not null && Directory.Exists(dir))
+        if (dir is not null && Directory.Exists(dir) && !SecureDelete.Directory(dir))
         {
-            ShredDirectory(dir);
+            // The shred is a privacy guarantee; if it couldn't complete (e.g. a wedged child still
+            // holds file locks), at least say so instead of failing silently.
+            Log.Warn("Some temporary wallet files could not be removed; they will be re-shredded on next launch if still present.");
         }
     }
 
     /// <summary>
-    /// Shred any xaultwallet_* temp directories left over from a previous session that crashed
-    /// or was killed before its own cleanup ran. Call ONCE at startup, before any wallet is
-    /// opened, and only when no other instance is running (the app's single-instance guard
-    /// ensures this) — a live session's temp dir must never be swept out from under it.
+    /// Shred any xaultwallet_* session directories left over from a previous session that crashed
+    /// or was killed before its own cleanup ran. Call ONCE at startup, before any wallet is opened,
+    /// and only when no other instance is running (the app's single-instance guard ensures this).
     /// </summary>
     public static void ShredOrphanedTempDirs()
     {
@@ -347,8 +416,7 @@ public sealed class MoneroProcessManager : IAsyncDisposable
                 // Age guard: an instance of an OLDER build (which predates the single-instance
                 // mutex) could still be running with a LIVE wallet in one of these dirs. A live
                 // dir is written constantly while syncing; a crash orphan goes quiet. Only
-                // shred dirs that have been untouched for a while — a fresh orphan just waits
-                // for the next launch.
+                // shred dirs that have been untouched for a while.
                 DateTime newestWriteUtc = Directory.GetLastWriteTimeUtc(dir);
                 try
                 {
@@ -371,8 +439,8 @@ public sealed class MoneroProcessManager : IAsyncDisposable
                     continue;
                 }
 
-                Log.Warn($"Shredding orphaned wallet temp dir from a previous session: {Path.GetFileName(dir)}");
-                ShredDirectory(dir);
+                Log.Warn("Shredding an orphaned wallet session directory from a previous session.");
+                SecureDelete.Directory(dir);
             }
         }
         catch (Exception ex)
@@ -381,71 +449,42 @@ public sealed class MoneroProcessManager : IAsyncDisposable
         }
     }
 
-    private static void ShredDirectory(string dir)
+    /// <summary>A fresh xaultwallet_* directory readable by this user only.</summary>
+    private static string CreatePrivateDirectory()
     {
-        try
+        string dir = Directory.CreateTempSubdirectory("xaultwallet_").FullName;
+        if (!OperatingSystem.IsWindows())
         {
-            foreach (string file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
-            {
-                SecureDeleteFile(file);
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Warn($"Error enumerating temp dir for shredding: {ex.GetType().Name}");
+            // CreateTempSubdirectory already uses 0700 on Unix; state the requirement explicitly.
+            File.SetUnixFileMode(dir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        try
+        return dir;
+    }
+
+    private static void WritePrivateFile(string path, string contents)
+    {
+        var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None };
+        if (!OperatingSystem.IsWindows())
         {
-            Directory.Delete(dir, recursive: true);
-        }
-        catch
-        {
-            // best effort
+            options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
         }
 
-        // The shred is a privacy guarantee; if it couldn't complete (e.g. a wedged child still
-        // holds file locks), at least say so instead of failing silently.
-        if (Directory.Exists(dir))
+        using var fs = new FileStream(path, options);
+        byte[] bytes = System.Text.Encoding.ASCII.GetBytes(contents);
+        try
         {
-            Log.Warn($"Some temporary wallet files could not be removed from {dir}; they will be re-shredded on next launch if still present.");
+            fs.Write(bytes);
+            fs.Flush(flushToDisk: true);
+        }
+        finally
+        {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes);
         }
     }
 
-    /// <summary>
-    /// Overwrite a file's bytes before deleting. On SSDs wear-levelling means this is not a
-    /// guarantee (see SECURITY.md), but it removes the plaintext from the obvious recovery paths.
-    /// </summary>
-    private static void SecureDeleteFile(string path)
-    {
-        try
-        {
-            var info = new FileInfo(path);
-            if (info.Exists && info.Length > 0)
-            {
-                using (var fs = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.None))
-                {
-                    byte[] noise = new byte[81920];
-                    long remaining = info.Length;
-                    while (remaining > 0)
-                    {
-                        RandomNumberGenerator.Fill(noise);
-                        int chunk = (int)Math.Min(noise.Length, remaining);
-                        fs.Write(noise, 0, chunk);
-                        remaining -= chunk;
-                    }
-
-                    fs.Flush(flushToDisk: true);
-                }
-            }
-
-            File.Delete(path);
-        }
-        catch
-        {
-            // best effort; the parent dir delete will still attempt removal
-        }
-    }
+    private static string RandomHex(int bytes) =>
+        Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(bytes)).ToLowerInvariant();
 
     public async ValueTask DisposeAsync() => await StopAsync().ConfigureAwait(false);
 }

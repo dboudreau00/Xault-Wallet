@@ -54,10 +54,17 @@ public sealed class AppServices
 
     private static string ResolveDefaultWalletRpcBinary()
     {
-        string exe = OperatingSystem.IsWindows() ? "monero-wallet-rpc.exe" : "monero-wallet-rpc";
+        string exe = ExecutableLocator.WalletRpcFileName;
 
-        // Look next to our own binary first (bundled), then rely on PATH.
+        // Next to our own binary first, then PATH — always resolved to an absolute path, because the
+        // launcher (rightly) refuses bare names. Previously a bare name was returned here, so
+        // "leave blank to auto-detect" could never actually launch a PATH-installed binary.
         string local = Path.Combine(AppContext.BaseDirectory, exe);
-        return File.Exists(local) ? local : exe;
+        if (File.Exists(local))
+        {
+            return local;
+        }
+
+        return ExecutableLocator.FindOnPath(exe, Environment.GetEnvironmentVariable("PATH")) ?? exe;
     }
 }

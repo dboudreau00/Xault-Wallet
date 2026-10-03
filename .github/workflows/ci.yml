@@ -1,10 +1,13 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
+  push:            # every branch: the Windows leg is the only place the Windows-only code runs
   pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

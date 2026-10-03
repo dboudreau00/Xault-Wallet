@@ -6,3 +6,5 @@ obj/
 [Rr]elease/
 *.xv
 *.xv.tmp
+ui-snapshots/
+release/

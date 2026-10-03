@@ -1,0 +1,68 @@
+name: Release
+
+# Push a tag like v0.2.0-beta to build single-file, self-contained executables for each
+# platform and attach them (plus SHA256SUMS) to a DRAFT GitHub release for review.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  publish:
+    name: Publish ${{ matrix.rid }}
+    strategy:
+      matrix:
+        include:
+          - { rid: win-x64,   os: windows-latest, exe: XaultWallet.exe }
+          - { rid: linux-x64, os: ubuntu-24.04,   exe: XaultWallet }
+          - { rid: osx-arm64, os: macos-14,       exe: XaultWallet }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Unit tests must pass before anything ships
+        run: dotnet run -c Release --project tools/TestRunner
+      - name: Publish (single file, self-contained)
+        run: dotnet publish src/XaultWallet.Desktop/XaultWallet.Desktop.csproj -c Release -r ${{ matrix.rid }} -o out
+      - name: Package
+        shell: bash
+        run: |
+          mkdir dist
+          name="XaultWallet-${GITHUB_REF_NAME}-${{ matrix.rid }}"
+          if [ "${{ matrix.rid }}" = "win-x64" ]; then
+            (cd out && 7z a "../dist/${name}.zip" "${{ matrix.exe }}")
+          else
+            tar -C out -czf "dist/${name}.tar.gz" "${{ matrix.exe }}"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.rid }}
+          path: dist/*
+
+  release:
+    needs: publish
+    runs-on: ubuntu-24.04
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS
+      - name: Draft release (unsigned binaries; review before publishing)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --draft \
+            --title "XaultWallet $GITHUB_REF_NAME" \
+            --notes "Unaudited beta — do not use with real funds. Binaries are unsigned; verify SHA256SUMS. monero-wallet-rpc is NOT bundled: download and verify it from getmonero.org."

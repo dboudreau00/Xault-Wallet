@@ -18,7 +18,7 @@ public class VaultSafeguardTests : IDisposable
     private static SecureBuffer Pw(string s) => SecureBuffer.FromPassword(s.ToCharArray());
 
     private static WalletSecrets Secrets(string mnemonic, bool wipe = false) =>
-        new() { Mnemonic = mnemonic, DuressWipeReal = wipe };
+        new() { Mnemonic = mnemonic, WipeOtherSlotOnUnlock = wipe };
 
     [Fact]
     public void Create_Rejects_Duress_Password_Equal_To_Main()
@@ -62,7 +62,7 @@ public class VaultSafeguardTests : IDisposable
     }
 
     [Fact]
-    public void ChangeMainPassword_Rejects_Password_That_Opens_The_Other_Slot()
+    public void ChangePassword_Rejects_Password_That_Opens_The_Other_Slot()
     {
         using (var mp = Pw("main-password-123"))
         using (var dp = Pw("duress-password-456"))
@@ -73,7 +73,7 @@ public class VaultSafeguardTests : IDisposable
         var mgr = VaultManager.Load(_path);
         using var cur = Pw("main-password-123");
         using var collides = Pw("duress-password-456");
-        Assert.Throws<ArgumentException>(() => mgr.ChangeMainPassword(cur, collides));
+        Assert.Throws<ArgumentException>(() => mgr.ChangePassword(cur, collides));
 
         // The vault must be unchanged: both original passwords still work.
         var mgr2 = VaultManager.Load(_path);
@@ -83,11 +83,11 @@ public class VaultSafeguardTests : IDisposable
         using var dp2 = Pw("duress-password-456");
         UnlockResult? duress = mgr3.Unlock(dp2);
         Assert.NotNull(duress);
-        Assert.True(duress!.WasDuress);
+        Assert.Equal("decoy seed", duress!.Secrets.Mnemonic);
     }
 
     [Fact]
-    public void ChangeMainPassword_Still_Works_For_A_Distinct_New_Password()
+    public void ChangePassword_Still_Works_For_A_Distinct_New_Password()
     {
         using (var mp = Pw("main-password-123"))
         using (var dp = Pw("duress-password-456"))
@@ -99,14 +99,14 @@ public class VaultSafeguardTests : IDisposable
         using (var cur = Pw("main-password-123"))
         using (var next = Pw("brand-new-password-789"))
         {
-            Assert.True(mgr.ChangeMainPassword(cur, next));
+            Assert.True(mgr.ChangePassword(cur, next));
         }
 
         var mgr2 = VaultManager.Load(_path);
         using var np = Pw("brand-new-password-789");
         UnlockResult? r = mgr2.Unlock(np);
         Assert.NotNull(r);
-        Assert.False(r!.WasDuress);
+        Assert.Equal("real seed", r!.Secrets.Mnemonic);
     }
 
     [Fact]
@@ -138,8 +138,7 @@ public class VaultSafeguardTests : IDisposable
             // Under coercion the decoy MUST still open normally — an error here would make a
             // duress unlock visibly different from a normal one.
             Assert.NotNull(r);
-            Assert.True(r!.WasDuress);
-            Assert.Equal("decoy seed", r.Secrets.Mnemonic);
+            Assert.Equal("decoy seed", r!.Secrets.Mnemonic);
         }
     }
 
@@ -157,7 +156,7 @@ public class VaultSafeguardTests : IDisposable
         {
             UnlockResult? r = mgr.Unlock(dp2);
             Assert.NotNull(r);
-            Assert.True(r!.WasDuress);
+            Assert.Equal("decoy seed", r!.Secrets.Mnemonic);
         }
 
         // After the wipe the real password opens nothing; the duress password still works.

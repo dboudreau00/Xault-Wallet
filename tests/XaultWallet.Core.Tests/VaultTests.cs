@@ -60,7 +60,7 @@ public class VaultManagerTests : IDisposable
     [Fact]
     public void Main_Password_Opens_Real_Wallet()
     {
-        var main = new WalletSecrets { Label = "Main", Mnemonic = "seed words real" };
+        var main = new WalletSecrets { Mnemonic = "seed words real" };
         using (var mp = Pw("main-pass-123"))
         {
             VaultManager.Create(_path, mp, main, argon: FastArgon);
@@ -71,12 +71,11 @@ public class VaultManagerTests : IDisposable
         UnlockResult? r = mgr.Unlock(mp2);
 
         Assert.NotNull(r);
-        Assert.False(r!.WasDuress);
-        Assert.Equal("seed words real", r.Secrets.Mnemonic);
+        Assert.Equal("seed words real", r!.Secrets.Mnemonic);
     }
 
     [Fact]
-    public void Duress_Password_Opens_Decoy_And_Flags_Duress()
+    public void Duress_Password_Opens_Decoy()
     {
         var main = new WalletSecrets { Mnemonic = "real seed" };
         var decoy = new WalletSecrets { Mnemonic = "decoy seed" };
@@ -92,8 +91,7 @@ public class VaultManagerTests : IDisposable
         UnlockResult? r = mgr.Unlock(dp2);
 
         Assert.NotNull(r);
-        Assert.True(r!.WasDuress);
-        Assert.Equal("decoy seed", r.Secrets.Mnemonic);
+        Assert.Equal("decoy seed", r!.Secrets.Mnemonic);
     }
 
     [Fact]
@@ -114,7 +112,7 @@ public class VaultManagerTests : IDisposable
     public void WipeReal_Destroys_Real_Slot_After_Duress_Unlock()
     {
         var main = new WalletSecrets { Mnemonic = "real seed" };
-        var decoy = new WalletSecrets { Mnemonic = "decoy seed", DuressWipeReal = true };
+        var decoy = new WalletSecrets { Mnemonic = "decoy seed", WipeOtherSlotOnUnlock = true };
 
         using (var mp = Pw("main-pass-123"))
         using (var dp = Pw("duress-pass-456"))
@@ -126,7 +124,7 @@ public class VaultManagerTests : IDisposable
         var mgr = VaultManager.Load(_path);
         using (var dp2 = Pw("duress-pass-456"))
         {
-            Assert.True(mgr.Unlock(dp2)!.WasDuress);
+            Assert.Equal("decoy seed", mgr.Unlock(dp2)!.Secrets.Mnemonic);
         }
 
         // Now the real password should no longer work.
@@ -136,12 +134,15 @@ public class VaultManagerTests : IDisposable
 
         // …but the duress password still does.
         using var dp3 = Pw("duress-pass-456");
-        Assert.True(reopened.Unlock(dp3)!.WasDuress);
+        Assert.Equal("decoy seed", reopened.Unlock(dp3)!.Secrets.Mnemonic);
     }
 
     [Fact]
-    public void ChangeMainPassword_Works_And_Rejects_Duress_Password()
+    public void ChangePassword_Is_Symmetric_And_Only_Touches_The_Opened_Slot()
     {
+        // Deniability: the duress password must be able to change ITS OWN password exactly like the
+        // main one can. The old asymmetric rule ("only the real wallet's password works here")
+        // told a coercer holding the duress password that a real wallet exists.
         var main = new WalletSecrets { Mnemonic = "real seed" };
         var decoy = new WalletSecrets { Mnemonic = "decoy seed" };
         using (var mp = Pw("old-main"))
@@ -150,24 +151,43 @@ public class VaultManagerTests : IDisposable
             VaultManager.Create(_path, mp, main, dp, decoy, FastArgon);
         }
 
-        var mgr = VaultManager.Load(_path);
-
-        // Duress password must not be usable to change the main password.
         using (var dp = Pw("duress-x"))
-        using (var np = Pw("hacked"))
+        using (var np = Pw("new-duress"))
         {
-            Assert.False(mgr.ChangeMainPassword(dp, np));
+            Assert.True(VaultManager.Load(_path).ChangePassword(dp, np));
         }
 
         using (var mp = Pw("old-main"))
         using (var np = Pw("new-main"))
         {
-            Assert.True(mgr.ChangeMainPassword(mp, np));
+            Assert.True(VaultManager.Load(_path).ChangePassword(mp, np));
         }
 
-        var reopened = VaultManager.Load(_path);
-        using var newpw = Pw("new-main");
-        Assert.Equal("real seed", reopened.Unlock(newpw)!.Secrets.Mnemonic);
+        using (var oldDuress = Pw("duress-x"))
+        {
+            Assert.Null(VaultManager.Load(_path).Unlock(oldDuress));
+        }
+
+        using (var newDuress = Pw("new-duress"))
+        {
+            Assert.Equal("decoy seed", VaultManager.Load(_path).Unlock(newDuress)!.Secrets.Mnemonic);
+        }
+
+        using var newMain = Pw("new-main");
+        Assert.Equal("real seed", VaultManager.Load(_path).Unlock(newMain)!.Secrets.Mnemonic);
+    }
+
+    [Fact]
+    public void ChangePassword_Wrong_Current_Password_Returns_False()
+    {
+        using (var mp = Pw("main-pass-123"))
+        {
+            VaultManager.Create(_path, mp, new WalletSecrets { Mnemonic = "real seed" }, argon: FastArgon);
+        }
+
+        using var bad = Pw("not-the-password");
+        using var np = Pw("whatever-new");
+        Assert.False(VaultManager.Load(_path).ChangePassword(bad, np));
     }
 
     [Fact]
@@ -175,7 +195,6 @@ public class VaultManagerTests : IDisposable
     {
         var main = new WalletSecrets
         {
-            Label = "Main",
             Mnemonic = "real seed",
             Network = MoneroNetwork.Stagenet,
             RestoreHeight = 12345,
@@ -242,8 +261,7 @@ public class VaultManagerTests : IDisposable
         using (var dp = Pw("duress-pass-456"))
         {
             UnlockResult? r = reopened.Unlock(dp);
-            Assert.True(r!.WasDuress);
-            Assert.Equal("http://decoy:2", r.Secrets.DaemonAddress);
+            Assert.Equal("http://decoy:2", r!.Secrets.DaemonAddress);
             Assert.Equal("decoy seed", r.Secrets.Mnemonic);
         }
 
@@ -251,8 +269,7 @@ public class VaultManagerTests : IDisposable
         using (var mp = Pw("main-pass-123"))
         {
             UnlockResult? r = reopened.Unlock(mp);
-            Assert.False(r!.WasDuress);
-            Assert.Equal("http://real:1", r.Secrets.DaemonAddress);
+            Assert.Equal("http://real:1", r!.Secrets.DaemonAddress);
             Assert.Equal("real seed", r.Secrets.Mnemonic);
         }
     }

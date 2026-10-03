@@ -21,7 +21,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty] private string _savedMessage = string.Empty;
     [ObservableProperty] private bool _busy;
 
-    // Change master password
+    // Change password (symmetric: works for whichever wallet the current password opens)
     [ObservableProperty] private string _currentPassword = string.Empty;
     [ObservableProperty] private string _newPassword = string.Empty;
     [ObservableProperty] private string _newPasswordConfirm = string.Empty;
@@ -300,20 +300,22 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 using var next = SecureBuffer.FromPassword(nextChars);
                 VaultManager mgr = VaultManager.Load(AppServices.Instance.VaultPath);
 
-                // ChangeMainPassword only succeeds for the REAL slot; the duress password is rejected.
-                return mgr.ChangeMainPassword(cur, next);
+                // Symmetric: re-seals whichever wallet the current password opens. The wording below
+                // is identical either way — an asymmetric rule or message would tell a coercer
+                // holding the duress password that another wallet exists.
+                return mgr.ChangePassword(cur, next);
             });
 
             if (changed)
             {
                 ChangePasswordOk = true;
                 ChangePasswordResult = "Password changed.";
-                Log.Info("Master password changed.");
+                Log.Info("Vault password changed.");
             }
             else
             {
                 ChangePasswordOk = false;
-                ChangePasswordResult = "That current password didn't unlock the real wallet.";
+                ChangePasswordResult = "That password didn't unlock this vault.";
             }
         }
         catch (ArgumentException ex)

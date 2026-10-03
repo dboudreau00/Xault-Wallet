@@ -138,8 +138,6 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>Drives the History tab's empty-state hint.</summary>
     [ObservableProperty] private bool _hasHistory;
 
-    public string WalletLabel => _secrets.Label;
-
     public event Action? Locked;
 
     /// <summary>Raised when the user asks to open Settings from the wallet screen (e.g. the

@@ -620,7 +620,6 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             LastTxKey = prepared.TxKey;
             HasLastTx = !string.IsNullOrWhiteSpace(LastTxId);
 
-            Log.Info("Transfer submitted.");
             SendAddress = string.Empty;
             SendAmount = 0;
             await SoftRefreshAsync();
@@ -673,7 +672,6 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             decimal fee = MoneroRpcClient.AtomicToXmr((ulong)sweep.FeeList.Sum(f => (decimal)f));
             string txNote = relayed > 1 ? $" in {relayed} transactions" : "";
             SendResult = $"Swept {_preparedAmount:0.############} XMR{txNote} (total fee {fee:0.############} XMR).";
-            Log.Info("Sweep submitted.");
             SendAddress = string.Empty;
             SendAmount = 0;
             await SoftRefreshAsync();

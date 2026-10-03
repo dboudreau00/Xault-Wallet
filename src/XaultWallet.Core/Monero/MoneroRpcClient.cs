@@ -9,12 +9,10 @@ namespace XaultWallet.Core.Monero;
 /// <summary>
 /// Thin JSON-RPC 2.0 client for a running monero-wallet-rpc instance.
 ///
-/// The app launches its wallet-rpc child with --disable-rpc-login (loopback-only
-/// binding makes RPC auth unnecessary), so no credentials are sent on the wire.
-/// The optional rpcUser/rpcPassword constructor parameters still wire up HTTP Digest
-/// via NetworkCredential for completeness, but note digest + a POST body can fail to
-/// replay after the 401 challenge — which is exactly why the ephemeral instance
-/// disables login rather than relying on it.
+/// The app's wallet-rpc child requires HTTP Digest auth with per-session random credentials
+/// (see <see cref="MoneroProcessManager"/>). An unauthenticated child would accept requests from
+/// anything that can reach loopback — including a web page (a cross-origin "simple" POST, or DNS
+/// rebinding, which can READ responses such as query_key → the seed).
 ///
 /// Amounts are in atomic units: 1 XMR = 1e12 atomic units.
 /// </summary>
@@ -26,14 +24,25 @@ public sealed class MoneroRpcClient : IDisposable
     private int _id;
 
     public MoneroRpcClient(Uri endpoint, string? rpcUser = null, string? rpcPassword = null)
+        : this(endpoint, string.IsNullOrEmpty(rpcUser) ? null : new NetworkCredential(rpcUser, rpcPassword))
     {
-        var handler = new HttpClientHandler();
-        if (!string.IsNullOrEmpty(rpcUser))
+    }
+
+    public MoneroRpcClient(Uri endpoint, NetworkCredential? credential)
+    {
+        ArgumentNullException.ThrowIfNull(endpoint);
+        var handler = new SocketsHttpHandler
         {
-            // Only relevant if RPC auth is enabled. Note: digest auth + a POST body can fail to
-            // replay after the 401 challenge, which is why the ephemeral local instance is
-            // launched with --disable-rpc-login instead.
-            handler.Credentials = new NetworkCredential(rpcUser, rpcPassword);
+            // Seed-bearing loopback traffic must never be routed through a system/env proxy.
+            UseProxy = false,
+            AllowAutoRedirect = false,
+        };
+
+        if (credential is not null)
+        {
+            // Digest ONLY: a server that answers with a Basic challenge (i.e. not monero-wallet-rpc)
+            // must never receive the password in cleartext.
+            handler.Credentials = new CredentialCache { { endpoint, "Digest", credential } };
             handler.PreAuthenticate = true;
         }
 
@@ -64,10 +73,21 @@ public sealed class MoneroRpcClient : IDisposable
         [JsonPropertyName("message")] public string Message { get; set; } = "";
     }
 
-    public sealed class MoneroRpcException(int code, string message)
+    /// <summary>An error reported by (or while talking to) monero-wallet-rpc. <see cref="Exception.Message"/>
+    /// names the method and the backend's own error text and is safe to show and to log;
+    /// <see cref="Diagnostics"/> holds the redacted request/response for debugging.</summary>
+    public sealed class MoneroRpcException(int code, string message, string? diagnostics = null)
         : Exception($"monero-wallet-rpc error {code}: {message}")
     {
         public int Code { get; } = code;
+
+        /// <summary>
+        /// Redacted request/response excerpt. Seeds, passwords and keys are already masked
+        /// (<see cref="SecretRedactor"/>), but it can still carry destination addresses, amounts and
+        /// restore heights — enough to tie a persistent log line to ONE of the vault's wallets. So it
+        /// is kept out of <see cref="Exception.Message"/> and the app never writes it to its log.
+        /// </summary>
+        public string Diagnostics { get; } = diagnostics ?? string.Empty;
     }
 
     public async Task<T> CallAsync<T>(string method, object? @params = null, CancellationToken ct = default)
@@ -95,15 +115,14 @@ public sealed class MoneroRpcClient : IDisposable
             string raw = "";
             try { raw = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false); } catch { }
 
-            // Never let the seed / seed_offset / password carried in the request (or a secret
-            // echoed in a response) reach an exception message — these propagate to the log file
-            // and the on-screen status. Redact both directions (hard rules #6 and #7).
-            string safePayload = SecretRedactor.Redact(payload);
+            // Secrets carried in the request (seed, offset, passwords) or echoed in a response must
+            // never reach anything that is displayed or logged: redact both directions.
+            string Diagnostics() => $"Sent: {SecretRedactor.Redact(payload)} Got: {Trim(SecretRedactor.Redact(raw))}";
 
             if (!resp.IsSuccessStatusCode)
             {
                 throw new MoneroRpcException((int)resp.StatusCode,
-                    $"HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}. Sent: {safePayload}. Got: {Trim(SecretRedactor.Redact(raw))}");
+                    $"{method}: HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}", Diagnostics());
             }
 
             RpcResponse<T>? body;
@@ -111,24 +130,24 @@ public sealed class MoneroRpcClient : IDisposable
             {
                 body = JsonSerializer.Deserialize<RpcResponse<T>>(raw);
             }
-            catch (System.Text.Json.JsonException ex)
+            catch (System.Text.Json.JsonException)
             {
-                throw new MoneroRpcException(-32700, $"Bad response JSON: {ex.Message}. Sent: {safePayload}. Got: {Trim(SecretRedactor.Redact(raw))}");
+                throw new MoneroRpcException(-32700, $"{method}: the backend returned malformed JSON", Diagnostics());
             }
 
             if (body is null)
             {
-                throw new MoneroRpcException(-32603, $"Empty response. Sent: {safePayload}. Got: {Trim(SecretRedactor.Redact(raw))}");
+                throw new MoneroRpcException(-32603, $"{method}: empty response", Diagnostics());
             }
 
             if (body.Error is { } err)
             {
-                throw new MoneroRpcException(err.Code, $"{err.Message}. Sent: {safePayload}");
+                throw new MoneroRpcException(err.Code, $"{method}: {err.Message}", Diagnostics());
             }
 
             if (body.Result is null)
             {
-                throw new MoneroRpcException(-32603, $"No result for '{method}'. Got: {Trim(SecretRedactor.Redact(raw))}");
+                throw new MoneroRpcException(-32603, $"{method}: no result", Diagnostics());
             }
 
             return body.Result;
@@ -208,8 +227,8 @@ public sealed class MoneroRpcClient : IDisposable
 
     /// <summary>Get the transaction private key for an outgoing tx. Safe to share to prove a
     /// specific payment (it does NOT let anyone spend your funds).</summary>
-    public Task<QueryKeyResult> GetTxKeyAsync(string txid, CancellationToken ct = default) =>
-        CallAsync<QueryKeyResult>("get_tx_key", new { txid }, ct);
+    public Task<GetTxKeyResult> GetTxKeyAsync(string txid, CancellationToken ct = default) =>
+        CallAsync<GetTxKeyResult>("get_tx_key", new { txid }, ct);
 
     /// <summary>Verify a payment: given txid + tx key + destination address, returns how much
     /// that address received and how many confirmations it has.</summary>
@@ -300,6 +319,13 @@ public sealed class GetHeightResult
 public sealed class QueryKeyResult
 {
     [JsonPropertyName("key")] public string Key { get; set; } = "";
+}
+
+/// <summary>get_tx_key answers with "tx_key" — NOT "key" like query_key. Reading it through
+/// <see cref="QueryKeyResult"/> silently produced an empty key for every transaction.</summary>
+public sealed class GetTxKeyResult
+{
+    [JsonPropertyName("tx_key")] public string TxKey { get; set; } = "";
 }
 
 public sealed class GetVersionResult

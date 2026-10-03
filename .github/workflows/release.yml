@@ -1,22 +1,96 @@
 name: Release
 
-# Push a tag like v0.2.0-beta to build single-file, self-contained executables for each
-# platform and attach them (plus SHA256SUMS) to a DRAFT GitHub release for review.
+# Builds single-file, self-contained executables for each platform and attaches them (plus
+# SHA256SUMS) to a DRAFT GitHub release for review. Two ways to start it:
+#
+#   1. Push a tag like v0.2.0-beta.
+#   2. Actions -> Release -> Run workflow, and give "version" (e.g. v0.2.0-beta). The draft is created
+#      for that version, targeting the commit the run started from. The git tag is created by GitHub
+#      only when a person presses Publish on the draft; this workflow never creates or moves a tag.
+#
+# Run without a version, it only builds (a dry run) and publishes nothing.
+#
+# Publishing a draft creates its tag, which starts this workflow again through route 1. The plan job
+# sees that the release already exists and skips everything, so that second run is a no-op.
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to prepare a DRAFT release for, e.g. v0.2.0-beta. Empty = build only (dry run).'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-${{ inputs.version || github.ref_name }}
+  cancel-in-progress: false
 
 env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
 
 jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.plan.outputs.tag }}
+      build: ${{ steps.plan.outputs.build }}
+      publish: ${{ steps.plan.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decide what this run does (and fail early on a bad release)
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          case "$GITHUB_REF" in
+            refs/tags/v*) tag="$GITHUB_REF_NAME" ;;
+            *)            tag="${INPUT_VERSION:-}" ;;
+          esac
+
+          build=true
+          publish=false
+          if [ -n "$tag" ]; then
+            # The tag ends up in file names and a command line: accept nothing but a version.
+            if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+              echo "::error::'$tag' is not a version tag such as v1.2.3 or v1.2.3-beta"; exit 1
+            fi
+            version="${tag#v}"
+
+            project=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' src/XaultWallet.Desktop/XaultWallet.Desktop.csproj | head -n 1)
+            if [ "$version" != "$project" ]; then
+              echo "::error::$tag does not match <Version>$project</Version> in XaultWallet.Desktop.csproj"; exit 1
+            fi
+            if ! awk -v v="$version" '$0 == "## " v || index($0, "## " v " ") == 1 { found = 1 } END { exit !found }' CHANGELOG.md; then
+              echo "::error::CHANGELOG.md has no '## $version' section"; exit 1
+            fi
+
+            # Drafts count: they are not found by tag name, only by listing. A failed call stops the job.
+            existing=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName --jq '.[].tagName')
+            if grep -Fxq "$tag" <<<"$existing"; then
+              echo "::notice::A release for $tag already exists (draft or published): nothing to build or publish."
+              build=false
+            else
+              publish=true
+            fi
+          else
+            echo "::notice::No version given: building only (a dry run). Nothing will be published."
+          fi
+
+          { echo "tag=$tag"; echo "build=$build"; echo "publish=$publish"; } >> "$GITHUB_OUTPUT"
+
   publish:
     name: Publish ${{ matrix.rid }}
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
     strategy:
       matrix:
         include:
@@ -24,6 +98,8 @@ jobs:
           - { rid: linux-x64, os: ubuntu-24.04,   exe: XaultWallet }
           - { rid: osx-arm64, os: macos-14,       exe: XaultWallet }
     runs-on: ${{ matrix.os }}
+    env:
+      TAG: ${{ needs.plan.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -37,7 +113,7 @@ jobs:
         shell: bash
         run: |
           mkdir dist
-          name="XaultWallet-${GITHUB_REF_NAME}-${{ matrix.rid }}"
+          name="XaultWallet-${TAG:-dev-${GITHUB_SHA::7}}-${{ matrix.rid }}"
           # The docs ship with the binary: the app points users at SECURITY.md (e.g. after a vault upgrade).
           docs="README.md SECURITY.md CHANGELOG.md LICENSE"
           cp $docs out/
@@ -52,9 +128,12 @@ jobs:
           path: dist/*
 
   release:
-    needs: publish
+    name: Draft release
+    needs: [plan, publish]
+    if: needs.plan.outputs.publish == 'true'
     runs-on: ubuntu-24.04
-    if: startsWith(github.ref, 'refs/tags/v')
+    env:
+      TAG: ${{ needs.plan.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -65,7 +144,7 @@ jobs:
         run: cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS
       - name: Release notes (warning + this version's CHANGELOG section)
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${TAG#v}"
           awk -v v="$version" '
             $0 == "## " v || index($0, "## " v " ") == 1 { on = 1; next }
             on && /^## / { exit }
@@ -75,14 +154,17 @@ jobs:
           fi
           {
             echo "**Unaudited beta: do not use with real funds.** The binaries are unsigned; verify them against \`SHA256SUMS\`. \`monero-wallet-rpc\` is not bundled: download and verify it from getmonero.org."
-            # Relative links (docs/…, SECURITY.md#…) would resolve against the releases page: pin them to this tag.
-            perl -pe 's{\]\((?!https?://|#|mailto:)([^)\s]+)\)}{](https://github.com/$ENV{GITHUB_REPOSITORY}/blob/$ENV{GITHUB_REF_NAME}/$1)}g' section.md
+            # Relative links (docs/…, SECURITY.md#…) would resolve against the releases page: pin them to
+            # the exact commit being released, which exists even while the tag does not (a draft).
+            perl -pe 's{\]\((?!https?://|#|mailto:)([^)\s]+)\)}{](https://github.com/$ENV{GITHUB_REPOSITORY}/blob/$ENV{GITHUB_SHA}/$1)}g' section.md
           } > notes.md
       - name: Draft release (unsigned binaries; review before publishing)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           # A pre-release version (v0.2.0-beta) must never show up as the repository's "Latest release".
-          pre=""; case "$GITHUB_REF_NAME" in *-*) pre="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --draft $pre \
-            --title "XaultWallet $GITHUB_REF_NAME" --notes-file notes.md
+          pre=""; case "$TAG" in *-*) pre="--prerelease" ;; esac
+          # --target pins the tag GitHub will create on Publish to the commit that was built. It is
+          # ignored when the tag already exists (route 1).
+          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --draft $pre \
+            --target "$GITHUB_SHA" --title "XaultWallet $TAG" --notes-file notes.md

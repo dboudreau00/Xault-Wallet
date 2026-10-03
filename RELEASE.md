@@ -102,17 +102,29 @@ builds (Settings → About reads it from the assembly).
 
 ## Automated releases (GitHub Actions)
 
-Pushing a tag such as `v0.2.0-beta` runs `.github/workflows/release.yml`: unit tests, then
-single-file self-contained builds for `win-x64`, `linux-x64` and `osx-arm64`. Each archive holds the
-executable plus `README.md`, `SECURITY.md`, `CHANGELOG.md` and `LICENSE`. They are attached with a
-`SHA256SUMS` file to a **draft** release for you to review and publish. The release notes are a
-warning header plus the `## <version>` section of `CHANGELOG.md`, so add that section before tagging;
-the job fails without it. A tag with a hyphen (`-beta`, `-rc.1`) is marked as a pre-release, so it
-never shows as the repository's latest release. The binaries are unsigned until a code-signing
-certificate is added to the workflow.
+`.github/workflows/release.yml` runs the unit tests, then builds single-file self-contained
+executables for `win-x64`, `linux-x64` and `osx-arm64`. Each archive holds the executable plus
+`README.md`, `SECURITY.md`, `CHANGELOG.md` and `LICENSE`. They are attached with a `SHA256SUMS` file
+to a **draft** release for you to review and publish. There are two ways to start it:
 
-Checklist: `<Version>` in `XaultWallet.Desktop.csproj` matches the tag (without the `v`), the
-CHANGELOG section is dated, CI is green on the commit being tagged, and the tag is on `main`.
+- **Push a tag** such as `v0.2.0-beta`.
+- **Run it by hand** (no git needed): GitHub → Actions → Release → *Run workflow*, with `version` set
+  to `v0.2.0-beta`. The draft targets the commit the run started from (normally `main`). GitHub
+  creates the tag only when you press **Publish** on the draft: the workflow never creates or moves a
+  tag. Run without a version, it only builds (a dry run) and publishes nothing.
+
+Before building, the workflow stops if the version isn't `vX.Y.Z` or `vX.Y.Z-suffix`, doesn't match
+`<Version>` in `XaultWallet.Desktop.csproj`, has no `## <version>` section in `CHANGELOG.md`, or
+already has a release (draft or published). The release notes are a warning header plus that
+CHANGELOG section. A hyphenated version (`-beta`, `-rc.1`) is marked as a pre-release, so it never
+shows as the repository's latest release. The binaries are unsigned until a code-signing certificate
+is added to the workflow.
+
+Publishing a draft creates its tag, which starts the workflow again; it sees the release already
+exists and does nothing. While a draft exists, don't also push the tag yourself: the tag would point
+wherever you pushed it, not necessarily at the commit that was built.
+
+Checklist: the CHANGELOG section is dated, and CI is green on the commit being released.
 
 `SelfContained` / `PublishSingleFile` apply only when publishing (`_IsPublishing`), so a plain
 `dotnet publish -r <rid>` produces the single file, while ordinary builds stay framework-dependent.

@@ -2,217 +2,269 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
              xmlns:conv="clr-namespace:XaultWallet.Desktop"
+             xmlns:c="clr-namespace:XaultWallet.Desktop.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="960" d:DesignHeight="700"
+             mc:Ignorable="d" d:DesignWidth="1080" d:DesignHeight="714"
              x:Class="XaultWallet.Desktop.Views.SettingsView"
              x:DataType="vm:SettingsViewModel">
 
-    <ScrollViewer>
-        <Border MaxWidth="720" Margin="24,20" VerticalAlignment="Top" HorizontalAlignment="Center"
-                Classes="card" Padding="28,24">
-            <StackPanel Spacing="14">
-                <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Grid.Column="0" Text="Settings" Classes="h1" VerticalAlignment="Center"/>
-                    <Button Grid.Column="1" Content="Close" Command="{Binding CloseCommand}"/>
-                </Grid>
+    <UserControl.Styles>
+        <Style Selector="Border.sectionIcon">
+            <Setter Property="Width" Value="34"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Background" Value="{StaticResource SurfaceAlt}"/>
+        </Style>
+        <Style Selector="Border.sectionIcon > c|Icon">
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="TextBlock.result">
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </UserControl.Styles>
 
-                <!-- monero-wallet-rpc binary -->
-                <StackPanel Spacing="6">
-                    <TextBlock Text="MONERO-WALLET-RPC EXECUTABLE" Classes="eyebrow"/>
-                    <TextBlock TextWrapping="Wrap" Classes="muted"
-                               Text="XaultWallet drives the official Monero wallet RPC binary; it doesn't reimplement Monero's cryptography. Point this at monero-wallet-rpc from a Monero CLI release."/>
-                    <Grid ColumnDefinitions="*,8,Auto">
-                        <TextBox Grid.Column="0" Classes="mono" FontSize="12.5"
-                                 Watermark="Path to monero-wallet-rpc (blank = auto-detect)"
-                                 Text="{Binding WalletRpcBinaryPath}"/>
-                        <Button Grid.Column="2" Content="Browse&#8230;" Command="{Binding BrowseCommand}"/>
-                    </Grid>
-                    <TextBlock Text="{Binding DefaultBinaryHint}" Foreground="{StaticResource TextTertiary}"
-                               FontSize="11" TextWrapping="Wrap"/>
-                    <Button Content="Test binary" Command="{Binding TestBinaryCommand}" IsEnabled="{Binding !Busy}"
-                            HorizontalAlignment="Left"/>
-                    <TextBlock Text="{Binding BinaryTestResult}" TextWrapping="Wrap"
-                               IsVisible="{Binding BinaryTestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                               Foreground="{Binding BinaryTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+    <Grid RowDefinitions="Auto,*">
+        <!-- Sticky header -->
+        <Border Grid.Row="0" Background="{StaticResource AppBg}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,0,0,1">
+            <Grid MaxWidth="820" Margin="28,18" ColumnDefinitions="*,Auto,Auto,Auto">
+                <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                    <TextBlock Text="Settings" Classes="h1"/>
+                    <TextBlock Classes="caption" Text="Stored in settings.json beside your vault — no secrets are ever written there."/>
                 </StackPanel>
-
-                <Separator/>
-
-                <!-- Daemon -->
-                <StackPanel Spacing="6">
-                    <TextBlock Text="DEFAULT NODE" Classes="eyebrow"/>
-                    <TextBlock TextWrapping="Wrap" Classes="muted"
-                               Text="Pre-fills the daemon address when you create a wallet. Existing wallets keep the node they were created with."/>
-
-                    <ComboBox x:CompileBindings="False" HorizontalAlignment="Stretch"
-                              ItemsSource="{Binding PresetNodes}" SelectedItem="{Binding SelectedPreset}"
-                              PlaceholderText="Choose a reputable public node (optional)…">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding Display}"/>
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextTertiary}" FontSize="11"
-                               Text="Public nodes are third-party: the operator can see your IP and broadcast transactions, and nodes can go offline. Test before relying on one. For mainnet privacy, run your own node."/>
-
-                    <Grid ColumnDefinitions="Auto,10,*">
-                        <ComboBox Grid.Column="0" SelectedIndex="{Binding NetworkIndex}" Width="128">
-                            <ComboBoxItem>Mainnet</ComboBoxItem>
-                            <ComboBoxItem>Stagenet</ComboBoxItem>
-                            <ComboBoxItem>Testnet</ComboBoxItem>
-                        </ComboBox>
-                        <TextBox Grid.Column="2" Classes="mono" FontSize="12.5"
-                                 Watermark="http://host:port" Text="{Binding DefaultDaemonAddress}"/>
-                    </Grid>
-                    <Button Content="Test node" Command="{Binding TestDaemonCommand}" IsEnabled="{Binding !Busy}"
-                            HorizontalAlignment="Left"/>
-                    <TextBlock Text="{Binding DaemonTestResult}" TextWrapping="Wrap"
-                               IsVisible="{Binding DaemonTestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                               Foreground="{Binding DaemonTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
-                </StackPanel>
-
-                <Separator/>
-
-                <!-- Refresh cadence + auto-lock -->
-                <StackPanel Spacing="6">
-                    <TextBlock Text="AUTO-REFRESH INTERVAL" Classes="eyebrow"/>
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBox Text="{Binding AutoRefreshSeconds}" Width="100"/>
-                        <TextBlock Text="seconds" Classes="muted" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="{Binding SavedMessage}" Classes="caption" VerticalAlignment="Center" Margin="0,0,14,0"
+                           Foreground="{StaticResource SuccessBrush}" MaxWidth="260" TextWrapping="Wrap"/>
+                <Button Grid.Column="2" Classes="accent" Command="{Binding SaveCommand}" Margin="0,0,8,0" VerticalAlignment="Center">
+                    <TextBlock Text="Save changes" Foreground="{StaticResource AccentText}"/>
+                </Button>
+                <Button Grid.Column="3" Command="{Binding CloseCommand}" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <c:Icon Data="{StaticResource IconClose}" Width="14" Height="14"/>
+                        <TextBlock Text="Close"/>
                     </StackPanel>
-                    <TextBlock Text="How often the open wallet re-checks balance and history (5&#8211;600s)."
-                               Foreground="{StaticResource TextTertiary}" FontSize="11"/>
-                </StackPanel>
-
-                <StackPanel Spacing="6">
-                    <TextBlock Text="AUTO-LOCK" Classes="eyebrow"/>
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBox Text="{Binding AutoLockMinutes}" Width="100"/>
-                        <TextBlock Text="minutes of inactivity (0 = never)" Classes="muted" VerticalAlignment="Center"/>
-                    </StackPanel>
-                    <TextBlock Text="Locks the wallet automatically after no mouse or keyboard input. Shreds the open wallet; you'll re-enter your password."
-                               Foreground="{StaticResource TextTertiary}" FontSize="11" TextWrapping="Wrap"/>
-                </StackPanel>
-
-                <StackPanel Spacing="6">
-                    <TextBlock Text="SOCKS PROXY (OPTIONAL)" Classes="eyebrow"/>
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBox Classes="mono" FontSize="12.5" Width="220"
-                                 Watermark="127.0.0.1:9050" Text="{Binding ProxyAddress}"/>
-                        <TextBlock Text="host:port (blank = direct)" Classes="muted" VerticalAlignment="Center"/>
-                    </StackPanel>
-                    <TextBlock Text="Routes the wallet backend's node traffic through a SOCKS proxy (e.g. Tor on 127.0.0.1:9050), so the node never sees your real IP. Takes effect the next time a wallet is opened."
-                               Foreground="{StaticResource TextTertiary}" FontSize="11" TextWrapping="Wrap"/>
-                </StackPanel>
-
-                <Separator/>
-
-                <!-- Change this wallet's node (repoint an existing vault) -->
-                <StackPanel Spacing="6" IsVisible="{Binding VaultExists}">
-                    <TextBlock Text="CHANGE THIS WALLET'S NODE" Classes="eyebrow"/>
-                    <TextBlock TextWrapping="Wrap" Classes="muted"
-                               Text="Repoints your EXISTING wallet at a different node. (The Default Node above only affects wallets you create later.) Only the node URL changes — your seed and network stay the same. Pick a node on the same network. Takes effect the next time you unlock."/>
-
-                    <ComboBox x:CompileBindings="False" HorizontalAlignment="Stretch"
-                              ItemsSource="{Binding PresetNodes}" SelectedItem="{Binding SelectedRepointPreset}"
-                              PlaceholderText="Pick a node (fills the address below)…">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding Display}"/>
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-
-                    <TextBox Classes="mono" FontSize="12.5" Watermark="http://host:port"
-                             Text="{Binding RepointNodeAddress}"/>
-                    <Button Content="Test node" Command="{Binding TestRepointNodeCommand}" IsEnabled="{Binding !Busy}"
-                            HorizontalAlignment="Left"/>
-                    <TextBlock Text="{Binding RepointTestResult}" TextWrapping="Wrap"
-                               IsVisible="{Binding RepointTestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                               Foreground="{Binding RepointTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
-
-                    <TextBox Watermark="Wallet password (confirms the change)" PasswordChar="&#9679;"
-                             Text="{Binding RepointPassword}"/>
-                    <Button Content="Update node" Command="{Binding RepointNodeCommand}" IsEnabled="{Binding !Busy}"
-                            HorizontalAlignment="Left"/>
-                    <TextBlock Text="{Binding RepointResult}" TextWrapping="Wrap" FontSize="12.5"
-                               IsVisible="{Binding RepointResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                               Foreground="{Binding RepointOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
-                </StackPanel>
-
-                <Separator IsVisible="{Binding VaultExists}"/>
-
-                <!-- Change password -->
-                <StackPanel Spacing="6">
-                    <TextBlock Text="CHANGE PASSWORD" Classes="eyebrow"/>
-                    <TextBlock TextWrapping="Wrap" Classes="muted"
-                               Text="Re-encrypts the wallet your current password opens under a new password. Your seed does not change."/>
-                    <TextBox Watermark="Current password" PasswordChar="&#9679;" Text="{Binding CurrentPassword}"/>
-                    <TextBox Watermark="New password" PasswordChar="&#9679;" Text="{Binding NewPassword}"/>
-                    <TextBlock Text="{Binding NewPasswordStrength}" FontSize="11" Foreground="{StaticResource TextTertiary}"
-                               IsVisible="{Binding NewPasswordStrength, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                    <TextBox Watermark="Confirm new password" PasswordChar="&#9679;" Text="{Binding NewPasswordConfirm}"/>
-                    <Button Content="Change password" Command="{Binding ChangePasswordCommand}" IsEnabled="{Binding !Busy}"
-                            HorizontalAlignment="Left"/>
-                    <TextBlock Text="{Binding ChangePasswordResult}" TextWrapping="Wrap" FontSize="12.5"
-                               IsVisible="{Binding ChangePasswordResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                               Foreground="{Binding ChangePasswordOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
-                </StackPanel>
-
-                <Separator/>
-
-                <!-- Vault backup: NOT gated on VaultExists — restoring from a backup when the
-                     vault file is lost is this feature's primary purpose. -->
-                <StackPanel Spacing="6">
-                    <TextBlock Text="VAULT BACKUP" Classes="eyebrow"/>
-                    <TextBlock TextWrapping="Wrap" Classes="muted"
-                               Text="Exports the encrypted vault file (your sealed seed). The copy stays protected by your password. If your vault file is ever lost or corrupted, restoring this backup brings the wallet back."/>
-                    <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextTertiary}" FontSize="11"
-                               Text="Careful where you keep it: a backup made before a duress wipe still contains the wiped wallet, so store it somewhere a coercer can't find. Restoring is only offered while no wallet is unlocked; the replaced vault is kept beside the new one (a duress wipe destroys those kept copies too)."/>
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="Export backup&#8230;" Command="{Binding ExportVaultCommand}"
-                                IsEnabled="{Binding VaultExists}"/>
-                        <Button Content="Restore from backup&#8230;" Command="{Binding RestoreVaultCommand}"
-                                IsEnabled="{Binding CanRestoreVault}"/>
-                    </StackPanel>
-                    <TextBlock Text="{Binding BackupResult}" TextWrapping="Wrap" FontSize="12.5"
-                               IsVisible="{Binding BackupResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                               Foreground="{Binding BackupOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
-                </StackPanel>
-
-                <Separator/>
-
-                <!-- Folders -->
-                <StackPanel Spacing="6">
-                    <TextBlock Text="FOLDERS" Classes="eyebrow"/>
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="Open data folder" Command="{Binding OpenDataFolderCommand}"/>
-                        <Button Content="Open log folder" Command="{Binding OpenLogsFolderCommand}"/>
-                    </StackPanel>
-                    <TextBlock Text="The data folder holds the encrypted vault (vault.xv) and settings; the log folder holds diagnostic logs (no secrets are ever logged)."
-                               Foreground="{StaticResource TextTertiary}" FontSize="11" TextWrapping="Wrap"/>
-                </StackPanel>
-
-                <Separator/>
-
-                <!-- About -->
-                <StackPanel Spacing="6">
-                    <TextBlock Text="ABOUT" Classes="eyebrow"/>
-                    <TextBlock Text="XaultWallet" FontWeight="SemiBold"/>
-                    <TextBlock Text="Brought to life in harmony." Classes="muted"/>
-                    <Button Classes="link" Content="https://dboudreau.dev" Click="OpenLink_Click"
-                            HorizontalAlignment="Left"/>
-                </StackPanel>
-
-                <Separator/>
-
-                <StackPanel Orientation="Horizontal" Spacing="12">
-                    <Button Content="Save" Classes="accent" Command="{Binding SaveCommand}"/>
-                    <TextBlock Text="{Binding SavedMessage}" VerticalAlignment="Center" Foreground="{StaticResource SuccessBrush}"/>
-                </StackPanel>
-            </StackPanel>
+                </Button>
+            </Grid>
         </Border>
-    </ScrollViewer>
+
+        <ScrollViewer Grid.Row="1">
+            <StackPanel MaxWidth="820" Margin="28,20,28,36" Spacing="14">
+
+                <!-- ============ Wallet backend ============ -->
+                <Border Classes="section">
+                    <StackPanel Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Border Classes="sectionIcon"><c:Icon Data="{StaticResource IconKey}"/></Border>
+                            <StackPanel Spacing="1" VerticalAlignment="Center">
+                                <TextBlock Text="Wallet backend" Classes="h2"/>
+                                <TextBlock Classes="caption" Text="The official monero-wallet-rpc. XaultWallet never reimplements Monero's cryptography."/>
+                            </StackPanel>
+                        </StackPanel>
+                        <Grid ColumnDefinitions="*,8,Auto,8,Auto">
+                            <TextBox Grid.Column="0" Classes="mono" FontSize="12.5"
+                                     Watermark="Path to monero-wallet-rpc (blank = auto-detect)" Text="{Binding WalletRpcBinaryPath}"/>
+                            <Button Grid.Column="2" Content="Browse…" Command="{Binding BrowseCommand}"/>
+                            <Button Grid.Column="4" Content="Test" Command="{Binding TestBinaryCommand}" IsEnabled="{Binding !Busy}"/>
+                        </Grid>
+                        <TextBlock Text="{Binding DefaultBinaryHint}" Classes="caption mono" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding BinaryTestResult}" Classes="result"
+                                   IsVisible="{Binding BinaryTestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                   Foreground="{Binding BinaryTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+                        <TextBlock Classes="caption" TextWrapping="Wrap"
+                                   Text="Download it from getmonero.org and verify the signed hashes before use — this binary handles your keys."/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ============ Network & privacy ============ -->
+                <Border Classes="section">
+                    <StackPanel Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Border Classes="sectionIcon"><c:Icon Data="{StaticResource IconNode}"/></Border>
+                            <StackPanel Spacing="1" VerticalAlignment="Center">
+                                <TextBlock Text="Network &amp; privacy" Classes="h2"/>
+                                <TextBlock Classes="caption" Text="Defaults for new wallets, and how the backend reaches its node."/>
+                            </StackPanel>
+                        </StackPanel>
+                        <TextBlock Text="DEFAULT NODE FOR NEW WALLETS" Classes="eyebrow"/>
+                        <Grid ColumnDefinitions="Auto,10,*,8,Auto">
+                            <ComboBox Grid.Column="0" SelectedIndex="{Binding NetworkIndex}" Width="140">
+                                <ComboBoxItem>Mainnet</ComboBoxItem>
+                                <ComboBoxItem>Stagenet</ComboBoxItem>
+                                <ComboBoxItem>Testnet</ComboBoxItem>
+                            </ComboBox>
+                            <TextBox Grid.Column="2" Classes="mono" FontSize="12.5" Watermark="http://host:port" Text="{Binding DefaultDaemonAddress}"/>
+                            <Button Grid.Column="4" Content="Test" Command="{Binding TestDaemonCommand}" IsEnabled="{Binding !Busy}"/>
+                        </Grid>
+                        <ComboBox x:CompileBindings="False" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding PresetNodes}" SelectedItem="{Binding SelectedPreset}"
+                                  PlaceholderText="Or pick a public node…">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Display}"/>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <TextBlock Text="{Binding DaemonTestResult}" Classes="result"
+                                   IsVisible="{Binding DaemonTestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                   Foreground="{Binding DaemonTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+
+                        <TextBlock Text="SOCKS PROXY" Classes="eyebrow" Margin="0,6,0,0"/>
+                        <Grid ColumnDefinitions="260,12,*">
+                            <TextBox Grid.Column="0" Classes="mono" FontSize="12.5" Watermark="127.0.0.1:9050" Text="{Binding ProxyAddress}"/>
+                            <TextBlock Grid.Column="2" Classes="caption" TextWrapping="Wrap" VerticalAlignment="Center"
+                                       Text="Optional. Routes node traffic through Tor or another SOCKS proxy so the node never sees your IP. Applies the next time a wallet opens."/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ============ Security ============ -->
+                <Border Classes="section">
+                    <StackPanel Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Border Classes="sectionIcon"><c:Icon Data="{StaticResource IconLock}"/></Border>
+                            <StackPanel Spacing="1" VerticalAlignment="Center">
+                                <TextBlock Text="Security" Classes="h2"/>
+                                <TextBlock Classes="caption" Text="Locking shuts the backend down and shreds the wallet's temporary files."/>
+                            </StackPanel>
+                        </StackPanel>
+                        <Grid ColumnDefinitions="*,16,*">
+                            <StackPanel Grid.Column="0" Spacing="6">
+                                <TextBlock Text="AUTO-LOCK AFTER" Classes="eyebrow"/>
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <NumericUpDown Value="{Binding AutoLockMinutes}" Minimum="0" Maximum="240" Increment="1"
+                                                   FormatString="0" Width="130"/>
+                                    <TextBlock Text="minutes idle (0 = never)" Classes="muted" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Spacing="6">
+                                <TextBlock Text="REFRESH EVERY" Classes="eyebrow"/>
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <NumericUpDown Value="{Binding AutoRefreshSeconds}" Minimum="5" Maximum="600" Increment="5"
+                                                   FormatString="0" Width="130"/>
+                                    <TextBlock Text="seconds" Classes="muted" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ============ This wallet (only with a vault) ============ -->
+                <Border Classes="section" IsVisible="{Binding VaultExists}">
+                    <StackPanel Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Border Classes="sectionIcon"><c:Icon Data="{StaticResource IconShield}"/></Border>
+                            <StackPanel Spacing="1" VerticalAlignment="Center">
+                                <TextBlock Text="This wallet" Classes="h2"/>
+                                <TextBlock Classes="caption" Text="Each change applies to the wallet your password opens. Your seed never changes."/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <TextBlock Text="CHANGE NODE" Classes="eyebrow" Margin="0,4,0,0"/>
+                        <Grid ColumnDefinitions="*,8,Auto">
+                            <TextBox Grid.Column="0" Classes="mono" FontSize="12.5" Watermark="http://host:port — same network as the wallet"
+                                     Text="{Binding RepointNodeAddress}"/>
+                            <Button Grid.Column="2" Content="Test" Command="{Binding TestRepointNodeCommand}" IsEnabled="{Binding !Busy}"/>
+                        </Grid>
+                        <ComboBox x:CompileBindings="False" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding PresetNodes}" SelectedItem="{Binding SelectedRepointPreset}"
+                                  PlaceholderText="Or pick a public node…">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Display}"/>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <TextBlock Text="{Binding RepointTestResult}" Classes="result"
+                                   IsVisible="{Binding RepointTestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                   Foreground="{Binding RepointTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+                        <Grid ColumnDefinitions="*,8,Auto">
+                            <TextBox Grid.Column="0" Watermark="Wallet password (confirms the change)" PasswordChar="●" Text="{Binding RepointPassword}"/>
+                            <Button Grid.Column="2" Content="Update node" Command="{Binding RepointNodeCommand}" IsEnabled="{Binding !Busy}"/>
+                        </Grid>
+                        <TextBlock Text="{Binding RepointResult}" Classes="result"
+                                   IsVisible="{Binding RepointResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                   Foreground="{Binding RepointOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+
+                        <Separator Margin="0,6"/>
+
+                        <TextBlock Text="CHANGE PASSWORD" Classes="eyebrow"/>
+                        <TextBox Watermark="Current password" PasswordChar="●" Text="{Binding CurrentPassword}"/>
+                        <Grid ColumnDefinitions="*,12,*">
+                            <TextBox Grid.Column="0" Watermark="New password" PasswordChar="●" Text="{Binding NewPassword}"/>
+                            <TextBox Grid.Column="2" Watermark="Confirm new password" PasswordChar="●" Text="{Binding NewPasswordConfirm}"/>
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Text="{Binding NewPasswordStrength}" Classes="caption" VerticalAlignment="Center"
+                                       IsVisible="{Binding NewPasswordStrength, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                            <Button Grid.Column="1" Content="Change password" Command="{Binding ChangePasswordCommand}" IsEnabled="{Binding !Busy}"/>
+                        </Grid>
+                        <TextBlock Text="{Binding ChangePasswordResult}" Classes="result"
+                                   IsVisible="{Binding ChangePasswordResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                   Foreground="{Binding ChangePasswordOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ============ Backup ============ -->
+                <Border Classes="section">
+                    <StackPanel Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Border Classes="sectionIcon"><c:Icon Data="{StaticResource IconDownload}"/></Border>
+                            <StackPanel Spacing="1" VerticalAlignment="Center">
+                                <TextBlock Text="Encrypted vault backup" Classes="h2"/>
+                                <TextBlock Classes="caption" Text="A copy of vault.xv — still protected by your password(s)."/>
+                            </StackPanel>
+                        </StackPanel>
+                        <TextBlock Classes="muted" TextWrapping="Wrap"
+                                   Text="Restoring brings a lost or corrupted vault back. A backup made before a duress wipe still contains the wiped wallet — keep it somewhere a coercer can't find. Restore is only offered while no wallet is unlocked; the replaced vault is kept beside the new one (a duress wipe destroys those kept copies too)."/>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Command="{Binding ExportVaultCommand}" IsEnabled="{Binding VaultExists}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <c:Icon Data="{StaticResource IconDownload}" Width="16" Height="16"/>
+                                    <TextBlock Text="Export backup…"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Command="{Binding RestoreVaultCommand}" IsEnabled="{Binding CanRestoreVault}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <c:Icon Data="{StaticResource IconRefresh}" Width="16" Height="16"/>
+                                    <TextBlock Text="Restore from backup…"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <TextBlock Text="{Binding BackupResult}" Classes="result"
+                                   IsVisible="{Binding BackupResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                   Foreground="{Binding BackupOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ============ Folders & about ============ -->
+                <Border Classes="section">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Spacing="4">
+                            <TextBlock Classes="h2">
+                                <Run Text="XaultWallet"/><Run Text="  " FontSize="12"/><Run Text="{Binding AppVersion}" FontSize="12" FontWeight="Normal" Foreground="{StaticResource TextTertiary}"/>
+                            </TextBlock>
+                            <TextBlock Classes="caption" Text="Unaudited beta · MIT licensed · brought to life in harmony"/>
+                            <Button Classes="link" Content="dboudreau.dev" Click="OpenLink_Click" HorizontalAlignment="Left"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Button Classes="ghost" Command="{Binding OpenDataFolderCommand}" ToolTip.Tip="vault.xv and settings.json">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <c:Icon Data="{StaticResource IconFolder}" Width="16" Height="16"/>
+                                    <TextBlock Text="Data folder"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="ghost" Command="{Binding OpenLogsFolderCommand}" ToolTip.Tip="Diagnostic logs — no secrets are ever logged">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <c:Icon Data="{StaticResource IconFolder}" Width="16" Height="16"/>
+                                    <TextBlock Text="Logs"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
 </UserControl>

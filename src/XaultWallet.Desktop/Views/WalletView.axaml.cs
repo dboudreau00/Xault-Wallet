@@ -4,7 +4,6 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
-using XaultWallet.Core.Monero;
 using XaultWallet.Desktop.ViewModels;
 
 namespace XaultWallet.Desktop.Views;
@@ -37,18 +36,11 @@ public partial class WalletView : UserControl
         }
     }
 
-    private async void CopySelectedTxId_Click(object? sender, RoutedEventArgs e)
+    private async void CopyRowTxId_Click(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is WalletViewModel vm)
+        if ((sender as Control)?.DataContext is HistoryRow row && !string.IsNullOrWhiteSpace(row.TxId))
         {
-            if (HistoryGrid.SelectedItem is TransferEntry entry && !string.IsNullOrWhiteSpace(entry.TxId))
-            {
-                await CopyToClipboardAsync(entry.TxId, "Transaction ID");
-            }
-            else
-            {
-                vm.CopyNotice = "Select a transaction row first.";
-            }
+            await CopyToClipboardAsync(row.TxId, "Transaction ID");
         }
     }
 

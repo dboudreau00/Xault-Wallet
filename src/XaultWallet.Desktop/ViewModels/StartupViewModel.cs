@@ -28,6 +28,12 @@ public sealed partial class StartupViewModel : ViewModelBase
 
     public StartupViewModel() => _ = RunAsync();
 
+    /// <summary>A splash that runs no checks — for UI snapshots and tests only.</summary>
+    internal StartupViewModel(bool preview)
+    {
+        _ = preview;
+    }
+
     private async Task RunAsync()
     {
         try

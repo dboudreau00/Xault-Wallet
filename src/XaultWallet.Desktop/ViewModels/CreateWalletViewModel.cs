@@ -187,11 +187,33 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         _ => MoneroNetwork.Mainnet,
     };
 
+    // Strength meter: 0..5 segments plus a colour band (weak / fair / strong).
+    [ObservableProperty] private int _strengthScore;
+    [ObservableProperty] private bool _strengthIsFair;
+    [ObservableProperty] private bool _strengthIsStrong;
+
     partial void OnMainPasswordChanged(string value)
     {
         var (level, bits) = PasswordStrength.Evaluate(value);
-        StrengthLabel = value.Length == 0 ? string.Empty : $"{level} (~{bits:0} bits)";
+        StrengthScore = (int)level;
+        StrengthIsFair = level == StrengthLevel.Fair;
+        StrengthIsStrong = level >= StrengthLevel.Strong;
+        StrengthLabel = value.Length == 0
+            ? string.Empty
+            : level < PasswordStrength.MinimumAccepted
+                ? "Too easy to guess"
+                : $"{LevelName(level)} · about {bits.ToString("0", System.Globalization.CultureInfo.InvariantCulture)} bits";
     }
+
+    internal static string LevelName(StrengthLevel level) => level switch
+    {
+        StrengthLevel.VeryWeak => "Very weak",
+        StrengthLevel.Weak => "Weak",
+        StrengthLevel.Fair => "Fair",
+        StrengthLevel.Strong => "Strong",
+        StrengthLevel.VeryStrong => "Very strong",
+        _ => string.Empty,
+    };
 
     // Switching between Generate and Import must FULLY reset the seed state for that profile.
     // Otherwise a seed left over from the other mode keeps its old provenance while the mode flips:

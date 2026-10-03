@@ -116,6 +116,8 @@ public class BlockHeightTests
     [InlineData("0", 0UL)]
     [InlineData("1,000", 1000UL)]
     [InlineData("3'150'000", 3150000UL)]
+    [InlineData("3\u202F150\u202F000", 3150000UL)] // fr-FR's group separator (narrow no-break space)
+    [InlineData("3\u00A0150\u00A0000", 3150000UL)]
     public void Accepts_Grouped_Or_Plain_Digits(string typed, ulong expected)
     {
         Assert.True(BlockHeight.TryParse(typed, out ulong h));

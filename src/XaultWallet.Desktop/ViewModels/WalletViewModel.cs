@@ -48,7 +48,15 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>What the Receive QR encodes: the standard Monero URI for the shown address.</summary>
     public string ReceiveUri => string.IsNullOrEmpty(PrimaryAddress) ? string.Empty : "monero:" + PrimaryAddress;
 
-    partial void OnHeightChanged(ulong value) => RebuildHistoryRows(); // confirmations move with the tip
+    partial void OnHeightChanged(ulong value)
+    {
+        // Confirmation counts only change for rows still pending or confirming. Rebuilding on every
+        // height change would reset the list's scroll position every few seconds while syncing.
+        if (_entries.Any(e => e.Height == 0 || e.Type is "pool" or "pending" || value < e.Height + HistoryRow.UnlockConfirmations))
+        {
+            RebuildHistoryRows();
+        }
+    }
 
     // Node sync tracker
     [ObservableProperty] private double _syncProgress;          // 0..100

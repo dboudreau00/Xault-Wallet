@@ -23,6 +23,8 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     [NotifyPropertyChangedFor(nameof(LockedBalance))]
     [NotifyPropertyChangedFor(nameof(HasLocked))]
     [NotifyPropertyChangedFor(nameof(BalanceDisplay))]
+    [NotifyPropertyChangedFor(nameof(BalanceWhole))]
+    [NotifyPropertyChangedFor(nameof(BalanceFraction))]
     [NotifyPropertyChangedFor(nameof(UnlockedDisplay))]
     [NotifyPropertyChangedFor(nameof(LockedDisplay))]
     private decimal _balance;
@@ -38,7 +40,15 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     public decimal LockedBalance => Math.Max(0m, Balance - UnlockedBalance);
     public bool HasLocked => LockedBalance > 0m;
     [ObservableProperty] private ulong _height;
-    [ObservableProperty] private string _primaryAddress = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ReceiveUri))]
+    private string _primaryAddress = string.Empty;
+
+    /// <summary>What the Receive QR encodes: the standard Monero URI for the shown address.</summary>
+    public string ReceiveUri => string.IsNullOrEmpty(PrimaryAddress) ? string.Empty : "monero:" + PrimaryAddress;
+
+    partial void OnHeightChanged(ulong value) => RebuildHistoryRows(); // confirmations move with the tip
 
     // Node sync tracker
     [ObservableProperty] private double _syncProgress;          // 0..100
@@ -86,6 +96,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     // Send confirmation overlay (irreversible action — always confirm)
     [ObservableProperty] private bool _showSendConfirm;
     [ObservableProperty] private string _sendSummary = string.Empty;
+    [ObservableProperty] private string _confirmAmountText = string.Empty;
     [ObservableProperty] private string _sendFeeText = string.Empty;
     [ObservableProperty] private string _sendTotalText = string.Empty;
 
@@ -115,14 +126,36 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>Masks balances on screen (shoulder-surfing). Persisted in settings.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(BalanceDisplay))]
+    [NotifyPropertyChangedFor(nameof(BalanceWhole))]
+    [NotifyPropertyChangedFor(nameof(BalanceFraction))]
     [NotifyPropertyChangedFor(nameof(UnlockedDisplay))]
     [NotifyPropertyChangedFor(nameof(LockedDisplay))]
     private bool _hideBalances = AppServices.Instance.Settings.HideBalances;
 
+    partial void OnHideBalancesChanged(bool value) => RebuildHistoryRows(); // history amounts mask too
+
     private const string Masked = "●●●●●";
     public string BalanceDisplay => HideBalances ? Masked : XmrAmount.Format(Balance);
-    public string UnlockedDisplay => HideBalances ? $"Spendable now: {Masked}" : $"Spendable now: {XmrAmount.Format(UnlockedBalance)} XMR";
-    public string LockedDisplay => HideBalances ? $"⧗ {Masked}" : $"⧗ {XmrAmount.Format(LockedBalance)} XMR maturing";
+
+    /// <summary>Balance split for display: whole part bright, fraction dimmed ("12" + ".4830…").</summary>
+    public string BalanceWhole => HideBalances ? Masked : decimal.Truncate(Balance).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    public string BalanceFraction
+    {
+        get
+        {
+            if (HideBalances)
+            {
+                return string.Empty;
+            }
+
+            string full = XmrAmount.Format(Balance);
+            int dot = full.IndexOf('.');
+            return dot < 0 ? string.Empty : full[dot..];
+        }
+    }
+    public string UnlockedDisplay => HideBalances ? $"Spendable {Masked}" : $"Spendable {XmrAmount.Format(UnlockedBalance)} XMR";
+    public string LockedDisplay => HideBalances ? $"Maturing {Masked}" : $"Maturing {XmrAmount.Format(LockedBalance)} XMR";
 
     [RelayCommand]
     private void ToggleBalances()
@@ -163,7 +196,29 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private string _verifyResult = string.Empty;
     [ObservableProperty] private bool _verifyOk;
 
-    public ObservableCollection<TransferEntry> History { get; } = new();
+    /// <summary>Display rows for the History list (rebuilt from <see cref="_entries"/>).</summary>
+    public ObservableCollection<HistoryRow> History { get; } = new();
+
+    /// <summary>The raw transfers as last fetched — the source of truth for rows and CSV export.</summary>
+    private IReadOnlyList<TransferEntry> _entries = Array.Empty<TransferEntry>();
+
+    /// <summary>Replace the transfer list (also used by UI previews).</summary>
+    internal void SetHistory(IReadOnlyList<TransferEntry> entries)
+    {
+        _entries = entries;
+        RebuildHistoryRows();
+    }
+
+    private void RebuildHistoryRows()
+    {
+        History.Clear();
+        foreach (TransferEntry t in _entries)
+        {
+            History.Add(new HistoryRow(t, Height, HideBalances));
+        }
+
+        HasHistory = History.Count > 0;
+    }
 
     /// <summary>Drives the History tab's empty-state hint.</summary>
     [ObservableProperty] private bool _hasHistory;
@@ -178,11 +233,22 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     private void OpenSettings() => SettingsRequested?.Invoke();
 
     public WalletViewModel(WalletSecrets secrets)
+        : this(secrets, startBackend: true)
+    {
+    }
+
+    private WalletViewModel(WalletSecrets secrets, bool startBackend)
     {
         _secrets = secrets ?? throw new ArgumentNullException(nameof(secrets));
         _wallet = AppServices.Instance.CreateWalletService();
-        _ = InitializeAsync();
+        if (startBackend)
+        {
+            _ = InitializeAsync();
+        }
     }
+
+    /// <summary>A wallet screen with no backend behind it — for UI snapshots and tests only.</summary>
+    internal static WalletViewModel ForPreview(WalletSecrets secrets) => new(secrets, startBackend: false);
 
     private async Task InitializeAsync()
     {
@@ -347,18 +413,12 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             {
                 IReadOnlyList<TransferEntry> entries = await _wallet.GetHistoryAsync(_cts.Token);
 
-                // Rebuild only when something changed: clearing every refresh reset the user's row
-                // selection (mid "copy tx ID") and scroll position every 20 seconds.
-                if (!SameHistory(History, entries))
+                // Rebuild only when something changed: rebuilding on every refresh reset the scroll
+                // position (and any selection) every 20 seconds.
+                if (!SameHistory(_entries, entries))
                 {
-                    History.Clear();
-                    foreach (TransferEntry t in entries)
-                    {
-                        History.Add(t);
-                    }
+                    SetHistory(entries);
                 }
-
-                HasHistory = History.Count > 0;
             }
             catch (OperationCanceledException) { }
             catch (Exception ex)
@@ -398,7 +458,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
     private bool _historyNotReadyLogged;
 
-    private static bool SameHistory(IList<TransferEntry> shown, IReadOnlyList<TransferEntry> fresh)
+    private static bool SameHistory(IReadOnlyList<TransferEntry> shown, IReadOnlyList<TransferEntry> fresh)
     {
         if (shown.Count != fresh.Count)
         {
@@ -540,7 +600,8 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             _preparedAmount = amount;
 
             decimal fee = MoneroRpcClient.AtomicToXmr(_preparedTx.Fee);
-            SendSummary = $"Send {XmrAmount.Format(amount)} XMR ({prio} priority) to:";
+            SendSummary = $"{prio} priority · built and signed, not yet broadcast";
+            ConfirmAmountText = $"{XmrAmount.Format(amount)} XMR";
             SendFeeText = $"{XmrAmount.Format(fee)} XMR";
             SendTotalText = $"{XmrAmount.Format(amount + fee)} XMR";
             SendFeeWarning = FeeWarning(fee, amount);
@@ -607,7 +668,8 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             _preparedAmount = amount;
 
             string txNote = sweep.TxMetadataList.Count > 1 ? $" across {sweep.TxMetadataList.Count} transactions" : "";
-            SendSummary = $"Sweep ALL spendable funds ({XmrAmount.Format(amount)} XMR{txNote}) to:";
+            SendSummary = $"Sweep of ALL spendable funds{txNote} · not yet broadcast";
+            ConfirmAmountText = $"{XmrAmount.Format(amount)} XMR";
             SendFeeText = $"{XmrAmount.Format(fee)} XMR";
             SendTotalText = $"{XmrAmount.Format(amount + fee)} XMR";
             SendFeeWarning = FeeWarning(fee, amount);
@@ -766,7 +828,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("date,type,amount_xmr,fee_xmr,height,txid");
-        foreach (TransferEntry t in History)
+        foreach (TransferEntry t in _entries)
         {
             // txid/type/date contain no commas or quotes (hex, fixed words, fixed format).
             sb.Append(t.Date).Append(',')

@@ -16,6 +16,13 @@ public sealed partial class UnlockViewModel : ViewModelBase
     [ObservableProperty]
     private bool _busy;
 
+    /// <summary>Show the typed password (long passphrases are easy to mistype blind).</summary>
+    [ObservableProperty]
+    private bool _revealPassword;
+
+    [RelayCommand]
+    private void ToggleReveal() => RevealPassword = !RevealPassword;
+
     /// <summary>Raised on a correct password. Carries no real/decoy signal — the vault has none.</summary>
     public event Action<WalletSecrets>? Unlocked;
 

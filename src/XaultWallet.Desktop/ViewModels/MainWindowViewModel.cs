@@ -17,6 +17,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private WalletViewModel? _wallet;
     private ViewModelBase? _beforeSettings;
 
+    /// <summary>A shell showing <paramref name="screen"/> with no startup flow — for UI snapshots and tests only.</summary>
+    internal MainWindowViewModel(ViewModelBase screen) => _current = screen;
+
     public MainWindowViewModel()
     {
         // Show the startup splash first; it runs node + binary checks in the background,

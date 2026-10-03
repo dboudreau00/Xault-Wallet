@@ -10,11 +10,15 @@
     <ApplicationIcon>Assets\xault.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
 
-    <!-- Release / publish defaults -->
-    <Version>0.1.0-beta</Version>
+    <Version>0.2.0-beta</Version>
     <AssemblyName>XaultWallet</AssemblyName>
     <Product>XaultWallet</Product>
     <RuntimeIdentifiers>win-x64;linux-x64;osx-x64;osx-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <!-- Publish only: one self-contained file that runs with no .NET installed. Plain builds stay
+       framework-dependent (fast dotnet run; the project can be referenced by UI tooling). -->
+  <PropertyGroup Condition="'$(_IsPublishing)' == 'true'">
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
@@ -35,10 +39,16 @@
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.1.3" />
     <PackageReference Include="Avalonia.Diagnostics" Version="11.1.3" Condition="'$(Configuration)' == 'Debug'" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageReference Include="QRCoder" Version="1.6.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\XaultWallet.Core\XaultWallet.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Headless UI snapshots + view smoke tests drive the preview constructors. -->
+    <InternalsVisibleTo Include="UiSnapshots" />
   </ItemGroup>
 
 </Project>

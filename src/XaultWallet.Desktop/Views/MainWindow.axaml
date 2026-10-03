@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
+        xmlns:c="clr-namespace:XaultWallet.Desktop.Controls"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="920" d:DesignHeight="660"
@@ -16,7 +17,7 @@
 
     <Grid RowDefinitions="Auto,*">
         <!-- Custom title bar: our own chrome extended to the top edge, draggable -->
-        <Border Grid.Row="0" Background="#101013" BorderBrush="{StaticResource BorderSubtle}"
+        <Border Grid.Row="0" Background="{StaticResource TitleBarBg}" BorderBrush="{StaticResource BorderSubtle}"
                 BorderThickness="0,0,0,1" PointerPressed="TitleBar_PointerPressed"
                 DoubleTapped="TitleBar_DoubleTapped">
             <Grid ColumnDefinitions="Auto,*,Auto,Auto" Height="46">
@@ -33,9 +34,14 @@
                                Margin="-6,0,0,0" Foreground="{StaticResource TextSecondary}"/>
                 </StackPanel>
 
-                <Button Grid.Column="1" Content="Settings" Command="{Binding OpenSettingsCommand}"
+                <Button Grid.Column="1" Classes="ghost" Command="{Binding OpenSettingsCommand}"
                         IsVisible="{Binding !SettingsOpen}" VerticalAlignment="Center"
-                        HorizontalAlignment="Right" Margin="0,0,10,0"/>
+                        HorizontalAlignment="Right" Margin="0,0,10,0" Padding="12,7">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <c:Icon Data="{StaticResource IconSettings}" Width="16" Height="16"/>
+                        <TextBlock Text="Settings" FontWeight="SemiBold"/>
+                    </StackPanel>
+                </Button>
 
                 <!-- Window controls -->
                 <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Stretch">

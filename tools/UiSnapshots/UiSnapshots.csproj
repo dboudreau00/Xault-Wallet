@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Renders every screen headlessly (real Skia rendering, no display needed) with deterministic
+    demo data, writes PNGs, and FAILS on any binding error. Doubles as a UI smoke test in CI.
+    Usage: dotnet run (Release) with this project; optional argument: output directory.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless" Version="11.1.3" />
+    <PackageReference Include="Avalonia.Skia" Version="11.1.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\XaultWallet.Desktop\XaultWallet.Desktop.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -531,8 +531,6 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
 
             var main = new WalletSecrets
             {
-                Kind = ProfileKind.Real,
-                Label = "Main",
                 Network = Network,
                 Mnemonic = RealMnemonic.Trim(),
                 // A generated seed NEVER carries an offset (that would restore a different, empty
@@ -555,15 +553,13 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
 
                 duress = new WalletSecrets
                 {
-                    Kind = ProfileKind.Duress,
-                    Label = "Wallet",
                     Network = Network,
                     Mnemonic = DuressMnemonic.Trim(),
                     SeedOffset = SeedOffsetPolicy.ForSeed(wasGenerated: CreateNewDuress, DuressSeedOffset),
                     RestoreHeight = duressRestore,
                     DaemonAddress = DaemonAddress.Trim(),
                     EphemeralWalletPassword = Convert.ToHexString(VaultCrypto.RandomBytes(24)),
-                    DuressWipeReal = WipeRealOnDuress,
+                    WipeOtherSlotOnUnlock = WipeRealOnDuress,
                 };
             }
 

@@ -32,16 +32,14 @@ public sealed class MoneroIntegrationTests
 
     private static SecureBuffer Pw(string s) => SecureBuffer.FromPassword(s.ToCharArray());
 
-    private static WalletSecrets Secrets(string mnemonic, ulong height, ProfileKind kind, bool wipeReal = false) => new()
+    private static WalletSecrets Secrets(string mnemonic, ulong height, bool wipeOther = false) => new()
     {
-        Kind = kind,
-        Label = kind == ProfileKind.Real ? "Main" : "Wallet",
         Network = IntegrationEnv.Network,
         Mnemonic = mnemonic,
         RestoreHeight = height,
         DaemonAddress = IntegrationEnv.Daemon!,
         EphemeralWalletPassword = Convert.ToHexString(VaultCrypto.RandomBytes(24)),
-        DuressWipeReal = wipeReal,
+        WipeOtherSlotOnUnlock = wipeOther,
     };
 
     [Fact]
@@ -77,7 +75,7 @@ public sealed class MoneroIntegrationTests
         _out.WriteLine($"generated seed at height {height}");
 
         // The generated seed must reopen into a valid wallet with an address.
-        string address = await svc.ValidateSeedOpensAsync(Secrets(mnemonic, height, ProfileKind.Real));
+        string address = await svc.ValidateSeedOpensAsync(Secrets(mnemonic, height));
         Assert.False(string.IsNullOrWhiteSpace(address));
         _out.WriteLine("primary address: " + address);
     }
@@ -95,7 +93,7 @@ public sealed class MoneroIntegrationTests
         {
             using (var pw = Pw("integration-main-password"))
             {
-                VaultManager.Create(vaultPath, pw, Secrets(mnemonic, height, ProfileKind.Real), null, null);
+                VaultManager.Create(vaultPath, pw, Secrets(mnemonic, height), null, null);
             }
 
             var mgr = VaultManager.Load(vaultPath);
@@ -103,8 +101,7 @@ public sealed class MoneroIntegrationTests
             {
                 UnlockResult? result = mgr.Unlock(pw);
                 Assert.NotNull(result);
-                Assert.False(result!.WasDuress);
-                Assert.Equal(mnemonic, result.Secrets.Mnemonic);
+                Assert.Equal(mnemonic, result!.Secrets.Mnemonic);
             }
         }
         finally
@@ -131,8 +128,8 @@ public sealed class MoneroIntegrationTests
             {
                 VaultManager.Create(
                     vaultPath,
-                    main, Secrets(realSeed, realH, ProfileKind.Real),
-                    duress, Secrets(decoySeed, decoyH, ProfileKind.Duress));
+                    main, Secrets(realSeed, realH),
+                    duress, Secrets(decoySeed, decoyH));
             }
 
             var mgr = VaultManager.Load(vaultPath);
@@ -141,16 +138,14 @@ public sealed class MoneroIntegrationTests
             {
                 UnlockResult? r = mgr.Unlock(main);
                 Assert.NotNull(r);
-                Assert.False(r!.WasDuress);
-                Assert.Equal(realSeed, r.Secrets.Mnemonic);
+                Assert.Equal(realSeed, r!.Secrets.Mnemonic);
             }
 
             using (var duress = Pw("decoy-password-456"))
             {
                 UnlockResult? r = mgr.Unlock(duress);
                 Assert.NotNull(r);
-                Assert.True(r!.WasDuress);
-                Assert.Equal(decoySeed, r.Secrets.Mnemonic);
+                Assert.Equal(decoySeed, r!.Secrets.Mnemonic);
             }
         }
         finally

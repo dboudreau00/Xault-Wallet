@@ -115,7 +115,7 @@
                                 </StackPanel>
                                 <CheckBox Content="Wipe the real wallet on duress" IsChecked="{Binding WipeRealOnDuress}"/>
                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#E0A030"
-                                           Text="Irreversible on this device. Only enable if your real seed is backed up elsewhere."/>
+                                           Text="Irreversible on this device. Only enable if your real seed is backed up elsewhere. Any use of the duress password — unlocking, or changing its password or node — triggers the wipe, and vault copies kept by Settings → Restore are destroyed too. Never use the duress password yourself."/>
                             </StackPanel>
                         </StackPanel>
                     </Grid>

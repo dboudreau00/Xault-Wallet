@@ -144,11 +144,11 @@
 
                 <Separator IsVisible="{Binding VaultExists}"/>
 
-                <!-- Change master password -->
+                <!-- Change password -->
                 <StackPanel Spacing="6">
-                    <TextBlock Text="CHANGE MASTER PASSWORD" Classes="eyebrow"/>
+                    <TextBlock Text="CHANGE PASSWORD" Classes="eyebrow"/>
                     <TextBlock TextWrapping="Wrap" Classes="muted"
-                               Text="Re-encrypts the real wallet under a new password. Your seed does not change. The duress password (if set) is unaffected and cannot be used here."/>
+                               Text="Re-encrypts the wallet your current password opens under a new password. Your seed does not change."/>
                     <TextBox Watermark="Current password" PasswordChar="&#9679;" Text="{Binding CurrentPassword}"/>
                     <TextBox Watermark="New password" PasswordChar="&#9679;" Text="{Binding NewPassword}"/>
                     <TextBlock Text="{Binding NewPasswordStrength}" FontSize="11" Foreground="{StaticResource TextTertiary}"
@@ -170,7 +170,7 @@
                     <TextBlock TextWrapping="Wrap" Classes="muted"
                                Text="Exports the encrypted vault file (your sealed seed). The copy stays protected by your password. If your vault file is ever lost or corrupted, restoring this backup brings the wallet back."/>
                     <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextTertiary}" FontSize="11"
-                               Text="Careful where you keep it: a backup made before a duress wipe still contains the wiped wallet, so store it somewhere a coercer can't find. Restoring is only offered while no wallet is unlocked; the replaced vault is kept, never destroyed."/>
+                               Text="Careful where you keep it: a backup made before a duress wipe still contains the wiped wallet, so store it somewhere a coercer can't find. Restoring is only offered while no wallet is unlocked; the replaced vault is kept beside the new one (a duress wipe destroys those kept copies too)."/>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button Content="Export backup&#8230;" Command="{Binding ExportVaultCommand}"
                                 IsEnabled="{Binding VaultExists}"/>

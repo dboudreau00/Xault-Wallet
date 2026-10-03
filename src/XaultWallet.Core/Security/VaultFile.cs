@@ -70,30 +70,57 @@ public sealed class VaultFile
 
     /// <summary>
     /// Seal <paramref name="plaintext"/> into slot <paramref name="slotIndex"/> under a key derived from
-    /// <paramref name="password"/>. The salt is stored with the slot; the associated data binds the
-    /// ciphertext to the file version and slot index so slots cannot be swapped.
+    /// <paramref name="password"/> with a FRESH salt. The salt is stored with the slot; the associated
+    /// data binds the ciphertext to the file version and slot index so slots cannot be swapped.
     /// </summary>
     public void WriteSlot(int slotIndex, SecureBuffer password, ReadOnlySpan<byte> plaintext)
+    {
+        CheckPayloadSize(plaintext);
+        byte[] salt = VaultCrypto.RandomBytes(VaultCrypto.SaltSizeBytes);
+        using SecureBuffer key = VaultCrypto.DeriveKey(password, salt, Argon);
+        _slots[slotIndex] = Seal(key, salt, slotIndex, plaintext);
+    }
+
+    /// <summary>
+    /// Re-encrypt an opened slot with new contents, reusing the key derived while opening it (same
+    /// salt, fresh random nonce). No Argon2 work happens, so a policy re-seal performed during unlock
+    /// (wipe-on-duress, legacy-format migration) adds no measurable time to that unlock — a duress
+    /// unlock must not be slower than a normal one.
+    /// </summary>
+    public void ResealSlot(OpenedSlot opened, ReadOnlySpan<byte> plaintext)
+    {
+        ArgumentNullException.ThrowIfNull(opened);
+        CheckPayloadSize(plaintext);
+        _slots[opened.SlotIndex] = Seal(opened.Key, opened.Salt, opened.SlotIndex, plaintext);
+    }
+
+    private static void CheckPayloadSize(ReadOnlySpan<byte> plaintext)
     {
         if (plaintext.Length > PaddedPlaintextBytes - 4)
         {
             throw new ArgumentException("Payload too large for a slot.", nameof(plaintext));
         }
+    }
 
+    private static byte[] Seal(SecureBuffer key, byte[] salt, int slotIndex, ReadOnlySpan<byte> plaintext)
+    {
         // Build padded plaintext: [len][data][random pad]
         byte[] padded = VaultCrypto.RandomBytes(PaddedPlaintextBytes);
-        BinaryPrimitives.WriteUInt32LittleEndian(padded, (uint)plaintext.Length);
-        plaintext.CopyTo(padded.AsSpan(4));
+        try
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(padded, (uint)plaintext.Length);
+            plaintext.CopyTo(padded.AsSpan(4));
+            byte[] enc = VaultCrypto.Encrypt(key, padded, AssociatedData(slotIndex));
 
-        byte[] salt = VaultCrypto.RandomBytes(VaultCrypto.SaltSizeBytes);
-        using SecureBuffer key = VaultCrypto.DeriveKey(password, salt, Argon);
-        byte[] enc = VaultCrypto.Encrypt(key, padded, AssociatedData(slotIndex));
-        CryptographicOperations.ZeroMemory(padded);
-
-        byte[] slot = new byte[SlotBytes];
-        salt.CopyTo(slot, 0);
-        enc.CopyTo(slot, VaultCrypto.SaltSizeBytes);
-        _slots[slotIndex] = slot;
+            byte[] slot = new byte[SlotBytes];
+            salt.CopyTo(slot, 0);
+            enc.CopyTo(slot, VaultCrypto.SaltSizeBytes);
+            return slot;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(padded);
+        }
     }
 
     /// <summary>Overwrite a slot with random filler (used for "wipe on duress" or to hide an unused slot).</summary>
@@ -106,31 +133,46 @@ public sealed class VaultFile
     /// </summary>
     public (SecureBuffer plaintext, int slotIndex)? TryUnlock(SecureBuffer password)
     {
-        (SecureBuffer, int)? result = null;
+        using OpenedSlot? opened = TryOpen(password);
+        return opened is null ? null : (new SecureBuffer(opened.Plaintext.Span), opened.SlotIndex);
+    }
+
+    /// <summary>
+    /// Like <see cref="TryUnlock"/>, but keeps the matched slot's derived key so the caller can
+    /// <see cref="ResealSlot"/> it without another key derivation. Dispose the result.
+    /// </summary>
+    public OpenedSlot? TryOpen(SecureBuffer password)
+    {
+        OpenedSlot? result = null;
 
         for (int i = 0; i < SlotCount; i++)
         {
             byte[] salt = _slots[i].AsSpan(0, VaultCrypto.SaltSizeBytes).ToArray();
             ReadOnlySpan<byte> enc = _slots[i].AsSpan(VaultCrypto.SaltSizeBytes);
 
-            using SecureBuffer key = VaultCrypto.DeriveKey(password, salt, Argon);
+            SecureBuffer key = VaultCrypto.DeriveKey(password, salt, Argon);
             SecureBuffer? dec = VaultCrypto.TryDecrypt(key, enc, AssociatedData(i));
-
-            if (dec is not null && result is null)
+            bool kept = false;
+            try
             {
-                // Unpad: first 4 bytes are the real length.
-                uint len = BinaryPrimitives.ReadUInt32LittleEndian(dec.Span);
-                if (len <= PaddedPlaintextBytes - 4)
+                if (dec is not null && result is null)
                 {
-                    var payload = new SecureBuffer(dec.Span.Slice(4, (int)len));
-                    result = (payload, i);
+                    // Unpad: first 4 bytes are the real length.
+                    uint len = BinaryPrimitives.ReadUInt32LittleEndian(dec.Span);
+                    if (len <= PaddedPlaintextBytes - 4)
+                    {
+                        result = new OpenedSlot(i, new SecureBuffer(dec.Span.Slice(4, (int)len)), key, salt);
+                        kept = true;
+                    }
                 }
-
-                dec.Dispose();
             }
-            else
+            finally
             {
                 dec?.Dispose();
+                if (!kept)
+                {
+                    key.Dispose();
+                }
             }
         }
 
@@ -206,5 +248,37 @@ public sealed class VaultFile
         }
 
         return new VaultFile(argon, slots);
+    }
+}
+
+/// <summary>
+/// A slot that a password successfully opened: its decrypted payload plus the key derived for it,
+/// kept only so the slot can be re-sealed without repeating the key derivation. Dispose promptly —
+/// disposal zeroes both the payload and the key.
+/// </summary>
+public sealed class OpenedSlot : IDisposable
+{
+    internal OpenedSlot(int slotIndex, SecureBuffer plaintext, SecureBuffer key, byte[] salt)
+    {
+        SlotIndex = slotIndex;
+        Plaintext = plaintext;
+        Key = key;
+        Salt = salt;
+    }
+
+    /// <summary>Physical slot position (0 or 1). Position carries no meaning: it is randomised at creation.</summary>
+    public int SlotIndex { get; }
+
+    /// <summary>The unpadded slot payload.</summary>
+    public SecureBuffer Plaintext { get; }
+
+    internal SecureBuffer Key { get; }
+
+    internal byte[] Salt { get; }
+
+    public void Dispose()
+    {
+        Plaintext.Dispose();
+        Key.Dispose();
     }
 }

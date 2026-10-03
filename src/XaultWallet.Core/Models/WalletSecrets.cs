@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-
 namespace XaultWallet.Core.Models;
 
 public enum MoneroNetwork
@@ -10,62 +8,44 @@ public enum MoneroNetwork
 }
 
 /// <summary>
-/// Whether a profile is the user's real wallet or the decoy that unlocks under
-/// the duress password. This value lives ONLY inside the encrypted slot, so an
-/// attacker who has not decrypted the slot cannot tell which is which.
-/// </summary>
-public enum ProfileKind
-{
-    Real = 0,
-    Duress = 1,
-}
-
-/// <summary>
-/// The complete secret payload for one wallet. This is what gets serialised to
-/// JSON, padded, and sealed inside an encrypted vault slot. It is intentionally
-/// small (well under the slot size) — it holds the seed, not the blockchain.
-/// The Monero wallet files themselves are never persisted to disk; they are
-/// restored into an ephemeral temp directory on unlock and shredded on lock.
+/// The complete secret payload for one wallet: what gets sealed inside an encrypted vault slot.
+/// It is intentionally small (well under the slot size) — it holds the seed, not the blockchain.
+/// The Monero wallet files themselves are never persisted to disk; they are restored into an
+/// ephemeral temp directory on unlock and shredded on lock.
+///
+/// DENIABILITY: this type deliberately has NO notion of "real" vs "decoy". Every slot carries
+/// exactly the same fields, so a decoy decrypted with the duress password is indistinguishable
+/// from the only wallet of a single-wallet vault. (Version 1 of the payload stored a
+/// <c>kind</c> and a label — anyone holding the vault file and the duress password could read
+/// them and prove a hidden wallet existed. See <c>SlotPayload</c> for the on-disk schema.)
 /// </summary>
 public sealed class WalletSecrets
 {
-    [JsonPropertyName("kind")]
-    public ProfileKind Kind { get; set; } = ProfileKind.Real;
-
-    [JsonPropertyName("label")]
-    public string Label { get; set; } = "Main";
-
-    [JsonPropertyName("network")]
-    public MoneroNetwork Network { get; set; } = MoneroNetwork.Mainnet;
+    public MoneroNetwork Network { get; set; } = MoneroNetwork.Stagenet;
 
     /// <summary>25-word Monero mnemonic seed (the master secret).</summary>
-    [JsonPropertyName("mnemonic")]
     public string Mnemonic { get; set; } = string.Empty;
 
     /// <summary>Optional seed offset / passphrase used when the seed was generated.</summary>
-    [JsonPropertyName("seedOffset")]
     public string SeedOffset { get; set; } = string.Empty;
 
     /// <summary>Block height to restore from, to avoid rescanning the whole chain.</summary>
-    [JsonPropertyName("restoreHeight")]
     public ulong RestoreHeight { get; set; }
 
-    /// <summary>Remote/local daemon this wallet talks to, e.g. "http://127.0.0.1:18081".</summary>
-    [JsonPropertyName("daemonAddress")]
-    public string DaemonAddress { get; set; } = "http://127.0.0.1:18081";
+    /// <summary>Remote/local daemon this wallet talks to, e.g. "http://127.0.0.1:38081".</summary>
+    public string DaemonAddress { get; set; } = "http://127.0.0.1:38081";
 
     /// <summary>
     /// Randomly generated password that protects the ephemeral monero-wallet-rpc
     /// files while they exist in temp. Regenerated per wallet; never shown to the user.
     /// </summary>
-    [JsonPropertyName("ephemeralWalletPassword")]
     public string EphemeralWalletPassword { get; set; } = string.Empty;
 
     /// <summary>
-    /// Only meaningful on a Duress profile. When true, opening this decoy also wipes
-    /// the real slot from the device. Stored INSIDE the encrypted payload so the
-    /// existence of a wipe policy (and therefore of a hidden wallet) never leaks.
+    /// Wipe-on-duress. When true, the first successful use of THIS slot's password (unlock,
+    /// change password, change node) overwrites the OTHER slot with random bytes and then clears
+    /// this flag — so a vault examined after the wipe looks exactly like a single-wallet vault.
+    /// Only ever set on the decoy; <c>VaultManager.Create</c> rejects it on the main wallet.
     /// </summary>
-    [JsonPropertyName("duressWipeReal")]
-    public bool DuressWipeReal { get; set; }
+    public bool WipeOtherSlotOnUnlock { get; set; }
 }

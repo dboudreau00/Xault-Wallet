@@ -16,8 +16,8 @@ public sealed partial class UnlockViewModel : ViewModelBase
     [ObservableProperty]
     private bool _busy;
 
-    /// <summary>Raised on a correct password. The bool indicates duress, but callers must not display it.</summary>
-    public event Action<WalletSecrets, bool>? Unlocked;
+    /// <summary>Raised on a correct password. Carries no real/decoy signal — the vault has none.</summary>
+    public event Action<WalletSecrets>? Unlocked;
 
     [RelayCommand]
     private async Task UnlockAsync()
@@ -53,7 +53,7 @@ public sealed partial class UnlockViewModel : ViewModelBase
                 return;
             }
 
-            Unlocked?.Invoke(result.Secrets, result.WasDuress);
+            Unlocked?.Invoke(result.Secrets);
         }
         catch (Exception ex)
         {

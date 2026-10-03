@@ -43,11 +43,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         return vm;
     }
 
-    private void OnUnlocked(WalletSecrets secrets, bool wasDuress)
+    private void OnUnlocked(WalletSecrets secrets)
     {
-        // IMPORTANT: the UI is intentionally identical whether the real or the
-        // duress wallet was opened. We do NOT surface `wasDuress` anywhere the
-        // user (or a coercer looking over their shoulder) could see it.
+        // The UI is identical whichever wallet was opened — by construction: the vault returns the
+        // same kind of secrets for both slots and nothing downstream could tell them apart.
         _wallet = new WalletViewModel(secrets);
         _wallet.Locked += () =>
         {

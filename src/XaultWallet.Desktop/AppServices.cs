@@ -13,9 +13,7 @@ public sealed class AppServices
 
     private AppServices()
     {
-        DataDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "XaultWallet");
+        DataDirectory = Path.Combine(UserConfigRoot(), "XaultWallet");
         // 0700 folder, 0600 files — and tighten what an older version created with the umask.
         PrivateFiles.EnsureDirectory(DataDirectory);
         PrivateFiles.TightenTree(DataDirectory);
@@ -23,6 +21,25 @@ public sealed class AppServices
         VaultPath = Path.Combine(DataDirectory, "vault.xv");
         SettingsPath = Path.Combine(DataDirectory, "settings.json");
         Settings = AppSettings.Load(SettingsPath);
+    }
+
+    /// <summary>
+    /// %APPDATA% on Windows, ~/Library/Application Support on macOS, $XDG_CONFIG_HOME or ~/.config on
+    /// Linux — whether or not it exists yet. The default GetFolderPath option returns "" for a folder
+    /// that doesn't exist (e.g. ~/.config on a fresh Linux account), and Path.Combine("", "XaultWallet")
+    /// is RELATIVE: the vault would then be created in, and only found from, the launch directory.
+    /// </summary>
+    internal static string UserConfigRoot()
+    {
+        string root = Environment.GetFolderPath(
+            Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.DoNotVerify);
+        if (!Path.IsPathFullyQualified(root))
+        {
+            throw new InvalidOperationException(
+                "Can't determine your user profile folder (is HOME set?), so there is nowhere safe to keep the vault.");
+        }
+
+        return root;
     }
 
     public string DataDirectory { get; }

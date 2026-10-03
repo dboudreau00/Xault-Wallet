@@ -104,7 +104,8 @@ The app refuses the weakest passwords (common words, sequences, keyboard runs, r
 estimator is a heuristic, not a full dictionary model (`zxcvbn` would be better).
 
 **What else is on disk (and unencrypted).** Besides the encrypted vault, XaultWallet writes
-two plaintext files under `%APPDATA%/XaultWallet/` (`~/.config/XaultWallet/` on Linux):
+two plaintext files under `%APPDATA%/XaultWallet/` (`~/.config/XaultWallet/` on Linux,
+`~/Library/Application Support/XaultWallet/` on macOS):
 `settings.json` (your monero-wallet-rpc path, default node, network, intervals, proxy) and `logs/`
 (high-level events and error types). These deliberately contain **no** secrets — no seeds,
 passwords, keys, or RPC credentials — and nothing that distinguishes one wallet from the other, so

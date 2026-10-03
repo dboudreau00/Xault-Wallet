@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0-beta — security audit & redesign
+## 0.2.0-beta — 2026-10-03 — security audit & redesign
 
 Full write-up with evidence: [docs/AUDIT-2026-10.md](docs/AUDIT-2026-10.md).
 
@@ -38,6 +38,9 @@ Full write-up with evidence: [docs/AUDIT-2026-10.md](docs/AUDIT-2026-10.md).
 - Typed restore heights like `2.800.000` are no longer silently ignored, and ambiguous ones like
   `3150000.0` are refused instead of being read 10× too high.
 - A transaction's history row now updates when it reaches 10 confirmations.
+- Linux: if `~/.config` didn't exist yet, the vault was created in whatever folder the app was
+  started from, and seemed to vanish when it was started elsewhere. It now always lives in
+  `~/.config/XaultWallet` (or `$XDG_CONFIG_HOME/XaultWallet`).
 - Launching the app twice brings the open window forward (Windows).
 
 ### Changed

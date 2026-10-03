@@ -56,16 +56,33 @@ jobs:
     runs-on: ubuntu-24.04
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
       - name: Checksums
         run: cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS
+      - name: Release notes (warning + this version's CHANGELOG section)
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $0 == "## " v || index($0, "## " v " ") == 1 { on = 1; next }
+            on && /^## / { exit }
+            on { print }' CHANGELOG.md > section.md
+          if ! grep -q '[^[:space:]]' section.md; then
+            echo "::error::CHANGELOG.md has no '## ${version}' section"; exit 1
+          fi
+          {
+            echo "**Unaudited beta: do not use with real funds.** The binaries are unsigned; verify them against \`SHA256SUMS\`. \`monero-wallet-rpc\` is not bundled: download and verify it from getmonero.org."
+            # Relative links (docs/…, SECURITY.md#…) would resolve against the releases page: pin them to this tag.
+            perl -pe 's{\]\((?!https?://|#|mailto:)([^)\s]+)\)}{](https://github.com/$ENV{GITHUB_REPOSITORY}/blob/$ENV{GITHUB_REF_NAME}/$1)}g' section.md
+          } > notes.md
       - name: Draft release (unsigned binaries; review before publishing)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --draft \
-            --title "XaultWallet $GITHUB_REF_NAME" \
-            --notes "Unaudited beta — do not use with real funds. Binaries are unsigned; verify SHA256SUMS. monero-wallet-rpc is NOT bundled: download and verify it from getmonero.org."
+          # A pre-release version (v0.2.0-beta) must never show up as the repository's "Latest release".
+          pre=""; case "$GITHUB_REF_NAME" in *-*) pre="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --draft $pre \
+            --title "XaultWallet $GITHUB_REF_NAME" --notes-file notes.md

@@ -103,9 +103,16 @@ builds (Settings → About reads it from the assembly).
 ## Automated releases (GitHub Actions)
 
 Pushing a tag such as `v0.2.0-beta` runs `.github/workflows/release.yml`: unit tests, then
-single-file self-contained builds for `win-x64`, `linux-x64` and `osx-arm64`, attached with a
-`SHA256SUMS` file to a **draft** release for you to review and publish. The binaries are unsigned
-until a code-signing certificate is added to the workflow.
+single-file self-contained builds for `win-x64`, `linux-x64` and `osx-arm64`. Each archive holds the
+executable plus `README.md`, `SECURITY.md`, `CHANGELOG.md` and `LICENSE`. They are attached with a
+`SHA256SUMS` file to a **draft** release for you to review and publish. The release notes are a
+warning header plus the `## <version>` section of `CHANGELOG.md`, so add that section before tagging;
+the job fails without it. A tag with a hyphen (`-beta`, `-rc.1`) is marked as a pre-release, so it
+never shows as the repository's latest release. The binaries are unsigned until a code-signing
+certificate is added to the workflow.
+
+Checklist: `<Version>` in `XaultWallet.Desktop.csproj` matches the tag (without the `v`), the
+CHANGELOG section is dated, CI is green on the commit being tagged, and the tag is on `main`.
 
 `SelfContained` / `PublishSingleFile` apply only when publishing (`_IsPublishing`), so a plain
 `dotnet publish -r <rid>` produces the single file, while ordinary builds stay framework-dependent.

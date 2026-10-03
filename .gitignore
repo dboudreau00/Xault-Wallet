@@ -8,3 +8,4 @@ obj/
 *.xv.tmp
 ui-snapshots/
 release/
+.avalonia-build-tasks/

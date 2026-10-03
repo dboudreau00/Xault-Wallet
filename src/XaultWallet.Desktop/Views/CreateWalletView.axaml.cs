@@ -42,9 +42,7 @@ public partial class CreateWalletView : UserControl
             return false;
         }
 
-        await using System.IO.Stream stream = await file.OpenWriteAsync();
-        await using var writer = new System.IO.StreamWriter(stream);
-        await writer.WriteAsync(contents);
+        await PickedFile.WriteTextAsync(file, contents);
         return true;
     }
 }

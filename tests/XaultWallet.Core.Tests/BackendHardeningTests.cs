@@ -67,6 +67,50 @@ public class LoopbackPortOwnershipTests
     }
 
     [Fact]
+    public void A_Process_That_Has_Exited_Owns_Nothing()
+    {
+        if (!Supported)
+        {
+            return;
+        }
+
+        // The hijack case: the child lost the port to someone else and died. Its missing /proc
+        // entry must read as a definite "no", never as "can't tell".
+        ProcessStartInfo psi = OperatingSystem.IsWindows()
+            ? new ProcessStartInfo("cmd.exe", "/c exit 0")
+            : new ProcessStartInfo("true");
+        psi.UseShellExecute = false;
+        psi.CreateNoWindow = true;
+        int exitedPid;
+        using (Process p = Process.Start(psi)!)
+        {
+            p.WaitForExit();
+            exitedPid = p.Id;
+        }
+
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        try
+        {
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            Assert.False(LoopbackPortOwnership.IsListenerOwnedBy(exitedPid, port));
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public void Only_A_Definite_Yes_Is_Trusted_Where_Ownership_Can_Be_Checked()
+    {
+        Assert.True(LoopbackPortOwnership.IsTrusted(true));
+        Assert.False(LoopbackPortOwnership.IsTrusted(false));
+        // "Can't tell" fails closed on Linux/Windows; only where no check exists (macOS) does it pass.
+        Assert.Equal(!Supported, LoopbackPortOwnership.IsTrusted(null));
+    }
+
+    [Fact]
     public void Reports_False_When_Nothing_Listens()
     {
         if (!Supported)
@@ -120,6 +164,48 @@ public class ExecutableLocatorTests : IDisposable
     [InlineData("")]
     public void Empty_Path_Finds_Nothing(string? path) =>
         Assert.Null(ExecutableLocator.FindOnPath("monero-wallet-rpc", path));
+
+    [Fact]
+    public async Task A_Relative_Name_Is_Never_Launched_Even_When_The_File_Is_Right_There()
+    {
+        // Process.Start would happily resolve this against the current directory.
+        string name = $"xw-planted-{Guid.NewGuid():N}";
+        string inCwd = Path.Combine(Directory.GetCurrentDirectory(), name);
+        File.WriteAllText(inCwd, "");
+        try
+        {
+            var ex = Assert.Throws<FileNotFoundException>(() => ExecutableLocator.EnsureLaunchable(name));
+            Assert.Contains("not a full path", ex.Message);
+            Assert.Throws<FileNotFoundException>(() => ExecutableLocator.EnsureLaunchable(Path.Combine(".", name)));
+            await Assert.ThrowsAsync<FileNotFoundException>(() => MoneroDiagnostics.ProbeWalletRpcAsync(name));
+        }
+        finally
+        {
+            File.Delete(inCwd);
+        }
+    }
+
+    [Fact]
+    public void A_Full_Path_To_An_Existing_File_Is_Launchable()
+    {
+        string exe = Path.Combine(_dir, "fake-wallet-rpc");
+        File.WriteAllText(exe, "");
+        ExecutableLocator.EnsureLaunchable(exe); // no throw
+        Assert.Throws<FileNotFoundException>(() => ExecutableLocator.EnsureLaunchable(exe + "-missing"));
+        Assert.Throws<FileNotFoundException>(() => ExecutableLocator.EnsureLaunchable("  "));
+    }
+
+    [Fact]
+    public void Configured_Bare_Names_Resolve_On_Path_And_Relative_Paths_Pass_Through_To_Be_Refused()
+    {
+        string exe = Path.Combine(_dir, "fake-wallet-rpc");
+        File.WriteAllText(exe, "");
+
+        Assert.Equal(exe, ExecutableLocator.ResolveConfigured(" fake-wallet-rpc ", _dir));
+        Assert.Equal(exe, ExecutableLocator.ResolveConfigured($"\"{exe}\"", null));
+        Assert.Equal("bin/fake-wallet-rpc", ExecutableLocator.ResolveConfigured("bin/fake-wallet-rpc", _dir));
+        Assert.Equal("not-on-path", ExecutableLocator.ResolveConfigured("not-on-path", _dir));
+    }
 
     public void Dispose()
     {

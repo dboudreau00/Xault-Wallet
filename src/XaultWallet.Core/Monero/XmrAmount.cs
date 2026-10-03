@@ -112,6 +112,11 @@ public static class XmrAmount
     public static bool LooksThousandsGrouped(string? text)
     {
         string s = (text ?? string.Empty).Trim();
+        if (s.EndsWith("xmr", StringComparison.OrdinalIgnoreCase))
+        {
+            s = s[..^3].TrimEnd(); // same tolerance as TryParse: "1,000 XMR"
+        }
+
         int sep = s.IndexOfAny(['.', ',']);
         return sep is >= 1 and <= 3
                && s[0] != '0'

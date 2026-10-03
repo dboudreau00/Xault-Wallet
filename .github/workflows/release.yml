@@ -38,10 +38,13 @@ jobs:
         run: |
           mkdir dist
           name="XaultWallet-${GITHUB_REF_NAME}-${{ matrix.rid }}"
+          # The docs ship with the binary: the app points users at SECURITY.md (e.g. after a vault upgrade).
+          docs="README.md SECURITY.md CHANGELOG.md LICENSE"
+          cp $docs out/
           if [ "${{ matrix.rid }}" = "win-x64" ]; then
-            (cd out && 7z a "../dist/${name}.zip" "${{ matrix.exe }}")
+            (cd out && 7z a "../dist/${name}.zip" "${{ matrix.exe }}" $docs)
           else
-            tar -C out -czf "dist/${name}.tar.gz" "${{ matrix.exe }}"
+            tar -C out -czf "dist/${name}.tar.gz" "${{ matrix.exe }}" $docs
           fi
       - uses: actions/upload-artifact@v4
         with:

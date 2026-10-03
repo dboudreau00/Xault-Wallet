@@ -50,6 +50,7 @@ internal static class Program
             ("wallet-send", WalletSend, w => SelectTab(w, 1)),
             ("wallet-send-confirm", WalletSendConfirm, w => SelectTab(w, 1)),
             ("wallet-history", Wallet, w => SelectTab(w, 2)),
+            ("wallet-upgraded", WalletUpgraded, w => SelectTab(w, 0)),
             ("settings", () => new SettingsViewModel(walletOpen: false), null),
         };
 
@@ -79,14 +80,16 @@ internal static class Program
             window.Close();
         }
 
+        CheckHistoryRowSettles();
+
         try { Directory.Delete(home, recursive: true); } catch { /* temp only */ }
 
-        foreach (string f in QrFailures)
+        foreach (string f in Failures)
         {
             Console.WriteLine("FAIL: " + f);
         }
 
-        if (QrFailures.Count > 0)
+        if (Failures.Count > 0)
         {
             return 1;
         }
@@ -106,7 +109,29 @@ internal static class Program
         return 0;
     }
 
-    private static readonly List<string> QrFailures = new();
+    private static readonly List<string> Failures = new();
+
+    /// <summary>
+    /// A row that reaches its 10th confirmation must stop saying "9/10". The redraw is skipped for
+    /// settled rows (to keep the scroll position), so the boundary itself is what has to be checked.
+    /// </summary>
+    private static void CheckHistoryRowSettles()
+    {
+        WalletViewModel vm = WalletViewModel.ForPreview(new WalletSecrets { Network = MoneroNetwork.Stagenet });
+        vm.SetHistory([new TransferEntry { TxId = FakeTxId(9), Type = "in", Amount = 1, Height = 1_000, Timestamp = 1 }]);
+        vm.Height = 1_009;
+        string before = vm.History[0].Subtitle;
+        vm.Height = 1_010;
+        string after = vm.History[0].Subtitle;
+        if (before.Contains("9/10", StringComparison.Ordinal) && after.Contains("block 1,000", StringComparison.Ordinal))
+        {
+            Console.WriteLine("History ok: a row redraws as settled at its 10th confirmation.");
+        }
+        else
+        {
+            Failures.Add($"History row did not settle: at 9 conf '{before}', at 10 conf '{after}'");
+        }
+    }
 
     /// <summary>
     /// Decode the rendered Receive screen with zbar and require EXACTLY the URI for the address on
@@ -130,7 +155,7 @@ internal static class Program
             }
             else
             {
-                QrFailures.Add($"QR decoded to '{decoded}', expected '{expected}'");
+                Failures.Add($"QR decoded to '{decoded}', expected '{expected}'");
             }
         }
         catch (System.ComponentModel.Win32Exception)
@@ -251,6 +276,13 @@ internal static class Program
             new TransferEntry { TxId = FakeTxId(4), Type = "in", Amount = 5_233_017_420_331, Fee = 0, Height = 1_709_115, Timestamp = (ulong)(now - 400_000) },
         };
         vm.SetHistory(history);
+        return vm;
+    }
+
+    private static ViewModelBase WalletUpgraded()
+    {
+        WalletViewModel vm = Wallet();
+        vm.UpgradeNotice = WalletViewModel.LegacyUpgradeNotice;
         return vm;
     }
 

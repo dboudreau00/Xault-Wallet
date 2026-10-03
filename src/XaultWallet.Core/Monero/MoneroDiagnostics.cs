@@ -13,10 +13,7 @@ public static class MoneroDiagnostics
     /// <summary>Run "&lt;binary&gt; --version" and return the reported version line. Throws on failure.</summary>
     public static async Task<string> ProbeWalletRpcAsync(string binaryPath, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(binaryPath))
-        {
-            throw new ArgumentException("No monero-wallet-rpc path is set.", nameof(binaryPath));
-        }
+        ExecutableLocator.EnsureLaunchable(binaryPath); // same rule as the real launch: full paths only
 
         var psi = new ProcessStartInfo
         {

@@ -1,4 +1,5 @@
 using System.Globalization;
+using XaultWallet.Core.Models;
 using XaultWallet.Core.Monero;
 using Xunit;
 
@@ -77,6 +78,7 @@ public class XmrAmountTests
     [InlineData("1,5", false)]
     [InlineData("1,0000", false)]
     [InlineData("1000", false)]
+    [InlineData("1,000 XMR", true)]
     public void Flags_Input_That_Might_Have_Meant_Thousands(string typed, bool ambiguous) =>
         Assert.Equal(ambiguous, XmrAmount.LooksThousandsGrouped(typed));
 
@@ -112,6 +114,8 @@ public class BlockHeightTests
     [InlineData("3 150 000", 3150000UL)]
     [InlineData(" 42 ", 42UL)]
     [InlineData("0", 0UL)]
+    [InlineData("1,000", 1000UL)]
+    [InlineData("3'150'000", 3150000UL)]
     public void Accepts_Grouped_Or_Plain_Digits(string typed, ulong expected)
     {
         Assert.True(BlockHeight.TryParse(typed, out ulong h));
@@ -125,5 +129,54 @@ public class BlockHeightTests
     [InlineData("12a")]
     [InlineData("1e6")]
     [InlineData("9999999999999")] // 13 digits: not a plausible height
+    [InlineData("3150000.0")]     // was stripped to 31,500,000 — a height that hides every payment
+    [InlineData("31,50,000")]     // not groups of three: refuse, don't guess
+    [InlineData("3,150.000")]     // mixed separators
+    [InlineData("3,150,00")]
+    [InlineData(",150")]
+    [InlineData("3,150,")]
     public void Rejects_Non_Heights(string typed) => Assert.False(BlockHeight.TryParse(typed, out _));
+}
+
+public class RestoreHeightTests
+{
+    private static readonly DateTimeOffset Jan2024 = DateTimeOffset.FromUnixTimeSeconds(1704067200); // 2024-01-01T00:00Z
+
+    [Theory]
+    // Hand-computed from wallet2::get_approximate_blockchain_height (monero master, 2026-10):
+    // latest-fork block + (t - fork time) / 120 - per-network correction.
+    [InlineData(MoneroNetwork.Mainnet, 3_051_325UL)]  // 2,689,608 + 395,317 - 33,600
+    [InlineData(MoneroNetwork.Stagenet, 1_498_437UL)] // 1,151,720 + 395,317 - 48,600
+    [InlineData(MoneroNetwork.Testnet, 2_384_035UL)]  // 1,983,520 + 427,115 - 26,600
+    public void Estimate_Matches_Upstream_Formula(MoneroNetwork network, ulong expected) =>
+        Assert.Equal(expected, RestoreHeights.ApproximateTip(network, Jan2024));
+
+    [Fact]
+    public void Estimate_Advances_One_Block_Per_Two_Minutes() =>
+        Assert.Equal(720UL, RestoreHeights.ApproximateTip(MoneroNetwork.Mainnet, Jan2024.AddDays(1)) - RestoreHeights.ApproximateTip(MoneroNetwork.Mainnet, Jan2024));
+
+    [Fact]
+    public void A_Clock_Before_Genesis_Gives_Zero_Not_An_Underflow() =>
+        Assert.Equal(0UL, RestoreHeights.ApproximateTip(MoneroNetwork.Mainnet, DateTimeOffset.UnixEpoch));
+
+    [Fact]
+    public void A_Node_Below_The_Estimate_Is_Used_As_Reported()
+    {
+        ulong tip = RestoreHeights.ApproximateTip(MoneroNetwork.Mainnet, Jan2024) - 5_000;
+        Assert.Equal(tip - RestoreHeights.SafetyMargin, RestoreHeights.ForNewSeed(tip, MoneroNetwork.Mainnet, Jan2024));
+    }
+
+    [Fact]
+    public void A_Node_Claiming_A_Far_Future_Height_Is_Capped_By_The_Clock()
+    {
+        ulong estimate = RestoreHeights.ApproximateTip(MoneroNetwork.Mainnet, Jan2024);
+        Assert.Equal(estimate - RestoreHeights.SafetyMargin, RestoreHeights.ForNewSeed(99_999_999, MoneroNetwork.Mainnet, Jan2024));
+    }
+
+    [Fact]
+    public void A_Young_Private_Chain_Uses_Its_Real_Tip()
+    {
+        Assert.Equal(1_000UL - RestoreHeights.SafetyMargin, RestoreHeights.ForNewSeed(1_000, MoneroNetwork.Mainnet, Jan2024));
+        Assert.Equal(0UL, RestoreHeights.ForNewSeed(300, MoneroNetwork.Mainnet, Jan2024));
+    }
 }

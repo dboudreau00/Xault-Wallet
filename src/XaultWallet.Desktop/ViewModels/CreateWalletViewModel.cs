@@ -560,10 +560,9 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
             ulong tipNow = needTip ? await GetTipHeightAsync() : 0UL;
             static ulong ClampToTip(ulong captured, ulong tip) => tip == 0 ? captured : Math.Min(captured, tip);
 
-            // "Newest blocks only" never means the bare tip: back off the same safety margin the
-            // generator uses (absorbs a reorg or a node slightly ahead; costs seconds of scanning).
-            ulong margin = MoneroWalletService.GeneratedSeedRestoreMargin;
-            ulong recentStart = tipNow > margin ? tipNow - margin : 0;
+            // "Newest blocks only" never means the bare tip: the node's claim is capped by the
+            // clock-based chain estimate and backed off a safety margin (RestoreHeights.ForNewSeed).
+            ulong recentStart = tipNow == 0 ? 0 : RestoreHeights.ForNewSeed(tipNow, Network, DateTimeOffset.UtcNow);
 
             ulong realRestore;
             if (CreateNewReal)

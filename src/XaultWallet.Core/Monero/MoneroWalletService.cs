@@ -39,13 +39,8 @@ public sealed class MoneroWalletService : IAsyncDisposable
         };
     }
 
-    /// <summary>
-    /// Blocks a freshly generated seed's restore height sits below the chain tip observed just
-    /// before generation (~1 day at 2-minute blocks). A brand-new address cannot have received
-    /// anything earlier; the margin only absorbs a reorg or a node a little ahead of its peers,
-    /// and costs seconds of extra scanning.
-    /// </summary>
-    public const ulong GeneratedSeedRestoreMargin = 720;
+    /// <summary>Blocks a new seed's restore height sits below the tip (see <see cref="RestoreHeights"/>).</summary>
+    public const ulong GeneratedSeedRestoreMargin = RestoreHeights.SafetyMargin;
 
     /// <summary>
     /// Generate a brand-new Monero wallet and return its 25-word mnemonic plus a restore height.
@@ -54,7 +49,8 @@ public sealed class MoneroWalletService : IAsyncDisposable
     /// the caller decides whether to seal the seed into the vault.
     ///
     /// The restore height comes from the DAEMON's tip, read BEFORE the seed exists (so no payment
-    /// to it can sit below that height), minus <see cref="GeneratedSeedRestoreMargin"/>. It is 0
+    /// to it can sit below that height), capped by the clock-based chain estimate and lowered by
+    /// <see cref="GeneratedSeedRestoreMargin"/> (<see cref="RestoreHeights.ForNewSeed"/>). It is 0
     /// (= full scan, always safe) when the daemon is unreachable. Note: wallet-rpc's own get_height
     /// right after create_wallet reports its local chain (1 on a fresh wallet), not the tip —
     /// sealing that made every unlock of a "new" wallet rescan the whole chain.
@@ -75,6 +71,8 @@ public sealed class MoneroWalletService : IAsyncDisposable
         await using var proc = new MoneroProcessManager(_walletRpcBinary, _options);
         using MoneroRpcClient rpc = await proc.StartServerAsync(network, daemonAddress, ct).ConfigureAwait(false);
 
+        // The seed comes back in a response: an impostor on the port could hand us a seed it knows.
+        proc.EnsureBackendIsOurs();
         string ephemeralPw = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(24));
         await rpc.CreateWalletAsync("gen", ephemeralPw, "English", ct).ConfigureAwait(false);
 
@@ -87,7 +85,7 @@ public sealed class MoneroWalletService : IAsyncDisposable
             throw new InvalidOperationException("monero-wallet-rpc returned an empty mnemonic.");
         }
 
-        return (mnemonic.Trim(), tip > GeneratedSeedRestoreMargin ? tip - GeneratedSeedRestoreMargin : 0);
+        return (mnemonic.Trim(), tip == 0 ? 0 : RestoreHeights.ForNewSeed(tip, network, DateTimeOffset.UtcNow));
     }
 
     /// <summary>

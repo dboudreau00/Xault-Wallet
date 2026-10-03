@@ -25,9 +25,9 @@ The duress scenario is the one where the adversary DOES hold a password — the 
 the device. So the decoy must also be indistinguishable from the inside:
 
 - Every slot decrypts to the same JSON shape (payload v2: no "real"/"decoy" kind, no label). An
-  examiner who decrypts the decoy with the duress password sees exactly what the only wallet of a
-  single-wallet vault looks like. (Vault payload v1 stored `"kind":1` in the decoy; v1 slots are
-  re-sealed as v2 the first time their password is used.)
+  examiner who decrypts a decoy created by 0.2 with the duress password sees exactly what the only
+  wallet of a single-wallet vault looks like. **Vaults created by 0.1 are the exception until each
+  slot has been converted** — see [Upgrading from 0.1](#upgrading-from-01).
 - Every operation is symmetric: unlock, change password and change node work identically for either
   slot, with identical wording. A duress unlock does the same key-derivation work as a normal one.
 - Wipe-on-duress fires on ANY use of the duress password, then clears its own flag (re-sealing with
@@ -39,10 +39,17 @@ the device. So the decoy must also be indistinguishable from the inside:
 requires per-session random HTTP Digest credentials. They are passed through a private config file
 (`0600`, inside a `0700` session folder) rather than the command line — other local users can read a
 process's command line — and the file is shredded once the server is up. This blocks web pages
-(cross-site POSTs, DNS rebinding) and other local users from driving the open wallet. Before any
-seed is sent, the app checks that the listening socket belongs to the process it started (Linux,
-Windows), so a process that grabbed the port first cannot receive it. wallet-rpc's own log and ring
-database are kept in the same session folder, which is shredded on lock.
+(cross-site POSTs, DNS rebinding) and other local users from driving the open wallet. Digest auth
+cannot authenticate the *server* (monero sends no `rspauth`), so before any seed is sent — and before
+a new seed is generated — the app checks that every listener that could answer on that port belongs
+to the process it started and that the process is still running (Linux, Windows). The check fails
+closed: if ownership can't be confirmed, nothing is sent. wallet-rpc's own log and ring database
+are kept in the same session folder, which is shredded on lock.
+
+**The wallet-rpc binary.** It is only ever started from a fully-qualified path. A bare name in
+Settings ("monero-wallet-rpc") is looked up on `PATH`; a relative path is refused. Handing a
+relative name to the OS would make it search the app's folder and then the *current directory*,
+so a file planted wherever the app was launched from could be started and handed the seed.
 
 ## What is NOT protected — read this
 
@@ -75,7 +82,9 @@ swap, crash dumps, file-system journals). Specifically:
   decoy *offline* — without the app ever opening it — can read `wipeOther: true` and infer a second
   wallet existed. The instruction has to be readable with the duress password; once the app opens the
   decoy, the flag is consumed and gone. Without wipe-on-duress the decoy is indistinguishable.
-- **macOS:** the port-ownership check is not implemented there.
+- **macOS:** the port-ownership check is not implemented there; the app relies on the per-session
+  digest credentials alone.
+- **Vaults upgraded from 0.1** — see [Upgrading from 0.1](#upgrading-from-01).
 - **The ring database** now lives only for the session. Monero keeps it so a wallet re-uses the same
   rings across a chain split; losing it each session only matters during a contentious fork.
 
@@ -104,12 +113,52 @@ directory holds wallet-rpc's restored wallet, its log and ring database; it is s
 swept on the next launch after a crash. If you download a seed backup, that file *is* plaintext by
 design; store it offline and delete any on-disk copy.
 
+**File permissions (Linux/macOS).** The data folder is `0700` and everything the app writes in it —
+vault, settings, logs, kept vault copies — is `0600`, whatever your umask. Installs made by earlier
+versions are tightened at startup. Vault exports, seed backups and history exports are also written
+`0600` when the save dialog hands back a local path. (Before this, a umask of `022` — the common
+default — left the vault and any seed backup readable by every account on the machine.) On Windows
+the per-user profile ACLs on `%APPDATA%` provide the equivalent; the app changes nothing there.
+
+## Upgrading from 0.1
+
+0.2 changed what is sealed inside each slot (payload v2, above). The app can only re-seal a slot
+while it is open, so a vault created by 0.1 is converted **one slot at a time, each by its own
+password**:
+
+- The first unlock with a password converts that password's slot. The app then shows a one-time
+  notice — the *same* notice for either password, so it says nothing about which wallet opened.
+- **Until the duress password is used once in 0.2, a decoy slot made by 0.1 still contains
+  `"kind":1` (and `"duressWipeReal"`) inside its encryption.** Anyone holding the vault file and the
+  duress password can read that and know a second wallet exists — the exact leak 0.2 removes.
+- Using the duress password converts its slot — and, if you enabled wipe-on-duress in 0.1, also
+  wipes the main wallet, exactly as it always would have. Don't "unlock with it once to upgrade it"
+  while that option is on.
+- Copies made before the upgrade — exported backups, file-system snapshots, sync/cloud history —
+  stay in the 0.1 format forever.
+
+If you never set a duress password in 0.1, the upgrade is complete after your first unlock. If you
+did, the clean fix is to rebuild the vault in 0.2:
+
+1. Have both seeds (main and decoy) and their restore heights written down, and check them.
+2. Settings → **Open data folder**, quit the app, and move `vault.xv` somewhere offline as a fallback.
+3. Start the app (it now offers to create a vault), choose **Import** for the main seed and for the
+   decoy seed, and set both passwords.
+4. Unlock with each password to confirm the right wallet opens. Then destroy the old `vault.xv` and
+   every exported copy of it.
+
 ## Choosing a daemon
 
 A remote/public node can see which blocks your wallet asks about and your broadcast
 transactions' timing/origin. For maximum privacy run your own `monerod`, or route the daemon
 connection over Tor. XaultWallet passes your daemon address straight through to
 `monero-wallet-rpc`; it does not add network-level privacy on its own.
+
+A node also supplies the chain height a *new* seed starts scanning from. A height above the block
+that holds a payment would hide that payment until the wallet is restored with an earlier height,
+so the app never accepts more than the clock-based estimate monero's own wallet uses
+(`wallet2::get_approximate_blockchain_height`), minus a one-day margin. A node can still lie in many
+other ways (balances, history, fees); a node you don't run is trusted for all of them.
 
 ## Before trusting this with real funds
 

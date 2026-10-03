@@ -14,6 +14,15 @@ namespace XaultWallet.Core.Monero;
 /// </summary>
 internal static class LoopbackPortOwnership
 {
+    /// <summary>Platforms where ownership can be checked. Elsewhere (macOS) the check reports null.</summary>
+    public static bool IsSupported => OperatingSystem.IsLinux() || OperatingSystem.IsWindows();
+
+    /// <summary>
+    /// Fail-closed reading of <see cref="IsListenerOwnedBy"/>: on a supported platform only a definite
+    /// "yes" is trusted — "can't tell" (an unreadable table, a process that vanished mid-check) is a no.
+    /// </summary>
+    public static bool IsTrusted(bool? owned) => owned == true || (owned is null && !IsSupported);
+
     /// <summary>True/false when the platform can tell; null when it cannot (e.g. macOS).</summary>
     public static bool? IsListenerOwnedBy(int pid, int port)
     {
@@ -60,14 +69,24 @@ internal static class LoopbackPortOwnership
             return false; // nobody (visible) is listening there
         }
 
+        // A process that has exited (and been reaped) owns nothing. This is exactly the hijack case:
+        // the child failed to bind because someone else holds the port, then died — so a missing
+        // /proc entry is a definite "no", never "can't tell".
         var childSockets = new HashSet<string>(StringComparer.Ordinal);
-        foreach (string fd in Directory.EnumerateFileSystemEntries($"/proc/{pid}/fd"))
+        try
         {
-            string? target = new FileInfo(fd).LinkTarget; // "socket:[12345]"
-            if (target is not null && target.StartsWith("socket:[", StringComparison.Ordinal) && target.EndsWith(']'))
+            foreach (string fd in Directory.EnumerateFileSystemEntries($"/proc/{pid}/fd"))
             {
-                childSockets.Add(target["socket:[".Length..^1]);
+                string? target = new FileInfo(fd).LinkTarget; // "socket:[12345]"
+                if (target is not null && target.StartsWith("socket:[", StringComparison.Ordinal) && target.EndsWith(']'))
+                {
+                    childSockets.Add(target["socket:[".Length..^1]);
+                }
             }
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return false;
         }
 
         return listeners.All(childSockets.Contains);
@@ -79,6 +98,7 @@ internal static class LoopbackPortOwnership
     private const int TcpTableOwnerPidListener = 3;
     private const uint NoError = 0;
     private const uint ErrorInsufficientBuffer = 122;
+    private const uint LoopbackNetworkOrder = 0x0100007F; // 127.0.0.1 as stored by the table
 
     [StructLayout(LayoutKind.Sequential)]
     private struct MibTcpRowOwnerPid
@@ -118,7 +138,9 @@ internal static class LoopbackPortOwnership
                     var row = Marshal.PtrToStructure<MibTcpRowOwnerPid>(buf + 4 + (i * rowSize));
                     // dwLocalPort holds the port in network byte order in its low 16 bits.
                     int rowPort = (int)(((row.LocalPort & 0xFF) << 8) | ((row.LocalPort >> 8) & 0xFF));
-                    if (rowPort != port)
+                    // Only listeners that would receive a 127.0.0.1 connection matter: the loopback
+                    // address itself or the wildcard (dwLocalAddr is in network byte order too).
+                    if (rowPort != port || (row.LocalAddr != LoopbackNetworkOrder && row.LocalAddr != 0))
                     {
                         continue;
                     }

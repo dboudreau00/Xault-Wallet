@@ -107,19 +107,29 @@
             </StackPanel>
         </Border>
 
-        <!-- ================= Startup failure banner ================= -->
-        <Border Grid.Row="1" IsVisible="{Binding StartupFailed}" Margin="0,14,0,0" Classes="callout danger">
-            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
-                <c:Icon Grid.Column="0" Data="{StaticResource IconWarning}" Foreground="{StaticResource DangerBrush}"
-                        VerticalAlignment="Center" Margin="0,0,12,0"/>
-                <TextBlock Grid.Column="1" VerticalAlignment="Center" Foreground="#F3C2C2" Margin="0,0,12,0"
-                           Text="{Binding Status}"/>
-                <Button Grid.Column="2" Content="Open Settings" Command="{Binding OpenSettingsCommand}"
-                        VerticalAlignment="Center" Margin="0,0,8,0"/>
-                <Button Grid.Column="3" Content="Retry" Classes="accent" Command="{Binding RetryStartupCommand}"
-                        VerticalAlignment="Center"/>
-            </Grid>
-        </Border>
+        <!-- ================= Notices: startup failure, format upgrade ================= -->
+        <StackPanel Grid.Row="1">
+            <Border IsVisible="{Binding HasUpgradeNotice}" Margin="0,14,0,0" Classes="callout">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <c:Icon Grid.Column="0" Data="{StaticResource IconShield}" Foreground="{StaticResource InfoBrush}"
+                            VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <TextBlock Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0" Text="{Binding UpgradeNotice}"/>
+                    <Button Grid.Column="2" Content="Dismiss" Command="{Binding DismissUpgradeNoticeCommand}" VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+            <Border IsVisible="{Binding StartupFailed}" Margin="0,14,0,0" Classes="callout danger">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <c:Icon Grid.Column="0" Data="{StaticResource IconWarning}" Foreground="{StaticResource DangerBrush}"
+                            VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <TextBlock Grid.Column="1" VerticalAlignment="Center" Foreground="#F3C2C2" Margin="0,0,12,0"
+                               Text="{Binding Status}"/>
+                    <Button Grid.Column="2" Content="Open Settings" Command="{Binding OpenSettingsCommand}"
+                            VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <Button Grid.Column="3" Content="Retry" Classes="accent" Command="{Binding RetryStartupCommand}"
+                            VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+        </StackPanel>
 
         <!-- ================= Navigation + panels ================= -->
         <TabControl Grid.Row="2" Classes="segmented" Margin="0,18,0,0" Padding="0" IsEnabled="{Binding IsReady}">

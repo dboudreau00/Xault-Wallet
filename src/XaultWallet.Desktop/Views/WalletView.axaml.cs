@@ -72,9 +72,7 @@ public partial class WalletView : UserControl
                 return; // user cancelled
             }
 
-            await using Stream stream = await file.OpenWriteAsync();
-            await using var writer = new StreamWriter(stream);
-            await writer.WriteAsync(vm.BuildHistoryCsv());
+            await PickedFile.WriteTextAsync(file, vm.BuildHistoryCsv());
             vm.CopyNotice = "History exported.";
         }
         catch (Exception ex)

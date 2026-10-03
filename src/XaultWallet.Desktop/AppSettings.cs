@@ -1,4 +1,5 @@
 using System.Text.Json;
+using XaultWallet.Core.Security;
 
 namespace XaultWallet.Desktop;
 
@@ -73,7 +74,7 @@ public sealed class AppSettings
         string tmp = path + ".tmp";
         try
         {
-            File.WriteAllText(tmp, JsonSerializer.Serialize(this, Options));
+            PrivateFiles.WriteAllText(tmp, JsonSerializer.Serialize(this, Options));
             if (File.Exists(path))
             {
                 File.Replace(tmp, path, destinationBackupFileName: null);

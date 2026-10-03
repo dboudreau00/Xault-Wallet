@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Globalization;
 
 namespace XaultWallet.Core.Monero;
@@ -5,7 +6,9 @@ namespace XaultWallet.Core.Monero;
 /// <summary>Culture-independent parsing of a typed block height.</summary>
 public static class BlockHeight
 {
-    private static readonly char[] Separators = [',', '.', '\'', '_', ' ', ' ', ' '];
+    // One kind of separator per number: comma, dot, apostrophe, underscore, space, no-break space,
+    // narrow no-break space. Cached SearchValues: the vectorised lookup for a set this size (CA1870).
+    private static readonly SearchValues<char> Separators = SearchValues.Create(",.'_ \u00A0\u202F");
 
     /// <summary>
     /// Plain digits, or digits grouped in threes with ONE kind of separator ("3,150,000",
@@ -21,7 +24,7 @@ public static class BlockHeight
             return false;
         }
 
-        int firstSep = s.IndexOfAny(Separators);
+        int firstSep = s.AsSpan().IndexOfAny(Separators);
         if (firstSep >= 0)
         {
             char sep = s[firstSep];

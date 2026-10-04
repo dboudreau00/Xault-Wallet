@@ -3,8 +3,8 @@ name: Release
 # Builds single-file, self-contained executables for each platform and attaches them (plus
 # SHA256SUMS) to a DRAFT GitHub release for review. Two ways to start it:
 #
-#   1. Push a tag like v0.2.0-beta.
-#   2. Actions -> Release -> Run workflow, and give "version" (e.g. v0.2.0-beta). The draft is created
+#   1. Push a tag like v0.3.0-beta.
+#   2. Actions -> Release -> Run workflow, and give "version" (e.g. v0.3.0-beta). The draft is created
 #      for that version, targeting the commit the run started from. The git tag is created by GitHub
 #      only when a person presses Publish on the draft; this workflow never creates or moves a tag.
 #
@@ -21,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag to prepare a DRAFT release for, e.g. v0.2.0-beta. Empty = build only (dry run).'
+        description: 'Version tag to prepare a DRAFT release for, e.g. v0.3.0-beta. Empty = build only (dry run).'
         required: false
         default: ''
         type: string
@@ -174,7 +174,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # A pre-release version (v0.2.0-beta) must never show up as the repository's "Latest release".
+          # A pre-release version (v0.3.0-beta) must never show up as the repository's "Latest release".
           pre=""; case "$TAG" in *-*) pre="--prerelease" ;; esac
           # --target pins the tag GitHub will create on Publish to the commit that was built. It is
           # ignored when the tag already exists (route 1).

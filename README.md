@@ -326,9 +326,14 @@ dotnet run --project src/XaultWallet.Desktop    # run the app
   `dotnet run -c Release --project tools/UiSnapshots -- ui-snapshots`
 - **Integration tests** against a real `monero-wallet-rpc` — a private regtest chain is the quickest:
   see [STAGENET-TESTING.md](STAGENET-TESTING.md#automated-integration-tests-regtest).
+- **End-to-end tests** of the whole app through its UI (create, duress, receive, send, history), on
+  Linux in process and on Windows against the released exe: see
+  [STAGENET-TESTING.md](STAGENET-TESTING.md#end-to-end-tests-the-whole-app-through-its-ui).
 
-CI (GitHub Actions) runs all of the above on Linux and Windows; pushing a `v*` tag drafts a release
-with single-file builds for Windows, Linux and macOS plus `SHA256SUMS`.
+CI (GitHub Actions) runs all of the above on every push: unit tests on Linux and Windows, the regtest
+integration and end-to-end tests on Linux, the UI smoke test, and the Windows end-to-end test of the
+published exe. A release is drafted only after that Windows test passes on the exact zip being
+released; see [RELEASE.md](RELEASE.md#automated-releases-github-actions).
 
 ## Troubleshooting
 

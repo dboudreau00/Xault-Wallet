@@ -62,7 +62,10 @@ a compromised machine is compromised.
 
 **A compromised operating system.** Keyloggers, malicious kernels, screen capture, and
 hypervisor-level attackers defeat any user-space wallet. This app cannot protect a password
-typed into a machine that is already owned.
+typed into a machine that is already owned. Other programs in your desktop session can also read
+what the app shows (screen capture, or accessibility APIs for visible text such as your seed words
+while they are displayed). Masked password boxes are the exception: since 0.3 they accept input from
+assistive tools but never hand their text out.
 
 **Secure deletion on SSDs.** The temp-file shredder overwrites bytes before deleting, but on
 SSDs with wear-levelling, and on copy-on-write or journaling filesystems, the original blocks

@@ -78,6 +78,7 @@ internal static class Program
 
             Console.WriteLine("wrote " + path);
             CheckAccessibleNames(name, window);
+            CheckPasswordsStayPrivate(name, window);
             CheckEntrancesSettled(name, window);
             if (name == "wallet-receive" && window.DataContext is MainWindowViewModel { Current: WalletViewModel wallet })
             {
@@ -119,6 +120,13 @@ internal static class Program
             return 1;
         }
 
+        if (CheckedSecrets == 0)
+        {
+            Console.WriteLine("FAIL: no filled password box was rendered, so password privacy went unchecked.");
+            return 1;
+        }
+
+        Console.WriteLine($"Privacy ok: {CheckedSecrets} filled password boxes, none readable through UI Automation.");
         Console.WriteLine("OK: all screens rendered with zero binding errors.");
         return 0;
     }
@@ -213,6 +221,27 @@ internal static class Program
 
         window.Close();
     }
+
+    /// <summary>A masked text box must not hand its text to other programs through UI Automation
+    /// (Avalonia's TextBox does, password or not: any process in the session could read it).</summary>
+    private static void CheckPasswordsStayPrivate(string screen, Window window)
+    {
+        foreach (TextBox box in window.GetVisualDescendants().OfType<TextBox>().Where(b => b.PasswordChar != default && !string.IsNullOrEmpty(b.Text)))
+        {
+            var peer = Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(box);
+            string? exposed = peer.GetProvider<Avalonia.Automation.Provider.IValueProvider>()?.Value;
+            if (!string.IsNullOrEmpty(exposed))
+            {
+                Failures.Add($"[{screen}] {Avalonia.Automation.AutomationProperties.GetAutomationId(box)} exposes its password through UI Automation");
+            }
+            else
+            {
+                CheckedSecrets++;
+            }
+        }
+    }
+
+    private static int CheckedSecrets;
 
     /// <summary>After the entrances have had time to play, nothing that rises in may still be
     /// transparent or displaced: a stuck entrance is a blank screen.</summary>

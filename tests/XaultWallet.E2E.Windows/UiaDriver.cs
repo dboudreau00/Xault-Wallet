@@ -174,7 +174,7 @@ internal sealed class UiaDriver : IAppDriver
 
     public async Task ScreenshotAsync(string name)
     {
-        await Task.Delay(700); // entrance transitions
+        await Task.Delay(900); // entrances (staggered up to ~0.6 s)
         Directory.CreateDirectory(_screenshots);
         using CaptureImage image = Capture.Element(_window);
         image.ToFile(Path.Combine(_screenshots, name + ".png"));

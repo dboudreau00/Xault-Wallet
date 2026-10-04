@@ -11,7 +11,11 @@ namespace XaultWallet.Desktop;
 
 public partial class App : Application
 {
-    public override void Initialize() => AvaloniaXamlLoader.Load(this);
+    public override void Initialize()
+    {
+        Motion.RegisterAnimators(); // before any style animation can start
+        AvaloniaXamlLoader.Load(this);
+    }
 
     public override void OnFrameworkInitializationCompleted()
     {

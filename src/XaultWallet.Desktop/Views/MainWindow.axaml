@@ -2,13 +2,15 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
         xmlns:c="clr-namespace:XaultWallet.Desktop.Controls"
+        xmlns:app="clr-namespace:XaultWallet.Desktop"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="920" d:DesignHeight="660"
         x:Class="XaultWallet.Desktop.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="XaultWallet" Width="1080" Height="760"
-        MinWidth="900" MinHeight="600"
+        MinWidth="900" MinHeight="560"
+        WindowStartupLocation="CenterScreen"
         Icon="/Assets/xault.ico"
         Background="{StaticResource AppBg}"
         ExtendClientAreaToDecorationsHint="True"
@@ -34,7 +36,7 @@
                                Margin="-6,0,0,0" Foreground="{StaticResource TextSecondary}"/>
                 </StackPanel>
 
-                <Button Grid.Column="1" Classes="ghost" AutomationProperties.AutomationId="Shell.Settings" Command="{Binding OpenSettingsCommand}"
+                <Button Grid.Column="1" Classes="ghost" AutomationProperties.AutomationId="Shell.Settings" AutomationProperties.Name="Settings" Command="{Binding OpenSettingsCommand}"
                         IsVisible="{Binding !SettingsOpen}" VerticalAlignment="Center"
                         HorizontalAlignment="Right" Margin="0,0,10,0" Padding="12,7">
                     <StackPanel Orientation="Horizontal" Spacing="8">
@@ -61,9 +63,11 @@
             </Grid>
         </Border>
 
+        <!-- Screen changes: the old screen fades out, the new one rises into place (instant with
+             reduced motion; see Motion). -->
         <TransitioningContentControl Grid.Row="1" Content="{Binding Current}" Margin="0">
             <TransitioningContentControl.PageTransition>
-                <CrossFade Duration="0:0:0.30"/>
+                <app:FadeLiftTransition/>
             </TransitioningContentControl.PageTransition>
         </TransitioningContentControl>
     </Grid>

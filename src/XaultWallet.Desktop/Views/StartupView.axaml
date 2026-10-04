@@ -2,14 +2,15 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
              xmlns:c="clr-namespace:XaultWallet.Desktop.Controls"
+             xmlns:app="clr-namespace:XaultWallet.Desktop"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="620"
              x:Class="XaultWallet.Desktop.Views.StartupView"
              x:DataType="vm:StartupViewModel">
 
-    <!-- Opacity-only animations: the one primitive Avalonia is guaranteed to interpolate.
-         Staggered via Delay so the entrance still feels sequenced. -->
+    <!-- The glow pulses (a looping style animation: nothing is committed when it stops). The mark
+         and text fade in staggered through app:Entrance (see Motion.cs for why not styles). -->
     <UserControl.Styles>
         <Style Selector="Ellipse.glowPulse">
             <Style.Animations>
@@ -21,45 +22,6 @@
             </Style.Animations>
         </Style>
 
-        <Style Selector="Border.fadeSeq">
-            <Setter Property="Opacity" Value="0"/>
-            <Style.Animations>
-                <Animation Duration="0:0:0.5" FillMode="Forward" Easing="CubicEaseOut">
-                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
-                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/></KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
-
-        <Style Selector="Ellipse.fadeDot">
-            <Setter Property="Opacity" Value="0"/>
-            <Style.Animations>
-                <Animation Duration="0:0:0.4" Delay="0:0:0.35" FillMode="Forward" Easing="CubicEaseOut">
-                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
-                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/></KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
-
-        <Style Selector="StackPanel.fadeA">
-            <Setter Property="Opacity" Value="0"/>
-            <Style.Animations>
-                <Animation Duration="0:0:0.5" Delay="0:0:0.3" FillMode="Forward" Easing="CubicEaseOut">
-                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
-                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/></KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
-
-        <Style Selector="StackPanel.fadeB">
-            <Setter Property="Opacity" Value="0"/>
-            <Style.Animations>
-                <Animation Duration="0:0:0.5" Delay="0:0:0.55" FillMode="Forward" Easing="CubicEaseOut">
-                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
-                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/></KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
     </UserControl.Styles>
 
     <Grid>
@@ -70,7 +32,7 @@
                 <Ellipse Classes="glowPulse" Width="140" Height="140" HorizontalAlignment="Center" VerticalAlignment="Center"
                          Fill="{StaticResource AccentBrush}"/>
 
-                <Border Classes="fadeSeq" Width="86" Height="86" CornerRadius="24"
+                <Border app:Entrance.Fade="0" Width="86" Height="86" CornerRadius="24"
                         HorizontalAlignment="Center" VerticalAlignment="Center"
                         Background="{StaticResource Surface}" BorderBrush="{StaticResource BorderStrong}"
                         BorderThickness="1" BoxShadow="0 16 44 -8 #77000000">
@@ -81,20 +43,20 @@
                             <Line StartPoint="59,25" EndPoint="27,61" Stroke="{StaticResource TextPrimary}"
                                   StrokeThickness="8.5" StrokeLineCap="Round"/>
                         </Canvas>
-                        <Ellipse Classes="fadeDot" Width="11" Height="11" HorizontalAlignment="Center" VerticalAlignment="Center"
+                        <Ellipse app:Entrance.Fade="350" Width="11" Height="11" HorizontalAlignment="Center" VerticalAlignment="Center"
                                  Fill="{StaticResource Surface}" Stroke="{StaticResource AccentBrush}" StrokeThickness="2.5"/>
                     </Grid>
                 </Border>
             </Grid>
 
-            <StackPanel Classes="fadeA" Spacing="5">
+            <StackPanel app:Entrance.Fade="300" Spacing="5">
                 <c:NamedTextBlock HorizontalAlignment="Center" AutomationProperties.Name="XaultWallet">
                     <Run Text="Xault" FontSize="24" FontWeight="Bold"/><Run Text="Wallet" FontSize="24" FontWeight="Light" Foreground="{StaticResource TextSecondary}"/>
                 </c:NamedTextBlock>
                 <TextBlock AutomationProperties.AutomationId="Startup.Status" Text="{Binding Status}" Classes="muted" HorizontalAlignment="Center"/>
             </StackPanel>
 
-            <StackPanel Classes="fadeB" Spacing="14">
+            <StackPanel app:Entrance.Fade="550" Spacing="14">
                 <ProgressBar IsIndeterminate="True" IsVisible="{Binding Checking}" Height="3" Width="220"
                              HorizontalAlignment="Center"/>
                 <TextBlock AutomationProperties.AutomationId="Startup.Detail" Text="{Binding Detail}" Classes="eyebrow" HorizontalAlignment="Center"

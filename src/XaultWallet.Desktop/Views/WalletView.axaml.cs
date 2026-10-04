@@ -1,6 +1,8 @@
 using System;
+using System.ComponentModel;
 using System.IO;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
@@ -10,7 +12,114 @@ namespace XaultWallet.Desktop.Views;
 
 public partial class WalletView : UserControl
 {
-    public WalletView() => InitializeComponent();
+    private WalletViewModel? _vm;
+    private bool _balanceShown;
+    private int _toastSequence;
+    private System.Threading.CancellationTokenSource? _toastMotion;
+
+    public WalletView()
+    {
+        InitializeComponent();
+
+        // A tab's content rises into place when it's chosen. SelectionChanged bubbles up from every
+        // selector inside the tabs (the priority box...), hence the source check.
+        Tabs.SelectionChanged += (_, e) =>
+        {
+            if (ReferenceEquals(e.Source, Tabs) && Tabs.SelectedContent is Visual page)
+            {
+                _ = Motion.RiseInAsync(page, distance: 8, milliseconds: 240);
+            }
+        };
+    }
+
+    protected override void OnDataContextChanged(EventArgs e)
+    {
+        base.OnDataContextChanged(e);
+        if (_vm is not null)
+        {
+            _vm.PropertyChanged -= OnViewModelChanged;
+        }
+
+        _vm = DataContext as WalletViewModel;
+        _balanceShown = false;
+        if (_vm is not null)
+        {
+            _vm.PropertyChanged += OnViewModelChanged;
+        }
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        if (_vm is not null)
+        {
+            _vm.PropertyChanged -= OnViewModelChanged;
+            _vm = null;
+        }
+    }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        if (_vm is null && DataContext is WalletViewModel vm)
+        {
+            _vm = vm;
+            _vm.PropertyChanged += OnViewModelChanged;
+        }
+    }
+
+    /// <summary>Motion that follows the wallet's state: what changed is where the eye goes.</summary>
+    private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_vm is null)
+        {
+            return;
+        }
+
+        switch (e.PropertyName)
+        {
+            case nameof(WalletViewModel.Balance):
+                // Not the first figure after unlocking: only money arriving or leaving.
+                if (_balanceShown)
+                {
+                    _ = Motion.PulseAsync(BalanceText);
+                }
+
+                _balanceShown = true;
+                break;
+            case nameof(WalletViewModel.SendResult) when _vm.SendResult.Length > 0:
+                _ = Motion.PopInAsync(SendOutcomeCard);
+                break;
+            case nameof(WalletViewModel.ShowSendConfirm) when _vm.ShowSendConfirm:
+                _ = Motion.FadeInAsync(ConfirmScrim, 180);
+                _ = Motion.RiseInAsync(ConfirmSheet, distance: 16, milliseconds: 300);
+                break;
+        }
+    }
+
+    /// <summary>Brief feedback at the bottom of the window, on whichever tab is open.</summary>
+    private async void ShowToast(string text, bool ok = true)
+    {
+        int sequence = ++_toastSequence;
+        _toastMotion?.Cancel(); // e.g. the previous toast's fade-out: never two opacity animations at once
+        var motion = _toastMotion = new System.Threading.CancellationTokenSource();
+        ToastText.Text = text;
+        ToastOk.IsVisible = ok;
+        ToastProblem.IsVisible = !ok;
+        Toast.IsVisible = true;
+        await Motion.RiseInAsync(Toast, distance: 10, milliseconds: 220, motion.Token);
+        await Task.Delay(TimeSpan.FromSeconds(ok ? 3.5 : 6));
+        if (sequence != _toastSequence)
+        {
+            return; // a newer message took over
+        }
+
+        await Motion.FadeOutAsync(Toast, 240, motion.Token);
+        if (sequence == _toastSequence)
+        {
+            Toast.IsVisible = false;
+        }
+    }
 
     private async void CopyAddress_Click(object? sender, RoutedEventArgs e)
     {
@@ -73,11 +182,11 @@ public partial class WalletView : UserControl
             }
 
             await PickedFile.WriteTextAsync(file, vm.BuildHistoryCsv());
-            vm.CopyNotice = "History exported.";
+            ShowToast("History exported.");
         }
         catch (Exception ex)
         {
-            vm.CopyNotice = "Export failed: " + ex.Message;
+            ShowToast("Export failed: " + ex.Message, ok: false);
         }
     }
 
@@ -89,7 +198,6 @@ public partial class WalletView : UserControl
 
     private async Task CopyToClipboardAsync(string? text, string what = "Value")
     {
-        WalletViewModel? vm = DataContext as WalletViewModel;
         try
         {
             if (string.IsNullOrWhiteSpace(text)
@@ -97,19 +205,12 @@ public partial class WalletView : UserControl
             {
                 // Never let a copy fail silently: the user may otherwise paste stale
                 // clipboard content (e.g. an OLD address) somewhere irreversible.
-                if (vm is not null)
-                {
-                    vm.CopyNotice = "Nothing was copied — the clipboard is unavailable.";
-                }
-
+                ShowToast("Nothing was copied — the clipboard is unavailable.", ok: false);
                 return;
             }
 
             await clipboard.SetTextAsync(text);
-            if (vm is not null)
-            {
-                vm.CopyNotice = $"{what} copied — clipboard clears in {ClipboardClearDelay.TotalSeconds:0} s.";
-            }
+            ShowToast($"{what} copied — the clipboard clears in {ClipboardClearDelay.TotalSeconds:0} s.");
 
             // Auto-clear: wallet data shouldn't linger for whatever the user pastes next week.
             // Only clear if (a) no newer copy was made from the app and (b) the clipboard still
@@ -123,20 +224,13 @@ public partial class WalletView : UserControl
                 && string.Equals(await clipboard.GetTextAsync(), text, StringComparison.Ordinal))
             {
                 await clipboard.ClearAsync();
-                if (vm is not null && seq == _copySequence)
-                {
-                    vm.CopyNotice = string.Empty;
-                }
             }
         }
         catch
         {
             // Clipboard can be unavailable on some platforms/headless; tell the user rather
             // than pretend the copy happened.
-            if (vm is not null)
-            {
-                vm.CopyNotice = "Copy failed — the clipboard is unavailable.";
-            }
+            ShowToast("Copy failed — the clipboard is unavailable.", ok: false);
         }
     }
 }

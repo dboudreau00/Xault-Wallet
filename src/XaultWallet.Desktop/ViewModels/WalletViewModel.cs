@@ -100,7 +100,40 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         }
     }
     [ObservableProperty] private int _sendPriority = 1;
+
+    /// <summary>One line on the outcome of the last send attempt ("Sent 12.5 XMR", or why not).</summary>
     [ObservableProperty] private string _sendResult = string.Empty;
+
+    /// <summary>Second line for a completed send: the fee and when the money moves.</summary>
+    [ObservableProperty] private string _sendResultDetail = string.Empty;
+
+    /// <summary>How <see cref="SendResult"/> is presented: success, "check before retrying", or not sent.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SendSucceeded))]
+    [NotifyPropertyChangedFor(nameof(SendNeedsCheck))]
+    [NotifyPropertyChangedFor(nameof(SendFailed))]
+    private SendOutcome _sendOutcome;
+
+    public bool SendSucceeded => SendOutcome == SendOutcome.Sent;
+
+    public bool SendNeedsCheck => SendOutcome == SendOutcome.NeedsCheck;
+
+    public bool SendFailed => SendOutcome == SendOutcome.Failed;
+
+    // Any message is a "not sent" until a send path says otherwise; clearing it clears the outcome.
+    partial void OnSendResultChanged(string value)
+    {
+        if (value.Length == 0)
+        {
+            SendOutcome = SendOutcome.None;
+            SendResultDetail = string.Empty;
+        }
+        else if (SendOutcome == SendOutcome.None)
+        {
+            SendOutcome = SendOutcome.Failed;
+        }
+    }
+
     [ObservableProperty] private bool _sending;
 
     // Send confirmation overlay (irreversible action — always confirm)
@@ -194,12 +227,9 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     [NotifyPropertyChangedFor(nameof(IsMainnetWallet))]
     private bool _isLocalTestChain;
 
-    /// <summary>Feedback line for the Receive tab (new-subaddress errors, copy feedback) —
-    /// kept OFF the Status line, which the sync tracker overwrites every few seconds.</summary>
+    /// <summary>Feedback line for the Receive tab (new-subaddress errors) — kept OFF the Status
+    /// line, which the sync tracker overwrites every few seconds. Copy feedback is the view's toast.</summary>
     [ObservableProperty] private string _receiveNotice = string.Empty;
-
-    /// <summary>Transient "Copied — clipboard clears in 30 s" feedback, set by the view.</summary>
-    [ObservableProperty] private string _copyNotice = string.Empty;
 
     // Payment proof (the tx key from the most recent send — safe to share for explorer verification)
     [ObservableProperty] private bool _hasLastTx;
@@ -773,7 +803,10 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         {
             string txHash = await _wallet.RelaySendAsync(prepared.TxMetadata, _cts.Token);
             decimal fee = MoneroRpcClient.AtomicToXmr(prepared.Fee);
-            SendResult = $"Sent {XmrAmount.Format(_preparedAmount)} XMR (fee {XmrAmount.Format(fee)} XMR).";
+            SendResult = $"Sent {XmrAmount.Format(_preparedAmount)} XMR";
+            SendResultDetail = $"Network fee {XmrAmount.Format(fee)} XMR. It confirms in about 2 minutes; " +
+                               "your change is spendable again after 10 confirmations (about 20 minutes).";
+            SendOutcome = SendOutcome.Sent;
 
             // Surface the transaction key so the payment can be proven on an explorer.
             LastTxId = string.IsNullOrWhiteSpace(txHash) ? prepared.TxHash : txHash;
@@ -789,6 +822,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             // The broadcast request may already have reached the network before cancellation.
             SendResult = "Send interrupted — the transaction MAY still have been broadcast. " +
                          $"Check History for txid {prepared.TxHash} before sending again.";
+            SendOutcome = SendOutcome.NeedsCheck;
         }
         catch (Exception ex)
         {
@@ -797,6 +831,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             // "check History" is actually actionable.
             SendResult = "Broadcast failed: " + Friendly(ex) +
                          $" The transaction may or may not have reached the network — check History for txid {prepared.TxHash} before sending again.";
+            SendOutcome = SendOutcome.NeedsCheck;
         }
         finally
         {
@@ -831,7 +866,9 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             HasLastTx = !string.IsNullOrWhiteSpace(LastTxId);
             decimal fee = MoneroRpcClient.AtomicToXmr((ulong)sweep.FeeList.Sum(f => (decimal)f));
             string txNote = relayed > 1 ? $" in {relayed} transactions" : "";
-            SendResult = $"Swept {XmrAmount.Format(_preparedAmount)} XMR{txNote} (total fee {XmrAmount.Format(fee)} XMR).";
+            SendResult = $"Swept {XmrAmount.Format(_preparedAmount)} XMR{txNote}";
+            SendResultDetail = $"Total network fee {XmrAmount.Format(fee)} XMR. It confirms in about 2 minutes.";
+            SendOutcome = SendOutcome.Sent;
             SendAddress = string.Empty;
             SendAmountText = string.Empty;
             await SoftRefreshAsync();
@@ -843,6 +880,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
                 : $"{relayed} of {sweep.TxMetadataList.Count} transactions were broadcast before the failure.";
             SendResult = $"Sweep interrupted: {Friendly(ex)} {done} Check History before retrying — " +
                          "re-running the sweep too early can conflict with the transactions already sent.";
+            SendOutcome = SendOutcome.NeedsCheck;
         }
         catch (OperationCanceledException)
         {
@@ -1061,4 +1099,19 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         _refreshGate.Dispose();
         _cts.Dispose();
     }
+}
+
+/// <summary>What happened to the last send attempt, for how the result is shown.</summary>
+public enum SendOutcome
+{
+    None,
+
+    /// <summary>Broadcast to the node.</summary>
+    Sent,
+
+    /// <summary>May or may not have reached the network: check History before trying again.</summary>
+    NeedsCheck,
+
+    /// <summary>Nothing was sent (invalid input, or building the transaction failed).</summary>
+    Failed,
 }

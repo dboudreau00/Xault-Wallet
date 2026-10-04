@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
+             xmlns:app="clr-namespace:XaultWallet.Desktop"
              xmlns:conv="clr-namespace:XaultWallet.Desktop"
              xmlns:c="clr-namespace:XaultWallet.Desktop.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -10,15 +11,6 @@
              x:DataType="vm:WalletViewModel">
 
     <UserControl.Styles>
-        <Style Selector="Border.fadeUp">
-            <Setter Property="Opacity" Value="0"/>
-            <Style.Animations>
-                <Animation Duration="0:0:0.35" FillMode="Forward" Easing="CubicEaseOut">
-                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
-                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/></KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
         <!-- History row hover -->
         <Style Selector="Border.txRow">
             <Setter Property="Background" Value="Transparent"/>
@@ -38,7 +30,7 @@
     <Grid Margin="28,20,28,22" RowDefinitions="Auto,Auto,*">
 
         <!-- ================= Balance + node sync ================= -->
-        <Border Grid.Row="0" Classes="card fadeUp" Padding="26,22,26,20">
+        <Border Grid.Row="0" Classes="card" app:Entrance.Rise="0" Padding="26,22,26,20">
             <StackPanel Spacing="16">
                 <Grid ColumnDefinitions="*,Auto">
                     <StackPanel Grid.Column="0" Spacing="6">
@@ -54,7 +46,7 @@
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="12">
                             <!-- NamedTextBlock: a plain TextBlock made of Runs has no accessible name in Avalonia 11.1 -->
-                            <c:NamedTextBlock AutomationProperties.AutomationId="Wallet.Balance" AutomationProperties.Name="{Binding BalanceDisplay}" Classes="mono" FontSize="40" FontWeight="SemiBold" VerticalAlignment="Bottom">
+                            <c:NamedTextBlock x:Name="BalanceText" AutomationProperties.AutomationId="Wallet.Balance" AutomationProperties.Name="{Binding BalanceDisplay}" Classes="mono" FontSize="40" FontWeight="SemiBold" VerticalAlignment="Bottom">
                                 <Run Text="{Binding BalanceWhole}"/><Run Text="{Binding BalanceFraction}" Foreground="{StaticResource TextSecondary}"/>
                             </c:NamedTextBlock>
                             <TextBlock Text="XMR" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Bottom"
@@ -83,7 +75,7 @@
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
                         <Button Classes="icon" AutomationProperties.AutomationId="Wallet.Refresh" AutomationProperties.Name="Refresh now" Command="{Binding RefreshCommand}" IsEnabled="{Binding IsReady}"
                                 ToolTip.Tip="Refresh now">
-                            <c:Icon Data="{StaticResource IconRefresh}"/>
+                            <c:Icon Data="{StaticResource IconRefresh}" Classes.spin="{Binding RefreshCommand.IsRunning}"/>
                         </Button>
                         <Button Classes="accent" AutomationProperties.AutomationId="Wallet.Lock" AutomationProperties.Name="Lock" Command="{Binding LockCommand}" ToolTip.Tip="Lock the wallet and shred its temporary files">
                             <StackPanel Orientation="Horizontal" Spacing="8">
@@ -98,6 +90,7 @@
                 <StackPanel Spacing="8">
                     <Grid ColumnDefinitions="Auto,*,Auto">
                         <Ellipse Grid.Column="0" Width="8" Height="8" Margin="0,0,9,0" VerticalAlignment="Center"
+                                 Classes.pulse="{Binding !IsSynced}"
                                  Fill="{Binding IsSynced, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
                         <TextBlock Grid.Column="1" Classes="mono" FontSize="12" VerticalAlignment="Center"
                                    Foreground="{StaticResource TextSecondary}" AutomationProperties.AutomationId="Wallet.SyncText" Text="{Binding SyncText}"/>
@@ -109,7 +102,7 @@
         </Border>
 
         <!-- ================= Notices: startup failure, format upgrade ================= -->
-        <StackPanel Grid.Row="1">
+        <StackPanel Grid.Row="1" app:Entrance.Rise="70">
             <Border IsVisible="{Binding HasUpgradeNotice}" Margin="0,14,0,0" Classes="callout">
                 <Grid ColumnDefinitions="Auto,*,Auto">
                     <c:Icon Grid.Column="0" Data="{StaticResource IconShield}" Foreground="{StaticResource InfoBrush}"
@@ -133,7 +126,7 @@
         </StackPanel>
 
         <!-- ================= Navigation + panels ================= -->
-        <TabControl AutomationProperties.AutomationId="Wallet.Tabs" Grid.Row="2" Classes="segmented" Margin="0,18,0,0" Padding="0" IsEnabled="{Binding IsReady}">
+        <TabControl x:Name="Tabs" AutomationProperties.AutomationId="Wallet.Tabs" Grid.Row="2" Classes="segmented" app:Entrance.Rise="140" Margin="0,18,0,0" Padding="0" IsEnabled="{Binding IsReady}">
 
             <!-- ==== Receive ==== -->
             <TabItem AutomationProperties.AutomationId="Wallet.Tab.Receive" AutomationProperties.Name="Receive">
@@ -169,8 +162,6 @@
                                         </StackPanel>
                                     </Button>
                                 </StackPanel>
-                                <TextBlock AutomationProperties.AutomationId="Receive.Notice" Text="{Binding CopyNotice}" Classes="caption" Foreground="{StaticResource SuccessBrush}"
-                                           IsVisible="{Binding CopyNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                 <TextBlock AutomationProperties.AutomationId="Receive.Error" Text="{Binding ReceiveNotice}" Classes="caption" TextWrapping="Wrap"
                                            Foreground="{StaticResource WarningBrush}"
                                            IsVisible="{Binding ReceiveNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
@@ -237,10 +228,25 @@
                                 <ProgressBar IsIndeterminate="True" IsVisible="{Binding Sending}" Height="3"/>
                                 <TextBlock Classes="muted" TextWrapping="Wrap"
                                            Text="The transaction is built and signed first — you see the exact fee and total before anything is broadcast."/>
-                                <Border Classes="inset" Padding="14,12"
+                                <!-- Outcome of the last attempt: sent / check History first / not sent -->
+                                <Border x:Name="SendOutcomeCard" Classes="callout outcome"
+                                        Classes.success="{Binding SendSucceeded}" Classes.warning="{Binding SendNeedsCheck}" Classes.danger="{Binding SendFailed}"
                                         IsVisible="{Binding SendResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                                    <TextBlock AutomationProperties.AutomationId="Send.Result" Text="{Binding SendResult}" Classes="mono" FontSize="12" TextWrapping="Wrap"
-                                               Foreground="{StaticResource TextSecondary}"/>
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <Border Grid.Column="0" Classes="outcomeBadge" VerticalAlignment="Top" Margin="0,0,13,0">
+                                            <Panel>
+                                                <c:Icon Data="{StaticResource IconCheck}" StrokeThickness="2.4" Width="17" Height="17" IsVisible="{Binding SendSucceeded}"
+                                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                <c:Icon Data="{StaticResource IconWarning}" Width="17" Height="17" IsVisible="{Binding !SendSucceeded}"
+                                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Panel>
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock AutomationProperties.AutomationId="Send.Result" Classes="outcomeTitle" Text="{Binding SendResult}"/>
+                                            <TextBlock AutomationProperties.AutomationId="Send.ResultDetail" Classes="outcomeDetail" Text="{Binding SendResultDetail}"
+                                                       IsVisible="{Binding SendResultDetail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                        </StackPanel>
+                                    </Grid>
                                 </Border>
 
                                 <!-- Payment proof from the last send -->
@@ -307,12 +313,9 @@
                 </TabItem.Header>
                 <Border Classes="card" Margin="0,14,0,0" Padding="12,10,12,12">
                     <Grid RowDefinitions="Auto,*">
-                        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="12,6,4,8">
+                        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="12,6,4,8">
                             <TextBlock Grid.Column="0" Text="TRANSACTIONS" Classes="eyebrow" VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="1" Text="{Binding CopyNotice}" Classes="caption" Margin="0,0,12,0"
-                                       Foreground="{StaticResource SuccessBrush}" VerticalAlignment="Center"
-                                       IsVisible="{Binding CopyNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                            <Button Grid.Column="2" Classes="ghost" AutomationProperties.AutomationId="History.Export" AutomationProperties.Name="Export CSV" Click="ExportHistory_Click" ToolTip.Tip="Save the transaction list as CSV">
+                            <Button Grid.Column="1" Classes="ghost" AutomationProperties.AutomationId="History.Export" AutomationProperties.Name="Export CSV" Click="ExportHistory_Click" ToolTip.Tip="Save the transaction list as CSV">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <c:Icon Data="{StaticResource IconDownload}" Width="16" Height="16"/>
                                     <TextBlock Text="Export CSV"/>
@@ -401,8 +404,9 @@
         </Border>
 
         <!-- ===== Send confirmation (Monero is irreversible; always confirm) ===== -->
-        <Border Grid.Row="0" Grid.RowSpan="3" Margin="-28,-20,-28,-22" AutomationProperties.AutomationId="SendConfirm" IsVisible="{Binding ShowSendConfirm}" Background="{StaticResource Scrim}">
-            <Border Classes="card" Width="500" Padding="28,26" VerticalAlignment="Center" HorizontalAlignment="Center">
+        <Border x:Name="ConfirmScrim" Grid.Row="0" Grid.RowSpan="3" Margin="-28,-20,-28,-22" AutomationProperties.AutomationId="SendConfirm" IsVisible="{Binding ShowSendConfirm}" Background="{StaticResource Scrim}">
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <Border x:Name="ConfirmSheet" Classes="card" Width="500" Padding="28,26" Margin="0,16" VerticalAlignment="Center" HorizontalAlignment="Center">
                 <StackPanel Spacing="16">
                     <StackPanel Orientation="Horizontal" Spacing="12">
                         <Border Width="40" Height="40" CornerRadius="12" Background="{StaticResource AccentSoft}">
@@ -465,6 +469,19 @@
                     </Grid>
                 </StackPanel>
             </Border>
+          </ScrollViewer>
+        </Border>
+
+        <!-- ===== Toast: copy / export feedback, on whichever tab is open ===== -->
+        <Border x:Name="Toast" Grid.Row="0" Grid.RowSpan="3" Classes="toast" IsVisible="False" IsHitTestVisible="False"
+                AutomationProperties.AutomationId="Wallet.Toast" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,10">
+            <StackPanel Orientation="Horizontal" Spacing="9">
+                <c:Icon x:Name="ToastOk" Data="{StaticResource IconCheck}" Width="15" Height="15" StrokeThickness="2.4"
+                        Foreground="{StaticResource SuccessBrush}" VerticalAlignment="Center"/>
+                <c:Icon x:Name="ToastProblem" Data="{StaticResource IconWarning}" Width="15" Height="15"
+                        Foreground="{StaticResource WarningBrush}" VerticalAlignment="Center" IsVisible="False"/>
+                <TextBlock x:Name="ToastText" VerticalAlignment="Center" FontSize="12.5"/>
+            </StackPanel>
         </Border>
     </Grid>
 </UserControl>

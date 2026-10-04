@@ -197,6 +197,12 @@ public sealed partial class WalletScenario
         Check(total >= spendable, $"balance {total} is below the spendable {spendable}");
         _log($"  balance {total} XMR, spendable {spendable} XMR");
         await ShotAsync("funded");
+
+        // Copy the address: a toast confirms it on whichever tab is open.
+        await _app.ClickAsync("Receive.Copy");
+        string toast = await EventuallyAsync(() => _app.ReadTextAsync("Wallet.Toast"), t => t.Length > 0, Seconds(10), "the copy toast");
+        Check(toast.StartsWith("Address copied", StringComparison.Ordinal), $"copy feedback reads \"{toast}\"");
+        await ShotAsync("address-copied");
     }
 
     private async Task SendAsync()
@@ -220,7 +226,9 @@ public sealed partial class WalletScenario
 
         await _app.ClickAsync("SendConfirm.Send");
         string result = await EventuallyAsync(() => _app.ReadTextAsync("Send.Result"), s => s.Length > 0, Seconds(120), "the send result");
-        Check(result.StartsWith("Sent 12.5 XMR", StringComparison.Ordinal), $"send result: {result}");
+        Check(result == "Sent 12.5 XMR", $"send result: {result}");
+        string detail = await _app.ReadTextAsync("Send.ResultDetail");
+        Check(detail.StartsWith("Network fee ", StringComparison.Ordinal) && Xmr(detail) == fee, $"send detail: {detail}");
         SentTxId = await _app.ReadTextAsync("Send.LastTxId");
         Check(TxId().IsMatch(SentTxId), $"payment proof shows txid \"{SentTxId}\"");
         Check(TxId().IsMatch(await _app.ReadTextAsync("Send.LastTxKey")), "payment proof has no tx key");

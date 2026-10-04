@@ -7,15 +7,52 @@ namespace XaultWallet.Desktop.Views;
 
 public partial class CreateWalletView : UserControl
 {
+    private CreateWalletViewModel? _vm;
+
     public CreateWalletView() => InitializeComponent();
 
     protected override void OnDataContextChanged(System.EventArgs e)
     {
         base.OnDataContextChanged(e);
-        if (DataContext is CreateWalletViewModel vm)
+        if (_vm is not null)
+        {
+            _vm.PropertyChanged -= OnViewModelChanged;
+        }
+
+        _vm = DataContext as CreateWalletViewModel;
+        if (_vm is not null)
         {
             // Provide the VM a way to invoke the platform save dialog without a hard MVVM violation.
-            vm.SaveBackupHandler = SaveBackupAsync;
+            _vm.SaveBackupHandler = SaveBackupAsync;
+            _vm.PropertyChanged += OnViewModelChanged;
+        }
+    }
+
+    protected override void OnDetachedFromVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        if (_vm is not null)
+        {
+            _vm.PropertyChanged -= OnViewModelChanged;
+            _vm = null;
+        }
+    }
+
+    private void OnViewModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(CreateWalletViewModel.RealSeedGenerated) when _vm?.RealSeedGenerated == true:
+                _ = Motion.RiseInAsync(SeedPanel, distance: 10, milliseconds: 360); // the 25 words arrive
+                break;
+            case nameof(CreateWalletViewModel.ShowVerifyOverlay) when _vm?.ShowVerifyOverlay == true:
+                _ = Motion.FadeInAsync(VerifyScrim, 180);
+                _ = Motion.RiseInAsync(VerifySheet, distance: 16, milliseconds: 300);
+                break;
+            case nameof(CreateWalletViewModel.ShowAddressConfirm) when _vm?.ShowAddressConfirm == true:
+                _ = Motion.FadeInAsync(AddressScrim, 180);
+                _ = Motion.RiseInAsync(AddressSheet, distance: 16, milliseconds: 300);
+                break;
         }
     }
 

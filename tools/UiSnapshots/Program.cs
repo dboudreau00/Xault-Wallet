@@ -52,6 +52,8 @@ internal static class Program
             ("wallet-receive", Wallet, w => SelectTab(w, 0)),
             ("wallet-send", WalletSend, w => SelectTab(w, 1)),
             ("wallet-send-confirm", WalletSendConfirm, w => SelectTab(w, 1)),
+            ("wallet-sent", WalletSent, w => SelectTab(w, 1)),
+            ("wallet-send-error", WalletSendError, w => SelectTab(w, 1)),
             ("wallet-history", Wallet, w => SelectTab(w, 2)),
             ("wallet-upgraded", WalletUpgraded, w => SelectTab(w, 0)),
             ("settings", () => new SettingsViewModel(walletOpen: false), null),
@@ -75,6 +77,8 @@ internal static class Program
             }
 
             Console.WriteLine("wrote " + path);
+            CheckAccessibleNames(name, window);
+            CheckEntrancesSettled(name, window);
             if (name == "wallet-receive" && window.DataContext is MainWindowViewModel { Current: WalletViewModel wallet })
             {
                 VerifyQr(path, wallet.ReceiveUri);
@@ -86,6 +90,7 @@ internal static class Program
 
         CheckHistoryRowSettles();
         CheckMiningRewardRow();
+        CheckMotion();
         if (!OperatingSystem.IsWindows())
         {
             CheckDataFolderIsUnder(configRoot);
@@ -154,6 +159,139 @@ internal static class Program
         else
         {
             Failures.Add($"History row did not settle: at 9 conf '{before}', at 10 conf '{after}'");
+        }
+    }
+
+    /// <summary>
+    /// Motion must never leave the UI transparent or displaced. Entrances start hidden (no flash of
+    /// the final frame), actually move, and end exactly on resting values; a screen change ends with
+    /// the new screen fully opaque and in place and the old one hidden.
+    /// </summary>
+    private static void CheckMotion()
+    {
+        var shell = new MainWindowViewModel(new UnlockViewModel());
+        var window = new MainWindow { DataContext = shell, Width = 1080, Height = 760 };
+        window.Show();
+        Pump(0);
+        Control card = window.GetVisualDescendants().OfType<Control>().First(c => c.Name == "LoginCard");
+        double first = card.Opacity;
+        Pump(320);
+        double middle = card.Opacity;
+        bool moving = card.RenderTransform is Avalonia.Media.Transformation.TransformOperations { IsIdentity: false };
+        Pump(900);
+        bool rested = card.Opacity == 1 && IsResting(card);
+        if (first < 0.05 && middle is > 0.05 and < 0.99 && moving && rested)
+        {
+            Console.WriteLine($"Motion ok: entrance went {first:0.00} -> {middle:0.00} (moving) -> 1 at rest.");
+        }
+        else
+        {
+            Failures.Add($"Entrance: opacity {first:0.00} -> {middle:0.00} (moving={moving}) -> {card.Opacity:0.00}, at rest={rested}");
+        }
+
+        // Screen change: the new screen must not flash in at full opacity, and must end at rest.
+        // Measured before the first frame is rendered: the layout pass that swaps the screens has
+        // run, the render tick has not.
+        var settings = new SettingsViewModel(walletOpen: false);
+        shell.Current = settings;
+        window.UpdateLayout();
+        var presenters = window.GetVisualDescendants().OfType<TransitioningContentControl>().First()
+            .GetVisualDescendants().OfType<Avalonia.Controls.Presenters.ContentPresenter>()
+            .Where(p => p.Name is "PART_ContentPresenter" or "PART_ContentPresenter2").ToList();
+        var to = presenters.First(p => ReferenceEquals(p.Content, settings));
+        var from = presenters.First(p => !ReferenceEquals(p, to));
+        double toFirst = to.Opacity;
+        Pump(1000);
+        if (toFirst < 0.05 && to.IsVisible && to.Opacity == 1 && IsResting(to) && !from.IsVisible)
+        {
+            Console.WriteLine($"Motion ok: screen change starts at {toFirst:0.00}, ends opaque and in place; old screen hidden.");
+        }
+        else
+        {
+            Failures.Add($"Screen change: new screen {toFirst:0.00} -> {to.Opacity:0.00} (at rest={IsResting(to)}, visible={to.IsVisible}), old visible={from.IsVisible}");
+        }
+
+        window.Close();
+    }
+
+    /// <summary>After the entrances have had time to play, nothing that rises in may still be
+    /// transparent or displaced: a stuck entrance is a blank screen.</summary>
+    private static void CheckEntrancesSettled(string screen, Window window)
+    {
+        foreach (Control c in window.GetVisualDescendants().OfType<Control>().Where(c => Entrance.HasEntrance(c) && c.IsEffectivelyVisible))
+        {
+            if (c.Opacity < 1 || !IsResting(c))
+            {
+                Failures.Add($"[{screen}] {c.GetType().Name}.{string.Join('.', c.Classes)} stuck at opacity {c.Opacity:0.00}, transform {c.RenderTransform}");
+            }
+        }
+    }
+
+    private static bool IsResting(Visual v) =>
+        v.RenderTransform is null or Avalonia.Media.Transformation.TransformOperations { IsIdentity: true };
+
+    /// <summary>Run the UI for <paramref name="milliseconds"/> of real time (animations use the clock).</summary>
+    private static void Pump(int milliseconds)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        do
+        {
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Thread.Sleep(5);
+        }
+        while (sw.ElapsedMilliseconds < milliseconds);
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    /// <summary>
+    /// Every control a person can operate must have a real accessible name: what a screen reader
+    /// says, and what UI Automation tests find. A button whose content is an icon plus text and no
+    /// AutomationProperties.Name is announced as its content's type ("Avalonia.Controls.StackPanel").
+    /// </summary>
+    private static void CheckAccessibleNames(string screen, Window window)
+    {
+        var interactive = new HashSet<Avalonia.Automation.Peers.AutomationControlType>
+        {
+            Avalonia.Automation.Peers.AutomationControlType.Button,
+            Avalonia.Automation.Peers.AutomationControlType.CheckBox,
+            Avalonia.Automation.Peers.AutomationControlType.RadioButton,
+            Avalonia.Automation.Peers.AutomationControlType.ComboBox,
+            Avalonia.Automation.Peers.AutomationControlType.Edit,
+            Avalonia.Automation.Peers.AutomationControlType.TabItem,
+            Avalonia.Automation.Peers.AutomationControlType.Slider,
+            Avalonia.Automation.Peers.AutomationControlType.Spinner,
+        };
+        var bad = new List<string>();
+
+        void Walk(Avalonia.Automation.Peers.AutomationPeer peer)
+        {
+            // A scroll bar's arrow buttons are framework parts nobody tabs to.
+            if (peer is Avalonia.Automation.Peers.ControlAutomationPeer { Owner: Avalonia.Controls.Primitives.ScrollBar })
+            {
+                return;
+            }
+
+            if (peer.IsControlElement() && interactive.Contains(peer.GetAutomationControlType()))
+            {
+                string name = peer.GetName().Trim();
+                if (name.Length == 0 || name.StartsWith("Avalonia.", StringComparison.Ordinal) || name.StartsWith("XaultWallet.", StringComparison.Ordinal))
+                {
+                    string id = peer.GetAutomationId() ?? "(no id)";
+                    bad.Add($"{peer.GetAutomationControlType()} {id} is announced as \"{name}\"");
+                }
+            }
+
+            foreach (Avalonia.Automation.Peers.AutomationPeer child in peer.GetChildren())
+            {
+                Walk(child);
+            }
+        }
+
+        Walk(Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(window));
+        foreach (string b in bad.Distinct())
+        {
+            Failures.Add($"[{screen}] {b}");
         }
     }
 
@@ -366,6 +504,26 @@ internal static class Program
         WalletViewModel vm = Wallet();
         vm.SendAddress = FakeAddress('5', 11);
         vm.SendAmountText = "0,25";
+        return vm;
+    }
+
+    private static ViewModelBase WalletSent()
+    {
+        WalletViewModel vm = Wallet();
+        vm.SendResult = "Sent 0.25 XMR";
+        vm.SendResultDetail = "Network fee 0.00003066 XMR. It confirms in about 2 minutes; " +
+                              "your change is spendable again after 10 confirmations (about 20 minutes).";
+        vm.SendOutcome = SendOutcome.Sent;
+        return vm;
+    }
+
+    private static ViewModelBase WalletSendError()
+    {
+        WalletViewModel vm = Wallet();
+        vm.SendAddress = FakeAddress('5', 11);
+        vm.SendAmountText = "40";
+        vm.SendResult = "Amount exceeds your spendable balance (11.983017420331 XMR). Funds received in the " +
+                        "last 10 blocks are still locked.";
         return vm;
     }
 

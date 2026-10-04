@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
+             xmlns:app="clr-namespace:XaultWallet.Desktop"
              xmlns:c="clr-namespace:XaultWallet.Desktop.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -12,7 +13,7 @@
         <StackPanel Width="400" Spacing="24" VerticalAlignment="Center" HorizontalAlignment="Center">
 
             <!-- X brand mark: two interlocking strokes on a vault tile -->
-            <Border Width="66" Height="66" CornerRadius="18" HorizontalAlignment="Center"
+            <Border Width="66" Height="66" CornerRadius="18" HorizontalAlignment="Center" app:Entrance.Rise="0"
                     Background="{StaticResource Surface}" BorderBrush="{StaticResource BorderStrong}"
                     BorderThickness="1" BoxShadow="0 10 30 -6 #55000000">
                 <Canvas Width="66" Height="66">
@@ -25,14 +26,14 @@
                 </Canvas>
             </Border>
 
-            <StackPanel Spacing="4">
+            <StackPanel Spacing="4" app:Entrance.Rise="70">
                 <TextBlock Text="Welcome back" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center"/>
                 <TextBlock Text="Enter your password to unlock the vault" Classes="muted"
                            HorizontalAlignment="Center"/>
             </StackPanel>
 
-            <!-- Login card -->
-            <Border Classes="card" Padding="24">
+            <!-- Login card (it shakes on a wrong password: see the code-behind) -->
+            <Border x:Name="LoginCard" Classes="card" app:Entrance.Rise="140" Padding="24">
                 <StackPanel Spacing="14">
                     <StackPanel Spacing="6">
                         <TextBlock Text="PASSWORD" Classes="eyebrow"/>
@@ -63,17 +64,22 @@
                     <Button Classes="accent" HorizontalAlignment="Stretch" MinHeight="44"
                             AutomationProperties.AutomationId="Unlock.Submit" AutomationProperties.Name="Unlock" HorizontalContentAlignment="Center" Command="{Binding UnlockCommand}"
                             IsEnabled="{Binding !Busy}">
-                        <TextBlock Text="Unlock" FontSize="14.5" Foreground="{StaticResource AccentText}"/>
+                        <Panel>
+                            <TextBlock Text="Unlock" FontSize="14.5" Foreground="{StaticResource AccentText}" IsVisible="{Binding !Busy}"/>
+                            <TextBlock Text="Unlocking…" FontSize="14.5" Foreground="{StaticResource AccentText}" IsVisible="{Binding Busy}"/>
+                        </Panel>
                     </Button>
 
                     <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" Height="3"/>
                 </StackPanel>
             </Border>
 
+            <Panel app:Entrance.Rise="210">
             <StackPanel Orientation="Horizontal" Spacing="7" HorizontalAlignment="Center" Opacity="0.75">
                 <c:Icon Data="{StaticResource IconShield}" Width="13" Height="13" Foreground="{StaticResource TextTertiary}" VerticalAlignment="Center"/>
                 <TextBlock Text="Sealed with AES-256-GCM · key derived with Argon2id" Classes="caption" VerticalAlignment="Center"/>
             </StackPanel>
+            </Panel>
         </StackPanel>
     </Grid>
 </UserControl>

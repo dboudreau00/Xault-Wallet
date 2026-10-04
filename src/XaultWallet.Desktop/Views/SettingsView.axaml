@@ -242,9 +242,9 @@
                 <Border Classes="section">
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel Spacing="4">
-                            <TextBlock Classes="h2">
+                            <c:NamedTextBlock Classes="h2" AutomationProperties.AutomationId="Settings.AppVersion">
                                 <Run Text="XaultWallet"/><Run Text="  " FontSize="12"/><Run Text="{Binding AppVersion}" FontSize="12" FontWeight="Normal" Foreground="{StaticResource TextTertiary}"/>
-                            </TextBlock>
+                            </c:NamedTextBlock>
                             <TextBlock Classes="caption" Text="Unaudited beta · MIT licensed · brought to life in harmony"/>
                             <Button Classes="link" Content="dboudreau.dev" Click="OpenLink_Click" HorizontalAlignment="Left"/>
                         </StackPanel>

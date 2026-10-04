@@ -57,7 +57,7 @@ jobs:
           monerod --regtest --offline --fixed-difficulty 1 --data-dir "$RUNNER_TEMP/regtest" \
                   --rpc-bind-ip 127.0.0.1 --rpc-bind-port 18081 --no-igd --hide-my-port \
                   --non-interactive --detach
-          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:18081/get_height && exit 0; sleep 1; done
+          for _ in $(seq 1 60); do curl -fsS http://127.0.0.1:18081/get_height && exit 0; sleep 1; done
           echo "monerod did not come up" >&2; exit 1
       - name: Integration tests (RPC auth, artifact containment, funds flow, duress)
         env:

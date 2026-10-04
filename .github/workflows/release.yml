@@ -10,6 +10,9 @@ name: Release
 #
 # Run without a version, it only builds (a dry run) and publishes nothing.
 #
+# Nothing is drafted unless the Windows end-to-end test (e2e-windows.yml) passes on the exact
+# win-x64 zip that will be attached.
+#
 # Publishing a draft creates its tag, which starts this workflow again through route 1. The plan job
 # sees that the release already exists and skips everything, so that second run is a no-op.
 on:
@@ -115,21 +118,29 @@ jobs:
           mkdir dist
           name="XaultWallet-${TAG:-dev-${GITHUB_SHA::7}}-${{ matrix.rid }}"
           # The docs ship with the binary: the app points users at SECURITY.md (e.g. after a vault upgrade).
-          docs="README.md SECURITY.md CHANGELOG.md LICENSE"
-          cp $docs out/
+          docs=(README.md SECURITY.md CHANGELOG.md LICENSE)
+          cp "${docs[@]}" out/
           if [ "${{ matrix.rid }}" = "win-x64" ]; then
-            (cd out && 7z a "../dist/${name}.zip" "${{ matrix.exe }}" $docs)
+            (cd out && 7z a "../dist/${name}.zip" "${{ matrix.exe }}" "${docs[@]}")
           else
-            tar -C out -czf "dist/${name}.tar.gz" "${{ matrix.exe }}" $docs
+            tar -C out -czf "dist/${name}.tar.gz" "${{ matrix.exe }}" "${docs[@]}"
           fi
       - uses: actions/upload-artifact@v4
         with:
           name: dist-${{ matrix.rid }}
           path: dist/*
 
+  e2e-windows:
+    name: Windows end-to-end on the exact zip being released
+    needs: [plan, publish]
+    if: needs.plan.outputs.build == 'true'
+    uses: ./.github/workflows/e2e-windows.yml
+    with:
+      artifact: dist-win-x64
+
   release:
     name: Draft release
-    needs: [plan, publish]
+    needs: [plan, publish, e2e-windows]
     if: needs.plan.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     env:
@@ -139,9 +150,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: dist
+          pattern: dist-*   # the packages only: never the end-to-end screenshots
           merge-multiple: true
       - name: Checksums
-        run: cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS
+        run: cd dist && sha256sum -- * > SHA256SUMS && cat SHA256SUMS
       - name: Release notes (warning + this version's CHANGELOG section)
         run: |
           version="${TAG#v}"

@@ -53,9 +53,10 @@
                             </Border>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="12">
-                            <TextBlock AutomationProperties.AutomationId="Wallet.Balance" AutomationProperties.Name="{Binding BalanceDisplay}" Classes="mono" FontSize="40" FontWeight="SemiBold" VerticalAlignment="Bottom">
+                            <!-- NamedTextBlock: a plain TextBlock made of Runs has no accessible name in Avalonia 11.1 -->
+                            <c:NamedTextBlock AutomationProperties.AutomationId="Wallet.Balance" AutomationProperties.Name="{Binding BalanceDisplay}" Classes="mono" FontSize="40" FontWeight="SemiBold" VerticalAlignment="Bottom">
                                 <Run Text="{Binding BalanceWhole}"/><Run Text="{Binding BalanceFraction}" Foreground="{StaticResource TextSecondary}"/>
-                            </TextBlock>
+                            </c:NamedTextBlock>
                             <TextBlock Text="XMR" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Bottom"
                                        Margin="0,0,0,9" Foreground="{StaticResource TextTertiary}"/>
                             <Button Classes="ghost icon" VerticalAlignment="Bottom" Margin="0,0,0,4"

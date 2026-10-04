@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.Text;
 using Avalonia;
 using Avalonia.Automation;
+using Avalonia.Automation.Peers;
+using Avalonia.Automation.Provider;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
@@ -96,12 +98,18 @@ internal sealed class HeadlessDriver : IAppDriver
         }
     }
 
-    public async Task SelectAsync(string id, int index)
+    public async Task SelectAsync(string id, string item)
     {
         await WaitForAsync(id, DefaultWait);
         if (Find(id) is not ComboBox combo)
         {
             throw new InvalidOperationException($"'{id}' is not a combo box.");
+        }
+
+        int index = combo.Items.Cast<object?>().ToList().FindIndex(i => (i is ContentControl cc ? cc.Content : i)?.ToString() == item);
+        if (index < 0)
+        {
+            throw new InvalidOperationException($"'{id}' has no item \"{item}\".");
         }
 
         // Keyboard, as with Tab + arrow keys: a closed combo box moves its selection with Up/Down.
@@ -140,24 +148,20 @@ internal sealed class HeadlessDriver : IAppDriver
         }
     }
 
+    // Text is read through Avalonia's automation peers: the tree its Windows UI Automation provider
+    // serves to screen readers and to the Windows driver. Both drivers therefore read the same thing,
+    // and text a screen reader can't get (an empty accessible name) fails here on Linux as well.
+
     public Task<string> ReadTextAsync(string id)
     {
         Control c = Find(id) ?? throw new InvalidOperationException($"'{id}' is not on screen.");
-        string? name = AutomationProperties.GetName(c);
-        string text = c switch
-        {
-            TextBox box => box.Text ?? string.Empty,
-            TextBlock block when !string.IsNullOrEmpty(name) => name,
-            TextBlock block => TextOf(block),
-            _ => string.Join(" ", Texts(c)),
-        };
-        return Task.FromResult(text.Trim());
+        return Task.FromResult(AccessibleText(Peer(c)).Trim());
     }
 
     public Task<IReadOnlyList<string>> ReadTextsAsync(string id)
     {
         Control c = Find(id) ?? throw new InvalidOperationException($"'{id}' is not on screen.");
-        return Task.FromResult<IReadOnlyList<string>>(Texts(c).ToList());
+        return Task.FromResult<IReadOnlyList<string>>(TextElements(Peer(c)).ToList());
     }
 
     public async Task ScreenshotAsync(string name)
@@ -176,7 +180,7 @@ internal sealed class HeadlessDriver : IAppDriver
             string? id = AutomationProperties.GetAutomationId(c);
             if (!string.IsNullOrEmpty(id))
             {
-                string text = string.Join(" ", Texts(c));
+                string text = AccessibleText(Peer(c)).Trim();
                 sb.Append("  ").Append(id).Append(c.IsEffectivelyEnabled ? "" : " (disabled)")
                   .Append(text.Length > 0 ? ": " + (text.Length > 140 ? text[..140] + "…" : text) : "").Append('\n');
             }
@@ -198,14 +202,36 @@ internal sealed class HeadlessDriver : IAppDriver
         && c.Bounds.Width > 0 && c.Bounds.Height > 0
         && c.GetSelfAndVisualAncestors().OfType<Visual>().All(v => v.Opacity > 0.01);
 
-    private static IEnumerable<string> Texts(Control root) =>
-        root.GetSelfAndVisualDescendants().OfType<TextBlock>()
-            .Where(t => t.IsEffectivelyVisible)
-            .Select(TextOf)
-            .Where(s => s.Length > 0);
+    private static AutomationPeer Peer(Control c) => ControlAutomationPeer.CreatePeerForElement(c);
 
-    private static string TextOf(TextBlock block) =>
-        (block.Text ?? block.Inlines?.Text ?? string.Empty).Trim();
+    /// <summary>Value (text box, combo box), else accessible name, else the text elements inside.</summary>
+    private static string AccessibleText(AutomationPeer peer)
+    {
+        if (peer.GetProvider<IValueProvider>() is { } value)
+        {
+            return value.Value ?? string.Empty;
+        }
+
+        string name = peer.GetName();
+        return name.Length > 0 ? name : string.Join(" ", TextElements(peer));
+    }
+
+    /// <summary>Names of the Text elements in the subtree, in tree order (hidden parts aren't in it).</summary>
+    private static IEnumerable<string> TextElements(AutomationPeer peer)
+    {
+        if (peer.GetAutomationControlType() == AutomationControlType.Text && peer.GetName().Trim() is { Length: > 0 } name)
+        {
+            yield return name;
+        }
+
+        foreach (AutomationPeer child in peer.GetChildren())
+        {
+            foreach (string text in TextElements(child))
+            {
+                yield return text;
+            }
+        }
+    }
 
     private static async Task SettleAsync(int frames = 4)
     {

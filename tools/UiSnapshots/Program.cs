@@ -243,16 +243,26 @@ internal static class Program
 
     private static int CheckedSecrets;
 
-    /// <summary>After the entrances have had time to play, nothing that rises in may still be
-    /// transparent or displaced: a stuck entrance is a blank screen.</summary>
+    /// <summary>Every element with an entrance must come to rest (fully opaque, no transform): a
+    /// stuck entrance is a blank screen. Entrances still playing get up to 3 s (the longest, on the
+    /// startup screen, takes 1 s); one that is stuck never gets there.</summary>
     private static void CheckEntrancesSettled(string screen, Window window)
     {
-        foreach (Control c in window.GetVisualDescendants().OfType<Control>().Where(c => Entrance.HasEntrance(c) && c.IsEffectivelyVisible))
+        List<Control> Unsettled() => window.GetVisualDescendants().OfType<Control>()
+            .Where(c => Entrance.HasEntrance(c) && c.IsEffectivelyVisible && (c.Opacity < 1 || !IsResting(c)))
+            .ToList();
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        List<Control> unsettled = Unsettled();
+        while (unsettled.Count > 0 && sw.ElapsedMilliseconds < 3000)
         {
-            if (c.Opacity < 1 || !IsResting(c))
-            {
-                Failures.Add($"[{screen}] {c.GetType().Name}.{string.Join('.', c.Classes)} stuck at opacity {c.Opacity:0.00}, transform {c.RenderTransform}");
-            }
+            Pump(50);
+            unsettled = Unsettled();
+        }
+
+        foreach (Control c in unsettled)
+        {
+            Failures.Add($"[{screen}] {c.GetType().Name}.{string.Join('.', c.Classes)} stuck at opacity {c.Opacity:0.000}, transform {c.RenderTransform}");
         }
     }
 
@@ -405,10 +415,11 @@ internal static class Program
         }
     }
 
-    /// <summary>Let layout, bindings and entrance animations finish before capturing.</summary>
+    /// <summary>Let layout, bindings and entrance animations finish before capturing (the longest
+    /// entrance, the startup screen's last fade, takes 1 s).</summary>
     private static void Settle()
     {
-        for (int i = 0; i < 12; i++)
+        for (int i = 0; i < 20; i++)
         {
             Dispatcher.UIThread.RunJobs();
             AvaloniaHeadlessPlatform.ForceRenderTimerTick();

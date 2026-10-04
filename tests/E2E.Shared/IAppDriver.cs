@@ -21,16 +21,17 @@ public interface IAppDriver
     /// <summary>Replace the text of a text box by typing.</summary>
     Task TypeAsync(string id, string text);
 
-    /// <summary>Pick an item of a combo box by index.</summary>
-    Task SelectAsync(string id, int index);
+    /// <summary>Pick the combo box item that reads <paramref name="item"/>.</summary>
+    Task SelectAsync(string id, string item);
 
     /// <summary>Set a toggle switch, check box or radio button.</summary>
     Task SetCheckedAsync(string id, bool on);
 
-    /// <summary>The text an element shows (text box value, text block, or accessible name).</summary>
+    /// <summary>What a screen reader gets for the element: the value of a text box or combo box,
+    /// else its accessible name, else the text elements inside it joined by spaces.</summary>
     Task<string> ReadTextAsync(string id);
 
-    /// <summary>Every piece of text inside a container, in reading order.</summary>
+    /// <summary>Every text element inside a container (accessible names), in reading order.</summary>
     Task<IReadOnlyList<string>> ReadTextsAsync(string id);
 
     /// <summary>Save a screenshot of the app window as &lt;name&gt;.png.</summary>

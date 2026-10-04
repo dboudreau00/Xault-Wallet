@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
+             xmlns:c="clr-namespace:XaultWallet.Desktop.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="620"
@@ -87,9 +88,9 @@
             </Grid>
 
             <StackPanel Classes="fadeA" Spacing="5">
-                <TextBlock HorizontalAlignment="Center">
+                <c:NamedTextBlock HorizontalAlignment="Center" AutomationProperties.Name="XaultWallet">
                     <Run Text="Xault" FontSize="24" FontWeight="Bold"/><Run Text="Wallet" FontSize="24" FontWeight="Light" Foreground="{StaticResource TextSecondary}"/>
-                </TextBlock>
+                </c:NamedTextBlock>
                 <TextBlock AutomationProperties.AutomationId="Startup.Status" Text="{Binding Status}" Classes="muted" HorizontalAlignment="Center"/>
             </StackPanel>
 

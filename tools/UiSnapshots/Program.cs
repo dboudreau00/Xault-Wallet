@@ -78,6 +78,7 @@ internal static class Program
             if (name == "wallet-receive" && window.DataContext is MainWindowViewModel { Current: WalletViewModel wallet })
             {
                 VerifyQr(path, wallet.ReceiveUri);
+                CheckBalanceIsAnnounced(window, wallet.BalanceDisplay);
             }
 
             window.Close();
@@ -153,6 +154,27 @@ internal static class Program
         else
         {
             Failures.Add($"History row did not settle: at 9 conf '{before}', at 10 conf '{after}'");
+        }
+    }
+
+    /// <summary>
+    /// What a screen reader (and UI Automation) gets for the balance must be the balance. It is drawn
+    /// as two Runs, and a plain TextBlock made of Runs reports an empty accessible name in Avalonia 11.1.
+    /// </summary>
+    private static void CheckBalanceIsAnnounced(Window window, string expected)
+    {
+        Control? balance = window.GetVisualDescendants().OfType<Control>()
+            .FirstOrDefault(c => Avalonia.Automation.AutomationProperties.GetAutomationId(c) == "Wallet.Balance");
+        string announced = balance is null
+            ? "(not found)"
+            : Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(balance).GetName();
+        if (announced == expected && expected.Length > 0)
+        {
+            Console.WriteLine($"Accessibility ok: the balance is announced as \"{announced}\".");
+        }
+        else
+        {
+            Failures.Add($"The balance is announced as \"{announced}\", expected \"{expected}\"");
         }
     }
 

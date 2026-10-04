@@ -85,7 +85,7 @@ public sealed partial class WalletScenario
 
     private async Task NetworkAsync()
     {
-        await _app.SelectAsync("Create.Network", 0); // regtest uses mainnet-format addresses
+        await _app.SelectAsync("Create.Network", "Mainnet"); // regtest uses mainnet-format addresses
         await _app.TypeAsync("Create.Daemon", _chain.DaemonUrl);
         await _app.WaitForAsync("Create.TestChainNotice", Seconds(20), enabled: false);
         Check(!await _app.IsVisibleAsync("Create.MainnetWarning"), "a local test chain is presented as real-funds mainnet");

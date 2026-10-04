@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The end-to-end scenario (tests/E2E.Shared) against the REAL published XaultWallet.exe, driven
+    from outside the process through Windows UI Automation (the interface screen readers use), with
+    the official Windows monero-wallet-rpc.exe next to it and a private regtest node.
+    Arguments: the path to XaultWallet.exe, then the screenshot directory (see
+    .github/workflows/e2e-windows.yml). Refuses to run on a profile that already has a vault.
+    Builds anywhere (EnableWindowsTargeting) so the regular CI compiles it; runs only on Windows.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>XaultWallet.E2E</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\E2E.Shared\*.cs" Link="Shared\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FlaUI.UIA3" Version="5.0.0" />
+  </ItemGroup>
+
+</Project>

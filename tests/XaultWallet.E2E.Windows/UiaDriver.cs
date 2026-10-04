@@ -113,10 +113,15 @@ internal sealed class UiaDriver : IAppDriver
             return value.Value.Value ?? string.Empty;
         });
         await SettleAsync();
-        if (now != text)
+
+        // Password boxes accept input through automation but never read back (SecretTextBox): the
+        // scenario checks what typing them achieved instead (strength meter, unlock).
+        bool secret = id.Contains("Password", StringComparison.Ordinal);
+        if (secret ? now.Length != 0 : now != text)
         {
-            throw new InvalidOperationException(
-                $"typed into '{id}' but it holds \"{(id.Contains("Password", StringComparison.Ordinal) ? "(hidden)" : now)}\".");
+            throw new InvalidOperationException(secret
+                ? $"'{id}' hands its text to UI Automation; a password box must not."
+                : $"typed into '{id}' but it holds \"{now}\".");
         }
     }
 

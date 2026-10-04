@@ -97,7 +97,7 @@ A packaged `.exe` looks finished, but packaging changes nothing about the code's
   a node. The wallet never ships someone else's key-handling binary.
 - **Back up your seed** independently of the app.
 
-Version is stamped as `0.2.0-beta` in the project file — bump `<Version>` there for future
+Version is stamped as `0.3.0-beta` in the project file — bump `<Version>` there for future
 builds (Settings → About reads it from the assembly).
 
 ## Automated releases (GitHub Actions)
@@ -107,16 +107,17 @@ executables for `win-x64`, `linux-x64` and `osx-arm64`. Each archive holds the e
 `README.md`, `SECURITY.md`, `CHANGELOG.md` and `LICENSE`. They are attached with a `SHA256SUMS` file
 to a **draft** release for you to review and publish. There are two ways to start it:
 
-- **Push a tag** such as `v0.2.0-beta`.
+- **Push a tag** such as `v0.3.0-beta`.
 - **Run it by hand** (no git needed): GitHub → Actions → Release → *Run workflow*, with `version` set
-  to `v0.2.0-beta`. The draft targets the commit the run started from (normally `main`). GitHub
+  to `v0.3.0-beta`. The draft targets the commit the run started from (normally `main`). GitHub
   creates the tag only when you press **Publish** on the draft: the workflow never creates or moves a
   tag. Run without a version, it only builds (a dry run) and publishes nothing.
 
 Before building, the workflow stops if the version isn't `vX.Y.Z` or `vX.Y.Z-suffix`, doesn't match
 `<Version>` in `XaultWallet.Desktop.csproj`, has no `## <version>` section in `CHANGELOG.md`, or
-already has a release (draft or published). The release notes are a warning header plus that
-CHANGELOG section. A hyphenated version (`-beta`, `-rc.1`) is marked as a pre-release, so it never
+already has a release (draft or published). After building, it runs the Windows end-to-end test
+(`e2e-windows.yml`) on the very `win-x64` zip it built, and drafts nothing if that fails. The release
+notes are a warning header plus that CHANGELOG section. A hyphenated version (`-beta`, `-rc.1`) is marked as a pre-release, so it never
 shows as the repository's latest release. The binaries are unsigned until a code-signing certificate
 is added to the workflow.
 

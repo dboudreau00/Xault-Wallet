@@ -185,8 +185,8 @@
                             <TextBlock Text="Vault password" Classes="h2" VerticalAlignment="Center"/>
                         </StackPanel>
                         <Grid ColumnDefinitions="*,12,*">
-                            <TextBox Grid.Column="0" Watermark="Password" PasswordChar="●" AutomationProperties.AutomationId="Create.Password" AutomationProperties.Name="Vault password" Text="{Binding MainPassword}"/>
-                            <TextBox Grid.Column="2" Watermark="Confirm password" PasswordChar="●" AutomationProperties.AutomationId="Create.PasswordConfirm" AutomationProperties.Name="Confirm vault password" Text="{Binding MainPasswordConfirm}"/>
+                            <c:SecretTextBox Grid.Column="0" Watermark="Password" PasswordChar="●" AutomationProperties.AutomationId="Create.Password" AutomationProperties.Name="Vault password" Text="{Binding MainPassword}"/>
+                            <c:SecretTextBox Grid.Column="2" Watermark="Confirm password" PasswordChar="●" AutomationProperties.AutomationId="Create.PasswordConfirm" AutomationProperties.Name="Confirm vault password" Text="{Binding MainPasswordConfirm}"/>
                         </Grid>
                         <Grid ColumnDefinitions="*,12,Auto" IsVisible="{Binding StrengthLabel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                             <ProgressBar Grid.Column="0" Classes="meter" Classes.fair="{Binding StrengthIsFair}" Classes.strong="{Binding StrengthIsStrong}"
@@ -210,7 +210,7 @@
                             <ToggleSwitch Grid.Column="3" AutomationProperties.AutomationId="Create.EnableDuress" AutomationProperties.Name="Duress password" IsChecked="{Binding EnableDuress}" OnContent="" OffContent="" VerticalAlignment="Center"/>
                         </Grid>
                         <StackPanel Spacing="12" IsVisible="{Binding EnableDuress}">
-                            <TextBox Watermark="Duress password (different from your vault password)" PasswordChar="●" AutomationProperties.AutomationId="Create.DuressPassword" AutomationProperties.Name="Duress password" Text="{Binding DuressPassword}"/>
+                            <c:SecretTextBox Watermark="Duress password (different from your vault password)" PasswordChar="●" AutomationProperties.AutomationId="Create.DuressPassword" AutomationProperties.Name="Duress password" Text="{Binding DuressPassword}"/>
                             <StackPanel Orientation="Horizontal" Spacing="22">
                                 <RadioButton GroupName="DuressMode" AutomationProperties.AutomationId="Create.DuressMode.Generate" Content="Generate a decoy" IsChecked="{Binding CreateNewDuress, Mode=TwoWay}"/>
                                 <RadioButton GroupName="DuressMode" AutomationProperties.AutomationId="Create.DuressMode.Import" Content="Import a decoy seed"/>

@@ -1,6 +1,63 @@
 # Changelog
 
+## 0.3.0-beta — 2026-10-04 — tested end to end, motion & polish
+
+**The first published release since 0.1.** 0.2.0-beta was prepared as a draft but never published, so
+everything listed under [0.2.0-beta](CHANGELOG.md#020-beta--2026-10-03--security-audit--redesign) is
+new in this release too, including the security fixes and the vault format upgrade. If you used 0.1,
+read [Upgrading from 0.1](SECURITY.md#upgrading-from-01) first. Audit notes for this release:
+[docs/AUDIT-2026-10.md → Third pass](docs/AUDIT-2026-10.md#third-pass-end-to-end-testing).
+
+### Tested end to end
+- **The released Windows executable is tested on every change.** A new workflow unpacks the exact
+  `win-x64` zip, puts the official Monero CLI next to it (its `hashes.txt` must be signed by
+  binaryFate's key), starts a private regtest chain, and drives the app from outside through Windows
+  UI Automation, the way a screen reader would: create a vault, verify the seed backup, set a duress
+  password and decoy, unlock both wallets, receive, copy the address, send with the confirmation
+  checked line by line, see it in History, see the decoy receive it, open Settings. It then closes the
+  app with its own close button and fails if `monero-wallet-rpc` is still running, a wallet session
+  folder is left in `%TEMP%`, or anything was written next to the exe. **The release workflow drafts
+  nothing unless this passes on the zip it is about to attach.**
+- The same scenario runs on Linux in CI, in-process with real pointer and keyboard input.
+- A node on this computer that reports itself as a private test chain (`monerod --regtest`) is
+  recognised: it is labelled *Regtest · local test chain* instead of mainnet, and wallet-rpc gets the
+  flag such a chain needs. This never applies to a remote node or to mainnet, stagenet or testnet.
+
+### Security
+- **Password boxes no longer hand their text to other programs.** Avalonia's text box reports its
+  content through UI Automation even when it is masked, so any program in your desktop session could
+  read a vault password as you typed it, without hooks or injection. They now accept input from
+  assistive tools but never return it.
+
+### Fixed
+- **Mining rewards** (P2Pool and solo payouts) were listed in History as *outgoing* "−35.12 XMR",
+  titled "block", and counted to 10 confirmations. They are now "Mining reward", +amount, confirming
+  over the 60-block window mined coins actually need.
+- **Screen readers announced nothing for your balance**, and several buttons as
+  "Avalonia.Controls.StackPanel". Every control you can operate now has a real name, and a test keeps
+  it that way.
+- Copying the transaction ID or key from the Send tab's payment proof gave no feedback.
+- On a small laptop screen (1366×768 at 125 %) the bottom of the window was off-screen. The window now
+  opens centred and fits the screen; the send confirmation scrolls if it has to.
+
+### Changed
+- **Motion.** Screens rise into place, sections arrive one after another, dialogs fade in over their
+  backdrop, buttons give a little when pressed, the sync dot breathes while syncing, the refresh icon
+  turns, your balance pulses when money arrives or leaves, and a wrong password shakes the card. It is
+  off when Windows' *Animation effects* setting is off, or with `XAULTWALLET_REDUCE_MOTION=1`.
+- **Send results are a card:** sent (with the fee, and when the money moves), *may have been
+  broadcast — check History before sending again*, or not sent, each clearly coloured.
+- Copy and export feedback is a toast at the bottom, on whichever tab you're on.
+- Unlock says *Unlocking…* while your key is derived.
+
+### For integrators of XaultWallet.Core
+- No breaking changes. New: `DaemonAddress.IsLoopback`, `MoneroDiagnostics.IsLocalTestChainAsync`,
+  `MoneroProcessManager.IsLocalTestChain`, `MoneroWalletService.IsLocalTestChain`. See
+  [PUBLIC-API.md](PUBLIC-API.md).
+
 ## 0.2.0-beta — 2026-10-03 — security audit & redesign
+
+*Prepared as a draft release but never published; shipped as part of 0.3.0-beta.*
 
 Full write-up with evidence: [docs/AUDIT-2026-10.md](docs/AUDIT-2026-10.md).
 

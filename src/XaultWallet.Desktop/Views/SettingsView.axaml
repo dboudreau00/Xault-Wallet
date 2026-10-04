@@ -183,7 +183,7 @@
                                    IsVisible="{Binding RepointTestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                    Foreground="{Binding RepointTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
                         <Grid ColumnDefinitions="*,8,Auto">
-                            <TextBox Grid.Column="0" Watermark="Wallet password (confirms the change)" PasswordChar="●" AutomationProperties.AutomationId="Settings.RepointPassword" AutomationProperties.Name="Wallet password" Text="{Binding RepointPassword}"/>
+                            <c:SecretTextBox Grid.Column="0" Watermark="Wallet password (confirms the change)" PasswordChar="●" AutomationProperties.AutomationId="Settings.RepointPassword" AutomationProperties.Name="Wallet password" Text="{Binding RepointPassword}"/>
                             <Button Grid.Column="2" Content="Update node" AutomationProperties.AutomationId="Settings.RepointNode" Command="{Binding RepointNodeCommand}" IsEnabled="{Binding !Busy}"/>
                         </Grid>
                         <TextBlock AutomationProperties.AutomationId="Settings.RepointResult" Text="{Binding RepointResult}" Classes="result"
@@ -193,10 +193,10 @@
                         <Separator Margin="0,6"/>
 
                         <TextBlock Text="CHANGE PASSWORD" Classes="eyebrow"/>
-                        <TextBox Watermark="Current password" PasswordChar="●" AutomationProperties.AutomationId="Settings.CurrentPassword" AutomationProperties.Name="Current password" Text="{Binding CurrentPassword}"/>
+                        <c:SecretTextBox Watermark="Current password" PasswordChar="●" AutomationProperties.AutomationId="Settings.CurrentPassword" AutomationProperties.Name="Current password" Text="{Binding CurrentPassword}"/>
                         <Grid ColumnDefinitions="*,12,*">
-                            <TextBox Grid.Column="0" Watermark="New password" PasswordChar="●" AutomationProperties.AutomationId="Settings.NewPassword" AutomationProperties.Name="New password" Text="{Binding NewPassword}"/>
-                            <TextBox Grid.Column="2" Watermark="Confirm new password" PasswordChar="●" AutomationProperties.AutomationId="Settings.NewPasswordConfirm" AutomationProperties.Name="Confirm new password" Text="{Binding NewPasswordConfirm}"/>
+                            <c:SecretTextBox Grid.Column="0" Watermark="New password" PasswordChar="●" AutomationProperties.AutomationId="Settings.NewPassword" AutomationProperties.Name="New password" Text="{Binding NewPassword}"/>
+                            <c:SecretTextBox Grid.Column="2" Watermark="Confirm new password" PasswordChar="●" AutomationProperties.AutomationId="Settings.NewPasswordConfirm" AutomationProperties.Name="Confirm new password" Text="{Binding NewPasswordConfirm}"/>
                         </Grid>
                         <Grid ColumnDefinitions="*,Auto">
                             <TextBlock Text="{Binding NewPasswordStrength}" Classes="caption" VerticalAlignment="Center"

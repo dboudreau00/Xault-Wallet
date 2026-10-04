@@ -77,6 +77,40 @@ Against stagenet instead, point `XW_DAEMON` at a synced stagenet node and set `X
 the funds-flow tests are skipped (they need to mine). Without the variables every test no-ops with a
 skip notice, so a green run with nothing configured means "skipped", not "passed".
 
+## End-to-end tests (the whole app, through its UI)
+
+One scenario (`tests/E2E.Shared/WalletScenario.cs`) uses the app the way a person does: create a
+vault, write down and verify the seed, set a duress password with a decoy, unlock both wallets,
+receive (mined) coins, copy the address, send 12.5 XMR to the decoy with the confirmation checked line
+by line, see it in History, see the decoy receive it, open Settings. Mining is the only thing done
+outside the UI. It needs the regtest node above and `monero-wallet-rpc`, and leaves a screenshot of
+every step. Two drivers run it:
+
+**Linux, in process** (CI runs this on every push). Real pointer and keyboard input; a fresh profile in
+a temporary home, never yours:
+
+```bash
+XW_E2E_DAEMON=http://127.0.0.1:18081 \
+  dotnet run -c Release --project tests/XaultWallet.E2E.Headless -- e2e-screens
+```
+
+**Windows, the real `XaultWallet.exe`**, driven from outside through UI Automation
+(`.github/workflows/e2e-windows.yml` runs it on every push and before every release, against the exact
+release zip). It refuses to run if `%APPDATA%\XaultWallet` already exists, so it can't touch a real
+vault; run it on a fresh VM:
+
+```powershell
+# monero-wallet-rpc.exe next to XaultWallet.exe, monerod --regtest running as above
+$env:XW_E2E_DAEMON = "http://127.0.0.1:18081"
+dotnet run -c Release --project tests/XaultWallet.E2E.Windows -- C:\path\to\XaultWallet.exe e2e-screens
+```
+
+After the scenario it closes the app with its close button and fails if `monero-wallet-rpc` is still
+running, a session folder is left in `%TEMP%`, or anything was written next to the exe. The screenshots
+are the run's `e2e-screens-windows` artifact; run the workflow by hand with *publish_screenshots* (or
+put `[e2e-screenshots]` in a pushed commit message) to also get them on the `ci/e2e-screenshots`
+branch.
+
 ## What still stands between this and mainnet
 
 Even after stagenet passes cleanly, this is **beta**. Before trusting real funds it needs a

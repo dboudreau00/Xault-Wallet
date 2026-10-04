@@ -113,7 +113,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public string DefaultBinaryHint { get; }
 
-    /// <summary>"0.2.0-beta" — the informational version without build metadata.</summary>
+    /// <summary>"0.3.0-beta" — the informational version without build metadata.</summary>
     public string AppVersion { get; } =
         (System.Reflection.CustomAttributeExtensions
             .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(SettingsViewModel).Assembly)

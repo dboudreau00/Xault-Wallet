@@ -8,6 +8,7 @@ monero-wallet-rpc orchestration without the Avalonia desktop app.
 > this until it has had a professional security review. See `SECURITY.md`.
 >
 > 0.2.0 has breaking changes from 0.1.0 — see [CHANGELOG.md](CHANGELOG.md#breaking-integrators-of-xaultwalletcore).
+> 0.3.0 only adds API (local regtest detection); nothing existing changed.
 
 ## Namespaces & surface
 
@@ -78,6 +79,8 @@ is refused with `InvalidDataException`.
   - `GetTxKeyAsync(txid)` (throws if the backend returns no key) / `CheckTxKeyAsync(txid, txKey, address)` — payment proofs
   - `NewSubaddressAsync(label)`
   - `BackendExited` — the wallet-rpc child died underneath an open wallet
+  - `IsLocalTestChain` — the open wallet syncs from a private regtest chain on this machine (see
+    `MoneroDiagnostics.IsLocalTestChainAsync`); label it as such rather than as its address network
   - `CloseAsync` / `DisposeAsync` — always dispose; this shreds the session directory.
 - **`MoneroProcessManager`** — lower level: launches `monero-wallet-rpc` on a random loopback port with
   per-session random **Digest credentials** (written to a `0600` `--config-file` in a `0700` session
@@ -88,9 +91,12 @@ is refused with `InvalidDataException`.
   any other call that carries a secret. A 401 during readiness is a hard failure. The binary must be a
   fully-qualified path (`ExecutableLocator.EnsureLaunchable`). On Windows the child
   is tied to the parent with a kill-on-close Job Object. `ShredOrphanedTempDirs()` sweeps leftovers from
-  a crashed session — call once at startup under a single-instance guard.
+  a crashed session — call once at startup under a single-instance guard. Each launch asks the node
+  whether it is a local test chain; if so (`IsLocalTestChain`), it passes
+  `--allow-mismatched-daemon-version`, which regtest needs.
 - **`WalletRpcOptions`** — `ProxyAddress` ("host:port" SOCKS for daemon traffic, e.g. Tor) and
-  `AllowMismatchedDaemonVersion` (**testing only** — a private `monerod --regtest` chain needs it).
+  `AllowMismatchedDaemonVersion` (**testing only**: forces the flag for any node. A local
+  `monerod --regtest` node doesn't need it; it is detected).
 - **`MoneroRpcClient`** — thin JSON-RPC client (hand-built envelope; omits null `params`). Credentials
   are offered only to a `Digest` challenge and never through a proxy. Errors are
   `MoneroRpcException` (`Code`; `Message` = method + backend error, safe to show and log;
@@ -110,9 +116,13 @@ is refused with `InvalidDataException`.
   passes anything else through unchanged. `EnsureLaunchable(path)` throws `FileNotFoundException` unless
   the path is fully qualified and exists.
 - **`MoneroAddress`** — `Problem(address, network)` → null or a human-readable reason (charset/length/prefix only).
-- **`DaemonAddress`** — the one definition of a valid node URL.
+- **`DaemonAddress`** — the one definition of a valid node URL. `IsLoopback(address)`: `localhost` or a
+  loopback IP (`127.0.0.0/8`, `::1`).
 - **`MoneroDiagnostics`** — `ProbeWalletRpcAsync(binaryPath)` (runs `--version`; same full-path rule as a launch),
-  `ProbeDaemonAsync(daemonUrl, proxy)` (GET `/get_height`, same route as wallet-rpc: SOCKS or direct).
+  `ProbeDaemonAsync(daemonUrl, proxy)` (GET `/get_height`, same route as wallet-rpc: SOCKS or direct),
+  `IsLocalTestChainAsync(daemonUrl, proxy)`: true only for a **loopback** node whose `/get_info` reports
+  `nettype: "fakechain"` (what `monerod --regtest` runs). A remote node is never asked; any failure
+  (unreachable, not JSON, an odd answer) is `false`. 5 s timeout.
 - **`SecretRedactor`** — structural JSON redaction of seeds, passwords, keys and signed-tx blobs.
 
 ### `XaultWallet.Core.Diagnostics`

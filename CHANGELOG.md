@@ -2,10 +2,9 @@
 
 ## 0.3.0-beta — 2026-10-04 — tested end to end, motion & polish
 
-**The first published release since 0.1.** 0.2.0-beta was prepared as a draft but never published, so
-everything listed under [0.2.0-beta](CHANGELOG.md#020-beta--2026-10-03--security-audit--redesign) is
-new in this release too, including the security fixes and the vault format upgrade. If you used 0.1,
-read [Upgrading from 0.1](SECURITY.md#upgrading-from-01) first. Audit notes for this release:
+Everything below is new since 0.2.0-beta. **Coming from 0.1?** The vault format changed in 0.2.0-beta:
+read its [notes](CHANGELOG.md#020-beta--2026-10-03--security-audit--redesign) and
+[Upgrading from 0.1](SECURITY.md#upgrading-from-01) first. Audit notes for this release:
 [docs/AUDIT-2026-10.md → Third pass](docs/AUDIT-2026-10.md#third-pass-end-to-end-testing).
 
 ### Tested end to end
@@ -56,8 +55,6 @@ read [Upgrading from 0.1](SECURITY.md#upgrading-from-01) first. Audit notes for 
   [PUBLIC-API.md](PUBLIC-API.md).
 
 ## 0.2.0-beta — 2026-10-03 — security audit & redesign
-
-*Prepared as a draft release but never published; shipped as part of 0.3.0-beta.*
 
 Full write-up with evidence: [docs/AUDIT-2026-10.md](docs/AUDIT-2026-10.md).
 

@@ -46,8 +46,38 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
     private static string DefaultLocalDaemon(int networkIndex) =>
         $"http://127.0.0.1:{networkIndex switch { 1 => "38081", 2 => "28081", _ => "18081" }}";
 
-    /// <summary>True when the mainnet (real money) network is selected — drives the warning banner.</summary>
-    public bool IsMainnet => NetworkIndex == 0;
+    /// <summary>True when the mainnet (real money) network is selected — drives the warning banner.
+    /// Not for the user's own local regtest chain, which uses mainnet addresses but has no real funds.</summary>
+    public bool IsMainnet => NetworkIndex == 0 && !IsLocalTestChain;
+
+    /// <summary>The node is a private test chain on this computer (local <c>monerod --regtest</c>).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsMainnet))]
+    private bool _isLocalTestChain;
+
+    private CancellationTokenSource? _chainProbe;
+
+    partial void OnDaemonAddressChanged(string value) => _ = ProbeTestChainAsync(value);
+
+    /// <summary>Ask the node what chain it is on, debounced while the address is being typed.</summary>
+    private async Task ProbeTestChainAsync(string address)
+    {
+        _chainProbe?.Cancel();
+        var cts = _chainProbe = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(350, cts.Token);
+            bool testChain = await MoneroDiagnostics.IsLocalTestChainAsync(address, AppServices.Instance.Settings.ProxyAddress, cts.Token);
+            if (!cts.IsCancellationRequested)
+            {
+                IsLocalTestChain = testChain;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // superseded by a newer address
+        }
+    }
 
     /// <summary>Public node presets (same list as Settings). Selecting one fills daemon + network.</summary>
     public IReadOnlyList<RemoteNode> PresetNodes => RemoteNodes.All;
@@ -178,6 +208,7 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         string daemon = AppServices.Instance.DefaultDaemonAddress;
         _networkIndex = AppServices.Instance.DefaultNetworkIndex;
         _daemonAddress = string.IsNullOrWhiteSpace(daemon) ? DefaultLocalDaemon(_networkIndex) : daemon;
+        _ = ProbeTestChainAsync(_daemonAddress);
     }
 
     private MoneroNetwork Network => NetworkIndex switch

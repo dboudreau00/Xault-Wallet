@@ -17,9 +17,9 @@ public sealed record WalletRpcOptions
     /// 127.0.0.1:9050. Null/empty = direct connection.</summary>
     public string? ProxyAddress { get; init; }
 
-    /// <summary>TESTING ONLY. Passes --allow-mismatched-daemon-version so the wallet accepts a daemon
-    /// whose hard-fork schedule doesn't match its network — what a private <c>monerod --regtest</c>
-    /// chain needs. Never enable it against a public network.</summary>
+    /// <summary>TESTING ONLY. Always pass --allow-mismatched-daemon-version. Not needed for a local
+    /// <c>monerod --regtest</c> node: that is detected automatically (see
+    /// <see cref="MoneroDiagnostics.IsLocalTestChainAsync"/>). Never enable it against a public network.</summary>
     public bool AllowMismatchedDaemonVersion { get; init; }
 
     /// <summary>TESTING ONLY. Bind this port instead of a random free one, so a test can occupy it
@@ -54,6 +54,10 @@ public sealed class MoneroProcessManager : IAsyncDisposable
     private const string WalletFileName = "w";
 
     public Uri? Endpoint { get; private set; }
+
+    /// <summary>True when the node is the user's own private test chain (a local regtest node), which
+    /// the UI labels as such instead of as a real network.</summary>
+    public bool IsLocalTestChain { get; private set; }
 
     /// <summary>The live session directory (tests inspect what the child writes there).</summary>
     internal string? SessionDirectory => _tempDir;
@@ -163,6 +167,11 @@ public sealed class MoneroProcessManager : IAsyncDisposable
             throw new ArgumentException("Daemon address is not a valid http(s) URL.", nameof(daemonAddress));
         }
 
+        // Decided per launch from what the node itself reports — only ever true for a node on this
+        // machine that says it is a regtest chain (never for mainnet, stagenet or testnet).
+        IsLocalTestChain = await MoneroDiagnostics.IsLocalTestChainAsync(daemonAddress, _options.ProxyAddress, ct).ConfigureAwait(false);
+        bool allowMismatchedDaemon = _options.AllowMismatchedDaemonVersion || IsLocalTestChain;
+
         _tempDir = CreatePrivateDirectory();
         string walletDir = Directory.CreateDirectory(Path.Combine(_tempDir, "wallet")).FullName;
         string ringDbDir = Directory.CreateDirectory(Path.Combine(_tempDir, "ringdb")).FullName;
@@ -220,7 +229,7 @@ public sealed class MoneroProcessManager : IAsyncDisposable
                 Arg(netFlag);
             }
 
-            if (_options.AllowMismatchedDaemonVersion)
+            if (allowMismatchedDaemon)
             {
                 Arg("--allow-mismatched-daemon-version");
             }

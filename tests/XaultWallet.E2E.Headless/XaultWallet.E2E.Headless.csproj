@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    End-to-end scenario (tests/E2E.Shared) against the real app, in-process and headless: real
+    windows, views and view-models, real Skia rendering, real pointer and keyboard input, and the
+    real monero-wallet-rpc talking to a private regtest chain. Writes a screenshot per step.
+    Usage: run this project in Release; its only argument is the screenshot directory.
+    Needs monero-wallet-rpc on PATH and a regtest node (XW_E2E_DAEMON, default http://127.0.0.1:18081).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>XaultWallet.E2E</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\E2E.Shared\*.cs" Link="Shared\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless" Version="11.1.3" />
+    <PackageReference Include="Avalonia.Skia" Version="11.1.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\XaultWallet.Desktop\XaultWallet.Desktop.csproj" />
+  </ItemGroup>
+
+</Project>

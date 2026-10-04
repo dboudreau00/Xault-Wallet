@@ -34,7 +34,7 @@
                                Margin="-6,0,0,0" Foreground="{StaticResource TextSecondary}"/>
                 </StackPanel>
 
-                <Button Grid.Column="1" Classes="ghost" Command="{Binding OpenSettingsCommand}"
+                <Button Grid.Column="1" Classes="ghost" AutomationProperties.AutomationId="Shell.Settings" Command="{Binding OpenSettingsCommand}"
                         IsVisible="{Binding !SettingsOpen}" VerticalAlignment="Center"
                         HorizontalAlignment="Right" Margin="0,0,10,0" Padding="12,7">
                     <StackPanel Orientation="Horizontal" Spacing="8">
@@ -45,13 +45,13 @@
 
                 <!-- Window controls -->
                 <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Stretch">
-                    <Button Classes="chrome" Click="Minimize_Click" ToolTip.Tip="Minimize">
+                    <Button Classes="chrome" AutomationProperties.AutomationId="Shell.Minimize" AutomationProperties.Name="Minimize" Click="Minimize_Click" ToolTip.Tip="Minimize">
                         <Rectangle Width="11" Height="1.5" Fill="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
                     </Button>
-                    <Button Classes="chrome" Click="MaxRestore_Click" ToolTip.Tip="Maximize">
+                    <Button Classes="chrome" AutomationProperties.AutomationId="Shell.Maximize" AutomationProperties.Name="Maximize" Click="MaxRestore_Click" ToolTip.Tip="Maximize">
                         <Border Width="10" Height="10" BorderBrush="{StaticResource TextSecondary}" BorderThickness="1.5" CornerRadius="2"/>
                     </Button>
-                    <Button Classes="chrome chromeClose" Click="Close_Click" ToolTip.Tip="Close">
+                    <Button Classes="chrome chromeClose" AutomationProperties.AutomationId="Shell.Close" AutomationProperties.Name="Close" Click="Close_Click" ToolTip.Tip="Close">
                         <Canvas Width="12" Height="12">
                             <Line StartPoint="1,1" EndPoint="11,11" Stroke="{StaticResource TextSecondary}" StrokeThickness="1.5"/>
                             <Line StartPoint="11,1" EndPoint="1,11" Stroke="{StaticResource TextSecondary}" StrokeThickness="1.5"/>

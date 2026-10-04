@@ -22,4 +22,20 @@ public static class DaemonAddress
         uri = null!;
         return false;
     }
+
+    /// <summary>
+    /// True when the address points at THIS machine: "localhost" or a loopback IP (127.0.0.0/8, ::1).
+    /// Only such a node can be the user's own private test chain; nothing on the network qualifies.
+    /// </summary>
+    public static bool IsLoopback(string? address)
+    {
+        if (!TryParse(address, out Uri uri))
+        {
+            return false;
+        }
+
+        string host = uri.IdnHost.Trim('[', ']');
+        return host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+               || (System.Net.IPAddress.TryParse(host, out System.Net.IPAddress? ip) && System.Net.IPAddress.IsLoopback(ip));
+    }
 }

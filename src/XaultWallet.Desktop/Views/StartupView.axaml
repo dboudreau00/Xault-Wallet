@@ -90,15 +90,15 @@
                 <TextBlock HorizontalAlignment="Center">
                     <Run Text="Xault" FontSize="24" FontWeight="Bold"/><Run Text="Wallet" FontSize="24" FontWeight="Light" Foreground="{StaticResource TextSecondary}"/>
                 </TextBlock>
-                <TextBlock Text="{Binding Status}" Classes="muted" HorizontalAlignment="Center"/>
+                <TextBlock AutomationProperties.AutomationId="Startup.Status" Text="{Binding Status}" Classes="muted" HorizontalAlignment="Center"/>
             </StackPanel>
 
             <StackPanel Classes="fadeB" Spacing="14">
                 <ProgressBar IsIndeterminate="True" IsVisible="{Binding Checking}" Height="3" Width="220"
                              HorizontalAlignment="Center"/>
-                <TextBlock Text="{Binding Detail}" Classes="eyebrow" HorizontalAlignment="Center"
+                <TextBlock AutomationProperties.AutomationId="Startup.Detail" Text="{Binding Detail}" Classes="eyebrow" HorizontalAlignment="Center"
                            TextWrapping="Wrap" TextAlignment="Center" MaxWidth="320"/>
-                <Button Content="Continue anyway" Command="{Binding ContinueCommand}"
+                <Button Content="Continue anyway" AutomationProperties.AutomationId="Startup.Continue" Command="{Binding ContinueCommand}"
                         IsVisible="{Binding CanContinue}" HorizontalAlignment="Center"/>
             </StackPanel>
         </StackPanel>

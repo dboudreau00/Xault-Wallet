@@ -13,6 +13,14 @@ public sealed class HistoryRow
     /// <summary>Incoming outputs become spendable after this many confirmations.</summary>
     public const ulong UnlockConfirmations = 10;
 
+    /// <summary>Mined coins (solo or P2Pool payouts arrive as coinbase outputs, which wallet-rpc
+    /// reports with type "block") unlock only after 60 blocks: CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW.</summary>
+    public const ulong MinedUnlockConfirmations = 60;
+
+    /// <summary>Confirmations until this entry's outputs are spendable.</summary>
+    public static ulong ConfirmationsToUnlock(TransferEntry entry) =>
+        entry.Type == "block" ? MinedUnlockConfirmations : UnlockConfirmations;
+
     private const string Masked = "●●●●●";
 
     public HistoryRow(TransferEntry entry, ulong walletHeight, bool hideAmounts)
@@ -21,7 +29,9 @@ public sealed class HistoryRow
         bool unconfirmed = entry.Type is "pool" or "pending" || entry.Height == 0;
         ulong confirmations = unconfirmed || walletHeight < entry.Height ? 0 : walletHeight - entry.Height;
 
-        IsIncoming = entry.Type is "in" or "pool";
+        // "block" = a mining reward: money IN. (It used to fall through to the outgoing style, so every
+        // P2Pool payout read as "−35.1 XMR" under the raw title "block".)
+        IsIncoming = entry.Type is "in" or "pool" or "block";
         IsPending = entry.Type is "pool" or "pending";
         IsFailed = entry.Type == "failed";
         Title = entry.Type switch
@@ -31,6 +41,7 @@ public sealed class HistoryRow
             "pool" => "Incoming",
             "pending" => "Sending",
             "failed" => "Failed",
+            "block" => "Mining reward",
             _ => entry.Type,
         };
 
@@ -43,8 +54,8 @@ public sealed class HistoryRow
             : DateTimeOffset.FromUnixTimeSeconds((long)entry.Timestamp).ToLocalTime().ToString("MMM d, yyyy · HH:mm", CultureInfo.InvariantCulture);
         Subtitle = unconfirmed
             ? $"{when} · waiting for a block"
-            : confirmations < UnlockConfirmations
-                ? $"{when} · {confirmations}/{UnlockConfirmations} confirmations"
+            : confirmations < ConfirmationsToUnlock(entry)
+                ? $"{when} · {confirmations}/{ConfirmationsToUnlock(entry)} confirmations"
                 : $"{when} · block {entry.Height.ToString("N0", CultureInfo.InvariantCulture)}";
 
         ShortTxId = entry.TxId.Length > 20 ? $"{entry.TxId[..8]}…{entry.TxId[^8..]}" : entry.TxId;

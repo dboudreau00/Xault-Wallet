@@ -21,6 +21,9 @@ public sealed class MoneroWalletService : IAsyncDisposable
     /// UI can offer a restart instead of surfacing repeated connection errors.</summary>
     public bool BackendExited => _proc?.HasProcessExited == true;
 
+    /// <summary>The open wallet syncs from the user's own private test chain (a local regtest node).</summary>
+    public bool IsLocalTestChain => _proc?.IsLocalTestChain == true;
+
     /// <param name="walletRpcBinary">Path to monero-wallet-rpc.</param>
     /// <param name="proxyAddress">Optional SOCKS proxy ("host:port") for the backend's daemon
     /// traffic; null/empty = direct connection.</param>

@@ -35,12 +35,12 @@
                     <TextBlock Text="Settings" Classes="h1"/>
                     <TextBlock Classes="caption" Text="Stored in settings.json beside your vault — no secrets are ever written there."/>
                 </StackPanel>
-                <TextBlock Grid.Column="1" Text="{Binding SavedMessage}" Classes="caption" VerticalAlignment="Center" Margin="0,0,14,0"
+                <TextBlock Grid.Column="1" AutomationProperties.AutomationId="Settings.SavedMessage" Text="{Binding SavedMessage}" Classes="caption" VerticalAlignment="Center" Margin="0,0,14,0"
                            Foreground="{StaticResource SuccessBrush}" MaxWidth="260" TextWrapping="Wrap"/>
-                <Button Grid.Column="2" Classes="accent" Command="{Binding SaveCommand}" Margin="0,0,8,0" VerticalAlignment="Center">
+                <Button Grid.Column="2" Classes="accent" AutomationProperties.AutomationId="Settings.Save" AutomationProperties.Name="Save changes" Command="{Binding SaveCommand}" Margin="0,0,8,0" VerticalAlignment="Center">
                     <TextBlock Text="Save changes" Foreground="{StaticResource AccentText}"/>
                 </Button>
-                <Button Grid.Column="3" Command="{Binding CloseCommand}" VerticalAlignment="Center">
+                <Button Grid.Column="3" AutomationProperties.AutomationId="Settings.Close" AutomationProperties.Name="Close settings" Command="{Binding CloseCommand}" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <c:Icon Data="{StaticResource IconClose}" Width="14" Height="14"/>
                         <TextBlock Text="Close"/>
@@ -64,12 +64,12 @@
                         </StackPanel>
                         <Grid ColumnDefinitions="*,8,Auto,8,Auto">
                             <TextBox Grid.Column="0" Classes="mono" FontSize="12.5"
-                                     Watermark="Path to monero-wallet-rpc (blank = auto-detect)" Text="{Binding WalletRpcBinaryPath}"/>
-                            <Button Grid.Column="2" Content="Browse…" Command="{Binding BrowseCommand}"/>
-                            <Button Grid.Column="4" Content="Test" Command="{Binding TestBinaryCommand}" IsEnabled="{Binding !Busy}"/>
+                                     Watermark="Path to monero-wallet-rpc (blank = auto-detect)" AutomationProperties.AutomationId="Settings.BinaryPath" AutomationProperties.Name="Path to monero-wallet-rpc" Text="{Binding WalletRpcBinaryPath}"/>
+                            <Button Grid.Column="2" Content="Browse…" AutomationProperties.AutomationId="Settings.Browse" Command="{Binding BrowseCommand}"/>
+                            <Button Grid.Column="4" Content="Test" AutomationProperties.AutomationId="Settings.TestBinary" AutomationProperties.Name="Test monero-wallet-rpc" Command="{Binding TestBinaryCommand}" IsEnabled="{Binding !Busy}"/>
                         </Grid>
                         <TextBlock Text="{Binding DefaultBinaryHint}" Classes="caption mono" TextWrapping="Wrap"/>
-                        <TextBlock Text="{Binding BinaryTestResult}" Classes="result"
+                        <TextBlock AutomationProperties.AutomationId="Settings.BinaryTestResult" Text="{Binding BinaryTestResult}" Classes="result"
                                    IsVisible="{Binding BinaryTestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                    Foreground="{Binding BinaryTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
                         <TextBlock Classes="caption" TextWrapping="Wrap"
@@ -89,13 +89,13 @@
                         </StackPanel>
                         <TextBlock Text="DEFAULT NODE FOR NEW WALLETS" Classes="eyebrow"/>
                         <Grid ColumnDefinitions="Auto,10,*,8,Auto">
-                            <ComboBox Grid.Column="0" SelectedIndex="{Binding NetworkIndex}" Width="140">
+                            <ComboBox Grid.Column="0" AutomationProperties.AutomationId="Settings.Network" AutomationProperties.Name="Default network" SelectedIndex="{Binding NetworkIndex}" Width="140">
                                 <ComboBoxItem>Mainnet</ComboBoxItem>
                                 <ComboBoxItem>Stagenet</ComboBoxItem>
                                 <ComboBoxItem>Testnet</ComboBoxItem>
                             </ComboBox>
-                            <TextBox Grid.Column="2" Classes="mono" FontSize="12.5" Watermark="http://host:port" Text="{Binding DefaultDaemonAddress}"/>
-                            <Button Grid.Column="4" Content="Test" Command="{Binding TestDaemonCommand}" IsEnabled="{Binding !Busy}"/>
+                            <TextBox Grid.Column="2" Classes="mono" FontSize="12.5" Watermark="http://host:port" AutomationProperties.AutomationId="Settings.DefaultDaemon" AutomationProperties.Name="Default node address" Text="{Binding DefaultDaemonAddress}"/>
+                            <Button Grid.Column="4" Content="Test" AutomationProperties.AutomationId="Settings.TestDaemon" AutomationProperties.Name="Test node" Command="{Binding TestDaemonCommand}" IsEnabled="{Binding !Busy}"/>
                         </Grid>
                         <ComboBox x:CompileBindings="False" HorizontalAlignment="Stretch"
                                   ItemsSource="{Binding PresetNodes}" SelectedItem="{Binding SelectedPreset}"
@@ -106,13 +106,13 @@
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
-                        <TextBlock Text="{Binding DaemonTestResult}" Classes="result"
+                        <TextBlock AutomationProperties.AutomationId="Settings.DaemonTestResult" Text="{Binding DaemonTestResult}" Classes="result"
                                    IsVisible="{Binding DaemonTestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                    Foreground="{Binding DaemonTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
 
                         <TextBlock Text="SOCKS PROXY" Classes="eyebrow" Margin="0,6,0,0"/>
                         <Grid ColumnDefinitions="260,12,*">
-                            <TextBox Grid.Column="0" Classes="mono" FontSize="12.5" Watermark="127.0.0.1:9050" Text="{Binding ProxyAddress}"/>
+                            <TextBox Grid.Column="0" Classes="mono" FontSize="12.5" Watermark="127.0.0.1:9050" AutomationProperties.AutomationId="Settings.Proxy" AutomationProperties.Name="SOCKS proxy" Text="{Binding ProxyAddress}"/>
                             <TextBlock Grid.Column="2" Classes="caption" TextWrapping="Wrap" VerticalAlignment="Center"
                                        Text="Optional. Routes node traffic through Tor or another SOCKS proxy so the node never sees your IP. Applies the next time a wallet opens."/>
                         </Grid>
@@ -133,7 +133,7 @@
                             <StackPanel Grid.Column="0" Spacing="6">
                                 <TextBlock Text="AUTO-LOCK AFTER" Classes="eyebrow"/>
                                 <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <NumericUpDown Value="{Binding AutoLockMinutes}" Minimum="0" Maximum="240" Increment="1"
+                                    <NumericUpDown AutomationProperties.AutomationId="Settings.AutoLock" AutomationProperties.Name="Auto-lock after minutes" Value="{Binding AutoLockMinutes}" Minimum="0" Maximum="240" Increment="1"
                                                    FormatString="0" Width="130"/>
                                     <TextBlock Text="minutes idle (0 = never)" Classes="muted" VerticalAlignment="Center"/>
                                 </StackPanel>
@@ -141,7 +141,7 @@
                             <StackPanel Grid.Column="2" Spacing="6">
                                 <TextBlock Text="REFRESH EVERY" Classes="eyebrow"/>
                                 <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <NumericUpDown Value="{Binding AutoRefreshSeconds}" Minimum="5" Maximum="600" Increment="5"
+                                    <NumericUpDown AutomationProperties.AutomationId="Settings.AutoRefresh" AutomationProperties.Name="Refresh every seconds" Value="{Binding AutoRefreshSeconds}" Minimum="5" Maximum="600" Increment="5"
                                                    FormatString="0" Width="130"/>
                                     <TextBlock Text="seconds" Classes="muted" VerticalAlignment="Center"/>
                                 </StackPanel>
@@ -163,9 +163,9 @@
 
                         <TextBlock Text="CHANGE NODE" Classes="eyebrow" Margin="0,4,0,0"/>
                         <Grid ColumnDefinitions="*,8,Auto">
-                            <TextBox Grid.Column="0" Classes="mono" FontSize="12.5" Watermark="http://host:port — same network as the wallet"
+                            <TextBox Grid.Column="0" Classes="mono" FontSize="12.5" AutomationProperties.AutomationId="Settings.RepointAddress" AutomationProperties.Name="New node address" Watermark="http://host:port — same network as the wallet"
                                      Text="{Binding RepointNodeAddress}"/>
-                            <Button Grid.Column="2" Content="Test" Command="{Binding TestRepointNodeCommand}" IsEnabled="{Binding !Busy}"/>
+                            <Button Grid.Column="2" Content="Test" AutomationProperties.AutomationId="Settings.TestRepoint" AutomationProperties.Name="Test new node" Command="{Binding TestRepointNodeCommand}" IsEnabled="{Binding !Busy}"/>
                         </Grid>
                         <ComboBox x:CompileBindings="False" HorizontalAlignment="Stretch"
                                   ItemsSource="{Binding PresetNodes}" SelectedItem="{Binding SelectedRepointPreset}"
@@ -176,31 +176,31 @@
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
-                        <TextBlock Text="{Binding RepointTestResult}" Classes="result"
+                        <TextBlock AutomationProperties.AutomationId="Settings.RepointTestResult" Text="{Binding RepointTestResult}" Classes="result"
                                    IsVisible="{Binding RepointTestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                    Foreground="{Binding RepointTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
                         <Grid ColumnDefinitions="*,8,Auto">
-                            <TextBox Grid.Column="0" Watermark="Wallet password (confirms the change)" PasswordChar="●" Text="{Binding RepointPassword}"/>
-                            <Button Grid.Column="2" Content="Update node" Command="{Binding RepointNodeCommand}" IsEnabled="{Binding !Busy}"/>
+                            <TextBox Grid.Column="0" Watermark="Wallet password (confirms the change)" PasswordChar="●" AutomationProperties.AutomationId="Settings.RepointPassword" AutomationProperties.Name="Wallet password" Text="{Binding RepointPassword}"/>
+                            <Button Grid.Column="2" Content="Update node" AutomationProperties.AutomationId="Settings.RepointNode" Command="{Binding RepointNodeCommand}" IsEnabled="{Binding !Busy}"/>
                         </Grid>
-                        <TextBlock Text="{Binding RepointResult}" Classes="result"
+                        <TextBlock AutomationProperties.AutomationId="Settings.RepointResult" Text="{Binding RepointResult}" Classes="result"
                                    IsVisible="{Binding RepointResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                    Foreground="{Binding RepointOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
 
                         <Separator Margin="0,6"/>
 
                         <TextBlock Text="CHANGE PASSWORD" Classes="eyebrow"/>
-                        <TextBox Watermark="Current password" PasswordChar="●" Text="{Binding CurrentPassword}"/>
+                        <TextBox Watermark="Current password" PasswordChar="●" AutomationProperties.AutomationId="Settings.CurrentPassword" AutomationProperties.Name="Current password" Text="{Binding CurrentPassword}"/>
                         <Grid ColumnDefinitions="*,12,*">
-                            <TextBox Grid.Column="0" Watermark="New password" PasswordChar="●" Text="{Binding NewPassword}"/>
-                            <TextBox Grid.Column="2" Watermark="Confirm new password" PasswordChar="●" Text="{Binding NewPasswordConfirm}"/>
+                            <TextBox Grid.Column="0" Watermark="New password" PasswordChar="●" AutomationProperties.AutomationId="Settings.NewPassword" AutomationProperties.Name="New password" Text="{Binding NewPassword}"/>
+                            <TextBox Grid.Column="2" Watermark="Confirm new password" PasswordChar="●" AutomationProperties.AutomationId="Settings.NewPasswordConfirm" AutomationProperties.Name="Confirm new password" Text="{Binding NewPasswordConfirm}"/>
                         </Grid>
                         <Grid ColumnDefinitions="*,Auto">
                             <TextBlock Text="{Binding NewPasswordStrength}" Classes="caption" VerticalAlignment="Center"
                                        IsVisible="{Binding NewPasswordStrength, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                            <Button Grid.Column="1" Content="Change password" Command="{Binding ChangePasswordCommand}" IsEnabled="{Binding !Busy}"/>
+                            <Button Grid.Column="1" Content="Change password" AutomationProperties.AutomationId="Settings.ChangePassword" Command="{Binding ChangePasswordCommand}" IsEnabled="{Binding !Busy}"/>
                         </Grid>
-                        <TextBlock Text="{Binding ChangePasswordResult}" Classes="result"
+                        <TextBlock AutomationProperties.AutomationId="Settings.ChangePasswordResult" Text="{Binding ChangePasswordResult}" Classes="result"
                                    IsVisible="{Binding ChangePasswordResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                    Foreground="{Binding ChangePasswordOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
                     </StackPanel>
@@ -219,20 +219,20 @@
                         <TextBlock Classes="muted" TextWrapping="Wrap"
                                    Text="Restoring brings a lost or corrupted vault back. A backup made before a duress wipe still contains the wiped wallet — keep it somewhere a coercer can't find. Restore is only offered while no wallet is unlocked; the replaced vault is kept beside the new one (a duress wipe destroys those kept copies too)."/>
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button Command="{Binding ExportVaultCommand}" IsEnabled="{Binding VaultExists}">
+                            <Button AutomationProperties.AutomationId="Settings.ExportVault" Command="{Binding ExportVaultCommand}" IsEnabled="{Binding VaultExists}">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <c:Icon Data="{StaticResource IconDownload}" Width="16" Height="16"/>
                                     <TextBlock Text="Export backup…"/>
                                 </StackPanel>
                             </Button>
-                            <Button Command="{Binding RestoreVaultCommand}" IsEnabled="{Binding CanRestoreVault}">
+                            <Button AutomationProperties.AutomationId="Settings.RestoreVault" Command="{Binding RestoreVaultCommand}" IsEnabled="{Binding CanRestoreVault}">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <c:Icon Data="{StaticResource IconRefresh}" Width="16" Height="16"/>
                                     <TextBlock Text="Restore from backup…"/>
                                 </StackPanel>
                             </Button>
                         </StackPanel>
-                        <TextBlock Text="{Binding BackupResult}" Classes="result"
+                        <TextBlock AutomationProperties.AutomationId="Settings.BackupResult" Text="{Binding BackupResult}" Classes="result"
                                    IsVisible="{Binding BackupResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                    Foreground="{Binding BackupOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
                     </StackPanel>

@@ -36,7 +36,7 @@
                 <StackPanel Spacing="14">
                     <StackPanel Spacing="6">
                         <TextBlock Text="PASSWORD" Classes="eyebrow"/>
-                        <TextBox Watermark="Enter your password"
+                        <TextBox AutomationProperties.AutomationId="Unlock.Password" AutomationProperties.Name="Password" Watermark="Enter your password"
                                  PasswordChar="●"
                                  RevealPassword="{Binding RevealPassword}"
                                  Text="{Binding Password}"
@@ -45,7 +45,7 @@
                                 <KeyBinding Gesture="Enter" Command="{Binding UnlockCommand}"/>
                             </TextBox.KeyBindings>
                             <TextBox.InnerRightContent>
-                                <Button Classes="ghost icon" Margin="0,0,4,0" Padding="6" Command="{Binding ToggleRevealCommand}"
+                                <Button Classes="ghost icon" Margin="0,0,4,0" Padding="6" AutomationProperties.AutomationId="Unlock.Reveal" AutomationProperties.Name="Show or hide the password" Command="{Binding ToggleRevealCommand}"
                                         ToolTip.Tip="Show or hide the password" Focusable="False">
                                     <Panel>
                                         <c:Icon Data="{StaticResource IconEye}" Width="16" Height="16" IsVisible="{Binding !RevealPassword}"/>
@@ -56,12 +56,12 @@
                         </TextBox>
                     </StackPanel>
 
-                    <TextBlock Text="{Binding Error}" Foreground="{StaticResource DangerBrush}"
+                    <TextBlock AutomationProperties.AutomationId="Unlock.Error" Text="{Binding Error}" Foreground="{StaticResource DangerBrush}"
                                TextWrapping="Wrap" FontSize="12.5"
                                IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
 
                     <Button Classes="accent" HorizontalAlignment="Stretch" MinHeight="44"
-                            HorizontalContentAlignment="Center" Command="{Binding UnlockCommand}"
+                            AutomationProperties.AutomationId="Unlock.Submit" AutomationProperties.Name="Unlock" HorizontalContentAlignment="Center" Command="{Binding UnlockCommand}"
                             IsEnabled="{Binding !Busy}">
                         <TextBlock Text="Unlock" FontSize="14.5" Foreground="{StaticResource AccentText}"/>
                     </Button>

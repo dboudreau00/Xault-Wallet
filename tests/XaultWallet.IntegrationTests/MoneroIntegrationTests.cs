@@ -334,6 +334,21 @@ public sealed class MoneroIntegrationTests
     }
 
     [Fact]
+    public async Task A_Local_Regtest_Node_Is_Detected_And_Nothing_Else_Is()
+    {
+        if (Skip()) { return; }
+
+        bool expected = IntegrationEnv.IsRegtest && DaemonAddress.IsLoopback(IntegrationEnv.Daemon);
+        Assert.Equal(expected, await MoneroDiagnostics.IsLocalTestChainAsync(IntegrationEnv.Daemon!, null));
+
+        // ...and the wallet that opens against it reports the same, so the UI can label it.
+        await using MoneroWalletService svc = IntegrationEnv.NewService();
+        (string seed, ulong height) = await svc.GenerateNewSeedAsync(IntegrationEnv.Network, IntegrationEnv.Daemon!);
+        await svc.OpenAsync(Secrets(seed, height));
+        Assert.Equal(expected, svc.IsLocalTestChain);
+    }
+
+    [Fact]
     public async Task Generate_Then_Reopen_Seed_RoundTrip()
     {
         if (Skip()) { return; }

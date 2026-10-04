@@ -32,7 +32,9 @@ internal static class IntegrationEnv
         _ => MoneroNetwork.Stagenet,
     };
 
-    public static WalletRpcOptions Options => new() { AllowMismatchedDaemonVersion = IsRegtest };
+    // A regtest node on this machine is detected by the app itself (it reports "fakechain"), which is
+    // exactly the path these tests should exercise; only a REMOTE regtest node needs the explicit flag.
+    public static WalletRpcOptions Options => new() { AllowMismatchedDaemonVersion = IsRegtest && !DaemonAddress.IsLoopback(Daemon) };
 
     public static bool Configured =>
         !string.IsNullOrWhiteSpace(WalletRpc) && !string.IsNullOrWhiteSpace(Daemon);

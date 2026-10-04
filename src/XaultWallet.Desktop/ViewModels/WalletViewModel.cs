@@ -54,7 +54,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         // height change would reset the list's scroll position every few seconds while syncing.
         // Judge "still confirming" at the OLD height: the change that takes a row from 9/10 to
         // settled is exactly the one that must redraw it.
-        if (_entries.Any(e => e.Height == 0 || e.Type is "pool" or "pending" || oldValue < e.Height + HistoryRow.UnlockConfirmations))
+        if (_entries.Any(e => e.Height == 0 || e.Type is "pool" or "pending" || oldValue < e.Height + HistoryRow.ConfirmationsToUnlock(e)))
         {
             RebuildHistoryRows();
         }
@@ -183,9 +183,16 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     }
 
     /// <summary>Which Monero network this wallet is on — shown as a badge so a real-funds
-    /// mainnet wallet is never mistaken for a test one (or vice versa).</summary>
-    public string NetworkLabel => _secrets.Network.ToString();
-    public bool IsMainnetWallet => _secrets.Network == Core.Models.MoneroNetwork.Mainnet;
+    /// mainnet wallet is never mistaken for a test one (or vice versa). A local regtest node uses
+    /// mainnet-format addresses but holds no real funds, so it gets its own label.</summary>
+    public string NetworkLabel => IsLocalTestChain ? "Regtest · local test chain" : _secrets.Network.ToString();
+    public bool IsMainnetWallet => _secrets.Network == Core.Models.MoneroNetwork.Mainnet && !IsLocalTestChain;
+
+    /// <summary>The node is the user's own private test chain (see MoneroDiagnostics.IsLocalTestChainAsync).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NetworkLabel))]
+    [NotifyPropertyChangedFor(nameof(IsMainnetWallet))]
+    private bool _isLocalTestChain;
 
     /// <summary>Feedback line for the Receive tab (new-subaddress errors, copy feedback) —
     /// kept OFF the Status line, which the sync tracker overwrites every few seconds.</summary>
@@ -283,6 +290,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         {
             Status = "Restoring wallet from seed\u2026";
             await _wallet.OpenAsync(_secrets, _cts.Token);
+            IsLocalTestChain = _wallet.IsLocalTestChain;
             PrimaryAddress = await _wallet.GetPrimaryAddressAsync(_cts.Token);
             IsReady = true;
             Status = "Syncing in the background\u2026";

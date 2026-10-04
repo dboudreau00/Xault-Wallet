@@ -45,21 +45,21 @@
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <TextBlock Text="TOTAL BALANCE" Classes="eyebrow" VerticalAlignment="Center"/>
                             <!-- Network badge: a real-funds mainnet wallet must never be mistaken for a test one -->
-                            <Border Classes="pill info" IsVisible="{Binding !IsMainnetWallet}">
+                            <Border Classes="pill info" AutomationProperties.AutomationId="Wallet.NetworkBadge" IsVisible="{Binding !IsMainnetWallet}">
                                 <TextBlock Text="{Binding NetworkLabel}"/>
                             </Border>
-                            <Border Classes="pill danger" IsVisible="{Binding IsMainnetWallet}">
+                            <Border Classes="pill danger" AutomationProperties.AutomationId="Wallet.MainnetBadge" IsVisible="{Binding IsMainnetWallet}">
                                 <TextBlock Text="MAINNET · REAL FUNDS"/>
                             </Border>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="12">
-                            <TextBlock Classes="mono" FontSize="40" FontWeight="SemiBold" VerticalAlignment="Bottom">
+                            <TextBlock AutomationProperties.AutomationId="Wallet.Balance" AutomationProperties.Name="{Binding BalanceDisplay}" Classes="mono" FontSize="40" FontWeight="SemiBold" VerticalAlignment="Bottom">
                                 <Run Text="{Binding BalanceWhole}"/><Run Text="{Binding BalanceFraction}" Foreground="{StaticResource TextSecondary}"/>
                             </TextBlock>
                             <TextBlock Text="XMR" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Bottom"
                                        Margin="0,0,0,9" Foreground="{StaticResource TextTertiary}"/>
                             <Button Classes="ghost icon" VerticalAlignment="Bottom" Margin="0,0,0,4"
-                                    Command="{Binding ToggleBalancesCommand}" ToolTip.Tip="Hide or show amounts">
+                                    AutomationProperties.AutomationId="Wallet.HideBalances" AutomationProperties.Name="Hide or show amounts" Command="{Binding ToggleBalancesCommand}" ToolTip.Tip="Hide or show amounts">
                                 <Panel>
                                     <c:Icon Data="{StaticResource IconEye}" IsVisible="{Binding !HideBalances}"/>
                                     <c:Icon Data="{StaticResource IconEyeOff}" IsVisible="{Binding HideBalances}"/>
@@ -68,23 +68,23 @@
                         </StackPanel>
                         <WrapPanel Orientation="Horizontal">
                             <Border Classes="pill success" Margin="0,0,8,0">
-                                <TextBlock Text="{Binding UnlockedDisplay}"/>
+                                <TextBlock AutomationProperties.AutomationId="Wallet.Spendable" Text="{Binding UnlockedDisplay}"/>
                             </Border>
                             <Border Classes="pill warning" IsVisible="{Binding HasLocked}">
                                 <StackPanel Orientation="Horizontal" Spacing="5">
                                     <c:Icon Data="{StaticResource IconClock}" Width="12" Height="12" StrokeThickness="2.2"
                                             Foreground="{StaticResource WarningBrush}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="{Binding LockedDisplay}"/>
+                                    <TextBlock AutomationProperties.AutomationId="Wallet.Maturing" Text="{Binding LockedDisplay}"/>
                                 </StackPanel>
                             </Border>
                         </WrapPanel>
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
-                        <Button Classes="icon" Command="{Binding RefreshCommand}" IsEnabled="{Binding IsReady}"
+                        <Button Classes="icon" AutomationProperties.AutomationId="Wallet.Refresh" AutomationProperties.Name="Refresh now" Command="{Binding RefreshCommand}" IsEnabled="{Binding IsReady}"
                                 ToolTip.Tip="Refresh now">
                             <c:Icon Data="{StaticResource IconRefresh}"/>
                         </Button>
-                        <Button Classes="accent" Command="{Binding LockCommand}" ToolTip.Tip="Lock the wallet and shred its temporary files">
+                        <Button Classes="accent" AutomationProperties.AutomationId="Wallet.Lock" AutomationProperties.Name="Lock" Command="{Binding LockCommand}" ToolTip.Tip="Lock the wallet and shred its temporary files">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <c:Icon Data="{StaticResource IconLock}" Width="16" Height="16"/>
                                 <TextBlock Text="Lock" Foreground="{StaticResource AccentText}"/>
@@ -99,7 +99,7 @@
                         <Ellipse Grid.Column="0" Width="8" Height="8" Margin="0,0,9,0" VerticalAlignment="Center"
                                  Fill="{Binding IsSynced, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
                         <TextBlock Grid.Column="1" Classes="mono" FontSize="12" VerticalAlignment="Center"
-                                   Foreground="{StaticResource TextSecondary}" Text="{Binding SyncText}"/>
+                                   Foreground="{StaticResource TextSecondary}" AutomationProperties.AutomationId="Wallet.SyncText" Text="{Binding SyncText}"/>
                         <TextBlock Grid.Column="2" Classes="eyebrow" VerticalAlignment="Center" Text="NODE SYNC"/>
                     </Grid>
                     <ProgressBar Minimum="0" Maximum="100" Value="{Binding SyncProgress}" Classes.synced="{Binding IsSynced}"/>
@@ -114,28 +114,28 @@
                     <c:Icon Grid.Column="0" Data="{StaticResource IconShield}" Foreground="{StaticResource InfoBrush}"
                             VerticalAlignment="Center" Margin="0,0,12,0"/>
                     <TextBlock Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0" Text="{Binding UpgradeNotice}"/>
-                    <Button Grid.Column="2" Content="Dismiss" Command="{Binding DismissUpgradeNoticeCommand}" VerticalAlignment="Center"/>
+                    <Button Grid.Column="2" Content="Dismiss" AutomationProperties.AutomationId="Wallet.DismissUpgrade" Command="{Binding DismissUpgradeNoticeCommand}" VerticalAlignment="Center"/>
                 </Grid>
             </Border>
-            <Border IsVisible="{Binding StartupFailed}" Margin="0,14,0,0" Classes="callout danger">
+            <Border AutomationProperties.AutomationId="Wallet.StartupFailed" IsVisible="{Binding StartupFailed}" Margin="0,14,0,0" Classes="callout danger">
                 <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                     <c:Icon Grid.Column="0" Data="{StaticResource IconWarning}" Foreground="{StaticResource DangerBrush}"
                             VerticalAlignment="Center" Margin="0,0,12,0"/>
                     <TextBlock Grid.Column="1" VerticalAlignment="Center" Foreground="#F3C2C2" Margin="0,0,12,0"
-                               Text="{Binding Status}"/>
+                               AutomationProperties.AutomationId="Wallet.StartupError" Text="{Binding Status}"/>
                     <Button Grid.Column="2" Content="Open Settings" Command="{Binding OpenSettingsCommand}"
                             VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <Button Grid.Column="3" Content="Retry" Classes="accent" Command="{Binding RetryStartupCommand}"
+                    <Button Grid.Column="3" Content="Retry" Classes="accent" AutomationProperties.AutomationId="Wallet.Retry" Command="{Binding RetryStartupCommand}"
                             VerticalAlignment="Center"/>
                 </Grid>
             </Border>
         </StackPanel>
 
         <!-- ================= Navigation + panels ================= -->
-        <TabControl Grid.Row="2" Classes="segmented" Margin="0,18,0,0" Padding="0" IsEnabled="{Binding IsReady}">
+        <TabControl AutomationProperties.AutomationId="Wallet.Tabs" Grid.Row="2" Classes="segmented" Margin="0,18,0,0" Padding="0" IsEnabled="{Binding IsReady}">
 
             <!-- ==== Receive ==== -->
-            <TabItem>
+            <TabItem AutomationProperties.AutomationId="Wallet.Tab.Receive" AutomationProperties.Name="Receive">
                 <TabItem.Header>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <c:Icon Classes="tabIcon" Data="{StaticResource IconReceive}" Width="16" Height="16"/>
@@ -147,20 +147,20 @@
                         <Grid ColumnDefinitions="Auto,28,*">
                             <Border Grid.Column="0" Width="208" Height="208" CornerRadius="14" ClipToBounds="True"
                                     Background="White" VerticalAlignment="Top">
-                                <c:QrCodeView x:Name="ReceiveQr" Text="{Binding ReceiveUri}" Width="208" Height="208"/>
+                                <c:QrCodeView AutomationProperties.AutomationId="Receive.Qr" AutomationProperties.Name="Receive QR code" x:Name="ReceiveQr" Text="{Binding ReceiveUri}" Width="208" Height="208"/>
                             </Border>
                             <StackPanel Grid.Column="2" Spacing="12" VerticalAlignment="Center">
                                 <TextBlock Text="YOUR ADDRESS" Classes="eyebrow"/>
                                 <SelectableTextBlock Classes="mono" FontSize="14" LineHeight="22" TextWrapping="Wrap"
-                                                     Text="{Binding PrimaryAddress}" Foreground="{StaticResource TextPrimary}"/>
+                                                     AutomationProperties.AutomationId="Receive.Address" Text="{Binding PrimaryAddress}" Foreground="{StaticResource TextPrimary}"/>
                                 <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-                                    <Button Classes="accent" Click="CopyAddress_Click">
+                                    <Button Classes="accent" AutomationProperties.AutomationId="Receive.Copy" AutomationProperties.Name="Copy address" Click="CopyAddress_Click">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <c:Icon Data="{StaticResource IconCopy}" Width="16" Height="16"/>
                                             <TextBlock Text="Copy address" Foreground="{StaticResource AccentText}"/>
                                         </StackPanel>
                                     </Button>
-                                    <Button Command="{Binding NewAddressCommand}"
+                                    <Button AutomationProperties.AutomationId="Receive.NewSubaddress" AutomationProperties.Name="New subaddress" Command="{Binding NewAddressCommand}"
                                             ToolTip.Tip="A fresh, unlinkable address for the same wallet">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <c:Icon Data="{StaticResource IconPlus}" Width="16" Height="16"/>
@@ -168,9 +168,9 @@
                                         </StackPanel>
                                     </Button>
                                 </StackPanel>
-                                <TextBlock Text="{Binding CopyNotice}" Classes="caption" Foreground="{StaticResource SuccessBrush}"
+                                <TextBlock AutomationProperties.AutomationId="Receive.Notice" Text="{Binding CopyNotice}" Classes="caption" Foreground="{StaticResource SuccessBrush}"
                                            IsVisible="{Binding CopyNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                                <TextBlock Text="{Binding ReceiveNotice}" Classes="caption" TextWrapping="Wrap"
+                                <TextBlock AutomationProperties.AutomationId="Receive.Error" Text="{Binding ReceiveNotice}" Classes="caption" TextWrapping="Wrap"
                                            Foreground="{StaticResource WarningBrush}"
                                            IsVisible="{Binding ReceiveNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                 <TextBlock Classes="muted" TextWrapping="Wrap" MaxWidth="560" HorizontalAlignment="Left"
@@ -182,7 +182,7 @@
             </TabItem>
 
             <!-- ==== Send ==== -->
-            <TabItem>
+            <TabItem AutomationProperties.AutomationId="Wallet.Tab.Send" AutomationProperties.Name="Send">
                 <TabItem.Header>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <c:Icon Classes="tabIcon" Data="{StaticResource IconSend}" Width="16" Height="16"/>
@@ -195,13 +195,13 @@
                             <StackPanel Spacing="16" MaxWidth="680" HorizontalAlignment="Left">
                                 <StackPanel Spacing="7">
                                     <TextBlock Text="DESTINATION ADDRESS" Classes="eyebrow"/>
-                                    <TextBox Classes="mono" FontSize="13" Watermark="Paste the recipient's Monero address"
+                                    <TextBox Classes="mono" FontSize="13" AutomationProperties.AutomationId="Send.Address" AutomationProperties.Name="Destination address" Watermark="Paste the recipient's Monero address"
                                              Text="{Binding SendAddress}"/>
                                 </StackPanel>
                                 <Grid ColumnDefinitions="*,12,Auto,12,Auto">
                                     <StackPanel Grid.Column="0" Spacing="7">
                                         <TextBlock Text="AMOUNT" Classes="eyebrow"/>
-                                        <TextBox Classes="mono" FontSize="15" Watermark="0.00" Text="{Binding SendAmountText}"
+                                        <TextBox Classes="mono" FontSize="15" Watermark="0.00" AutomationProperties.AutomationId="Send.Amount" AutomationProperties.Name="Amount" Text="{Binding SendAmountText}"
                                                  VerticalContentAlignment="Center">
                                             <TextBox.InnerRightContent>
                                                 <TextBlock Text="XMR" Classes="eyebrow" VerticalAlignment="Center" Margin="0,0,12,0"/>
@@ -210,7 +210,7 @@
                                     </StackPanel>
                                     <StackPanel Grid.Column="2" Spacing="7">
                                         <TextBlock Text="PRIORITY" Classes="eyebrow"/>
-                                        <ComboBox SelectedIndex="{Binding SendPriority}" MinWidth="140">
+                                        <ComboBox AutomationProperties.AutomationId="Send.Priority" AutomationProperties.Name="Priority" SelectedIndex="{Binding SendPriority}" MinWidth="140">
                                             <ComboBoxItem>Default</ComboBoxItem>
                                             <ComboBoxItem>Low</ComboBoxItem>
                                             <ComboBoxItem>Medium</ComboBoxItem>
@@ -218,16 +218,16 @@
                                         </ComboBox>
                                     </StackPanel>
                                     <StackPanel Grid.Column="4" Spacing="7" VerticalAlignment="Bottom">
-                                        <Button Content="Send max" Command="{Binding ReviewSendMaxCommand}" MinHeight="40"
+                                        <Button Content="Send max" AutomationProperties.AutomationId="Send.Max" Command="{Binding ReviewSendMaxCommand}" MinHeight="40"
                                                 IsEnabled="{Binding !Sending}"
                                                 ToolTip.Tip="Sweep the entire spendable balance to this address. The exact amount and fee are shown for confirmation before anything is sent."/>
                                     </StackPanel>
                                 </Grid>
-                                <TextBlock Classes="mono" FontSize="12" Text="{Binding SendAmountPreview}" TextWrapping="Wrap" Margin="0,-8,0,0"
+                                <TextBlock Classes="mono" FontSize="12" AutomationProperties.AutomationId="Send.AmountPreview" Text="{Binding SendAmountPreview}" TextWrapping="Wrap" Margin="0,-8,0,0"
                                            IsVisible="{Binding SendAmountPreview, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                            Foreground="{Binding SendAmountPreviewIsError, Converter={x:Static conv:BoolToBrushConverter.ErrorMuted}}"/>
                                 <Button Classes="accent" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" MinHeight="44"
-                                        Command="{Binding ReviewSendCommand}" IsEnabled="{Binding !Sending}">
+                                        AutomationProperties.AutomationId="Send.Review" AutomationProperties.Name="Review and send" Command="{Binding ReviewSendCommand}" IsEnabled="{Binding !Sending}">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <c:Icon Data="{StaticResource IconSend}" Width="16" Height="16"/>
                                         <TextBlock Text="Review &amp; send" Foreground="{StaticResource AccentText}"/>
@@ -238,7 +238,7 @@
                                            Text="The transaction is built and signed first — you see the exact fee and total before anything is broadcast."/>
                                 <Border Classes="inset" Padding="14,12"
                                         IsVisible="{Binding SendResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                                    <TextBlock Text="{Binding SendResult}" Classes="mono" FontSize="12" TextWrapping="Wrap"
+                                    <TextBlock AutomationProperties.AutomationId="Send.Result" Text="{Binding SendResult}" Classes="mono" FontSize="12" TextWrapping="Wrap"
                                                Foreground="{StaticResource TextSecondary}"/>
                                 </Border>
 
@@ -253,13 +253,13 @@
                                                    Text="Share the transaction ID and key to prove this payment. The key proves this one payment only — it cannot spend anything. Never share your seed."/>
                                         <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,8,Auto">
                                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Tx ID" Classes="caption" Margin="0,0,14,0" VerticalAlignment="Center"/>
-                                            <SelectableTextBlock Grid.Row="0" Grid.Column="1" Classes="mono" FontSize="12" Text="{Binding LastTxId}" TextWrapping="Wrap" VerticalAlignment="Center"/>
-                                            <Button Grid.Row="0" Grid.Column="2" Classes="ghost icon" Click="CopyLastTxId_Click" ToolTip.Tip="Copy transaction ID">
+                                            <SelectableTextBlock Grid.Row="0" Grid.Column="1" Classes="mono" FontSize="12" AutomationProperties.AutomationId="Send.LastTxId" Text="{Binding LastTxId}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                            <Button Grid.Row="0" Grid.Column="2" Classes="ghost icon" AutomationProperties.AutomationId="Send.CopyTxId" AutomationProperties.Name="Copy transaction ID" Click="CopyLastTxId_Click" ToolTip.Tip="Copy transaction ID">
                                                 <c:Icon Data="{StaticResource IconCopy}" Width="16" Height="16"/>
                                             </Button>
                                             <TextBlock Grid.Row="2" Grid.Column="0" Text="Tx key" Classes="caption" Margin="0,0,14,0" VerticalAlignment="Center"/>
-                                            <SelectableTextBlock Grid.Row="2" Grid.Column="1" Classes="mono" FontSize="12" Text="{Binding LastTxKey}" TextWrapping="Wrap" VerticalAlignment="Center"/>
-                                            <Button Grid.Row="2" Grid.Column="2" Classes="ghost icon" Click="CopyLastTxKey_Click" ToolTip.Tip="Copy transaction key">
+                                            <SelectableTextBlock Grid.Row="2" Grid.Column="1" Classes="mono" FontSize="12" AutomationProperties.AutomationId="Send.LastTxKey" Text="{Binding LastTxKey}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                            <Button Grid.Row="2" Grid.Column="2" Classes="ghost icon" AutomationProperties.AutomationId="Send.CopyTxKey" AutomationProperties.Name="Copy transaction key" Click="CopyLastTxKey_Click" ToolTip.Tip="Copy transaction key">
                                                 <c:Icon Data="{StaticResource IconCopy}" Width="16" Height="16"/>
                                             </Button>
                                         </Grid>
@@ -269,7 +269,7 @@
                         </Border>
 
                         <!-- Verify any payment -->
-                        <Expander HorizontalAlignment="Stretch">
+                        <Expander AutomationProperties.AutomationId="Proof.Expander" AutomationProperties.Name="Verify a payment" HorizontalAlignment="Stretch">
                             <Expander.Header>
                                 <StackPanel Orientation="Horizontal" Spacing="10">
                                     <c:Icon Data="{StaticResource IconShield}" Width="16" Height="16"/>
@@ -278,16 +278,16 @@
                                 </StackPanel>
                             </Expander.Header>
                             <StackPanel Spacing="10" MaxWidth="680" HorizontalAlignment="Left" Margin="4,6,4,4">
-                                <TextBox Classes="mono" FontSize="12" Watermark="Transaction ID" Text="{Binding VerifyTxId}"/>
-                                <TextBox Classes="mono" FontSize="12" Watermark="Transaction key" Text="{Binding VerifyTxKey}"/>
-                                <TextBox Classes="mono" FontSize="12" Watermark="Destination address" Text="{Binding VerifyAddress}"/>
+                                <TextBox Classes="mono" FontSize="12" Watermark="Transaction ID" AutomationProperties.AutomationId="Proof.TxId" AutomationProperties.Name="Transaction ID" Text="{Binding VerifyTxId}"/>
+                                <TextBox Classes="mono" FontSize="12" Watermark="Transaction key" AutomationProperties.AutomationId="Proof.TxKey" AutomationProperties.Name="Transaction key" Text="{Binding VerifyTxKey}"/>
+                                <TextBox Classes="mono" FontSize="12" Watermark="Destination address" AutomationProperties.AutomationId="Proof.Address" AutomationProperties.Name="Destination address" Text="{Binding VerifyAddress}"/>
                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <Button Content="Verify" Classes="accent" Command="{Binding VerifyPaymentCommand}"/>
-                                    <Button Content="Use last send" Command="{Binding PrefillVerifyFromLastCommand}" IsVisible="{Binding HasLastTx}"/>
-                                    <Button Content="Fetch key from wallet" Command="{Binding FetchTxKeyCommand}"
+                                    <Button Content="Verify" Classes="accent" AutomationProperties.AutomationId="Proof.Verify" Command="{Binding VerifyPaymentCommand}"/>
+                                    <Button Content="Use last send" AutomationProperties.AutomationId="Proof.UseLast" Command="{Binding PrefillVerifyFromLastCommand}" IsVisible="{Binding HasLastTx}"/>
+                                    <Button Content="Fetch key from wallet" AutomationProperties.AutomationId="Proof.FetchKey" Command="{Binding FetchTxKeyCommand}"
                                             ToolTip.Tip="Look up the tx key for a transaction this wallet sent"/>
                                 </StackPanel>
-                                <TextBlock Text="{Binding VerifyResult}" TextWrapping="Wrap" FontSize="12.5"
+                                <TextBlock AutomationProperties.AutomationId="Proof.Result" Text="{Binding VerifyResult}" TextWrapping="Wrap" FontSize="12.5"
                                            IsVisible="{Binding VerifyResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                            Foreground="{Binding VerifyOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
                             </StackPanel>
@@ -297,7 +297,7 @@
             </TabItem>
 
             <!-- ==== History ==== -->
-            <TabItem>
+            <TabItem AutomationProperties.AutomationId="Wallet.Tab.History" AutomationProperties.Name="History">
                 <TabItem.Header>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <c:Icon Classes="tabIcon" Data="{StaticResource IconHistory}" Width="16" Height="16"/>
@@ -311,7 +311,7 @@
                             <TextBlock Grid.Column="1" Text="{Binding CopyNotice}" Classes="caption" Margin="0,0,12,0"
                                        Foreground="{StaticResource SuccessBrush}" VerticalAlignment="Center"
                                        IsVisible="{Binding CopyNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                            <Button Grid.Column="2" Classes="ghost" Click="ExportHistory_Click" ToolTip.Tip="Save the transaction list as CSV">
+                            <Button Grid.Column="2" Classes="ghost" AutomationProperties.AutomationId="History.Export" AutomationProperties.Name="Export CSV" Click="ExportHistory_Click" ToolTip.Tip="Save the transaction list as CSV">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <c:Icon Data="{StaticResource IconDownload}" Width="16" Height="16"/>
                                     <TextBlock Text="Export CSV"/>
@@ -320,7 +320,7 @@
                         </Grid>
 
                         <ScrollViewer Grid.Row="1" IsVisible="{Binding HasHistory}">
-                            <ItemsControl ItemsSource="{Binding History}">
+                            <ItemsControl AutomationProperties.AutomationId="History.List" AutomationProperties.Name="Transactions" ItemsSource="{Binding History}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:HistoryRow">
                                         <Border Classes="txRow">
@@ -363,7 +363,7 @@
                                                 </StackPanel>
 
                                                 <Button Grid.Column="6" Classes="ghost icon" VerticalAlignment="Center"
-                                                        Click="CopyRowTxId_Click" ToolTip.Tip="Copy transaction ID">
+                                                        AutomationProperties.AutomationId="History.CopyTxId" AutomationProperties.Name="Copy transaction ID" Click="CopyRowTxId_Click" ToolTip.Tip="Copy transaction ID">
                                                     <c:Icon Data="{StaticResource IconCopy}" Width="16" Height="16"/>
                                                 </Button>
                                             </Grid>
@@ -374,7 +374,7 @@
                         </ScrollViewer>
 
                         <!-- Empty state -->
-                        <StackPanel Grid.Row="1" IsVisible="{Binding !HasHistory}" VerticalAlignment="Center"
+                        <StackPanel Grid.Row="1" AutomationProperties.AutomationId="History.Empty" IsVisible="{Binding !HasHistory}" VerticalAlignment="Center"
                                     HorizontalAlignment="Center" Spacing="10" Margin="0,30">
                             <Border Width="52" Height="52" CornerRadius="16" Background="{StaticResource SurfaceAlt}" HorizontalAlignment="Center">
                                 <c:Icon Data="{StaticResource IconHistory}" Width="22" Height="22" Foreground="{StaticResource TextTertiary}"
@@ -395,12 +395,12 @@
             <Grid ColumnDefinitions="Auto,*,Auto">
                 <c:Icon Grid.Column="0" Data="{StaticResource IconLock}" Foreground="{StaticResource WarningBrush}" Margin="0,0,12,0" VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="1" VerticalAlignment="Center" Foreground="#F1E2B6" Text="{Binding LockCountdownText}"/>
-                <Button Grid.Column="2" Content="Stay unlocked" Classes="accent" Command="{Binding StayUnlockedCommand}"/>
+                <Button Grid.Column="2" Content="Stay unlocked" Classes="accent" AutomationProperties.AutomationId="Wallet.StayUnlocked" Command="{Binding StayUnlockedCommand}"/>
             </Grid>
         </Border>
 
         <!-- ===== Send confirmation (Monero is irreversible; always confirm) ===== -->
-        <Border Grid.Row="0" Grid.RowSpan="3" Margin="-28,-20,-28,-22" IsVisible="{Binding ShowSendConfirm}" Background="{StaticResource Scrim}">
+        <Border Grid.Row="0" Grid.RowSpan="3" Margin="-28,-20,-28,-22" AutomationProperties.AutomationId="SendConfirm" IsVisible="{Binding ShowSendConfirm}" Background="{StaticResource Scrim}">
             <Border Classes="card" Width="500" Padding="28,26" VerticalAlignment="Center" HorizontalAlignment="Center">
                 <StackPanel Spacing="16">
                     <StackPanel Orientation="Horizontal" Spacing="12">
@@ -409,7 +409,7 @@
                         </Border>
                         <StackPanel VerticalAlignment="Center" Spacing="2">
                             <TextBlock Text="Confirm this send" Classes="h2"/>
-                            <TextBlock Text="{Binding SendSummary}" Classes="caption"/>
+                            <TextBlock AutomationProperties.AutomationId="SendConfirm.Summary" Text="{Binding SendSummary}" Classes="caption"/>
                         </StackPanel>
                     </StackPanel>
 
@@ -417,7 +417,7 @@
                     <Border Classes="inset" Padding="14,12">
                         <StackPanel Spacing="5">
                             <TextBlock Text="RECIPIENT" Classes="eyebrow"/>
-                            <SelectableTextBlock Classes="mono" FontSize="12.5" LineHeight="19" Text="{Binding ConfirmSendAddress}" TextWrapping="Wrap"/>
+                            <SelectableTextBlock Classes="mono" FontSize="12.5" LineHeight="19" AutomationProperties.AutomationId="SendConfirm.Recipient" Text="{Binding ConfirmSendAddress}" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
 
@@ -426,23 +426,23 @@
                         <StackPanel Spacing="10">
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBlock Text="Amount" Classes="muted"/>
-                                <TextBlock Grid.Column="1" Classes="mono" FontSize="13" HorizontalAlignment="Right" Text="{Binding ConfirmAmountText}"/>
+                                <TextBlock Grid.Column="1" Classes="mono" FontSize="13" HorizontalAlignment="Right" AutomationProperties.AutomationId="SendConfirm.Amount" Text="{Binding ConfirmAmountText}"/>
                             </Grid>
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBlock Text="Network fee" Classes="muted"/>
-                                <TextBlock Grid.Column="1" Classes="mono" FontSize="13" HorizontalAlignment="Right" Text="{Binding SendFeeText}"/>
+                                <TextBlock Grid.Column="1" Classes="mono" FontSize="13" HorizontalAlignment="Right" AutomationProperties.AutomationId="SendConfirm.Fee" Text="{Binding SendFeeText}"/>
                             </Grid>
                             <Rectangle Fill="{StaticResource BorderSubtle}" Height="1"/>
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBlock Text="Total" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" Classes="mono" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Right" Text="{Binding SendTotalText}"/>
+                                <TextBlock Grid.Column="1" Classes="mono" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Right" AutomationProperties.AutomationId="SendConfirm.Total" Text="{Binding SendTotalText}"/>
                             </Grid>
                             <TextBlock Classes="caption" TextWrapping="Wrap" Text="The fee is locked into the signed transaction — it can't change after you confirm."/>
                         </StackPanel>
                     </Border>
 
                     <Border Classes="callout danger" IsVisible="{Binding SendFeeWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                        <TextBlock Foreground="#F3C2C2" Text="{Binding SendFeeWarning}"/>
+                        <TextBlock Foreground="#F3C2C2" AutomationProperties.AutomationId="SendConfirm.FeeWarning" Text="{Binding SendFeeWarning}"/>
                     </Border>
 
                     <Border Classes="callout warning">
@@ -456,9 +456,9 @@
 
                     <Grid ColumnDefinitions="*,10,*">
                         <Button Grid.Column="0" Content="Cancel" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                MinHeight="42" Command="{Binding CancelSendCommand}"/>
+                                MinHeight="42" AutomationProperties.AutomationId="SendConfirm.Cancel" Command="{Binding CancelSendCommand}"/>
                         <Button Grid.Column="2" Classes="accent" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                MinHeight="42" Command="{Binding ConfirmSendCommand}">
+                                MinHeight="42" AutomationProperties.AutomationId="SendConfirm.Send" AutomationProperties.Name="Send now" Command="{Binding ConfirmSendCommand}">
                             <TextBlock Text="Send now" Foreground="{StaticResource AccentText}"/>
                         </Button>
                     </Grid>

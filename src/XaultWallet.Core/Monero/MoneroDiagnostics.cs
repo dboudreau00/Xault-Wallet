@@ -87,23 +87,8 @@ public static class MoneroDiagnostics
             throw new ArgumentException("Daemon address must be a valid http(s) URL.", nameof(daemonAddress));
         }
 
-        // Same route as wallet-rpc: the user's SOCKS proxy when set, otherwise a DIRECT connection.
-        // wallet-rpc ignores system/env proxies, so the probe must too — or it would reach the
-        // node over a different path (and from a different IP) than the wallet itself.
-        using var handler = new SocketsHttpHandler { UseProxy = false };
-        if (!string.IsNullOrWhiteSpace(proxyAddress))
-        {
-            handler.Proxy = new System.Net.WebProxy("socks5://" + proxyAddress.Trim());
-            handler.UseProxy = true;
-        }
-
-        using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
-
-        // Relative (not rooted) so a daemon behind a path prefix (e.g. https://host/monero)
-        // is probed at the same URL wallet-rpc will actually use via --daemon-address.
-        Uri probeUri = baseUri.AbsolutePath.EndsWith('/')
-            ? new Uri(baseUri, "get_height")
-            : new Uri(baseUri + "/get_height");
+        using HttpClient http = DaemonClient(proxyAddress);
+        Uri probeUri = DaemonEndpoint(baseUri, "get_height");
 
         HttpResponseMessage resp;
         try
@@ -137,4 +122,67 @@ public static class MoneroDiagnostics
             throw new InvalidOperationException("The endpoint responded but wasn't a Monero daemon (no height field).");
         }
     }
+
+    /// <summary>
+    /// True only for the user's own PRIVATE TEST CHAIN: a node on this machine (loopback) that itself
+    /// reports <c>"nettype": "fakechain"</c> — what <c>monerod --regtest</c> runs. Such a chain needs
+    /// monero-wallet-rpc's <c>--allow-mismatched-daemon-version</c>: its blocks carry the latest
+    /// hard-fork version from height 1, which wallet2's per-height fork check rejects. Never true for a
+    /// public network: those nodes report mainnet/stagenet/testnet, and nothing off this machine is
+    /// even asked. Any failure (unreachable, not JSON, odd answer) reads as "no".
+    /// </summary>
+    public static async Task<bool> IsLocalTestChainAsync(string daemonAddress, string? proxyAddress, CancellationToken ct = default)
+    {
+        if (!DaemonAddress.IsLoopback(daemonAddress) || !DaemonAddress.TryParse(daemonAddress, out Uri baseUri))
+        {
+            return false;
+        }
+
+        try
+        {
+            using HttpClient http = DaemonClient(proxyAddress, TimeSpan.FromSeconds(5));
+            using HttpResponseMessage resp = await http.GetAsync(DaemonEndpoint(baseUri, "get_info"), ct).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode)
+            {
+                return false;
+            }
+
+            await using Stream stream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            using JsonDocument doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                   && doc.RootElement.TryGetProperty("nettype", out JsonElement nettype)
+                   && nettype.ValueKind == JsonValueKind.String
+                   && nettype.GetString() == "fakechain";
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// An HTTP client that reaches the node by the SAME route as wallet-rpc: the user's SOCKS proxy
+    /// when set, otherwise a DIRECT connection. wallet-rpc ignores system/env proxies, so the probes
+    /// must too — or they would reach the node over a different path (and from a different IP).
+    /// </summary>
+    private static HttpClient DaemonClient(string? proxyAddress, TimeSpan? timeout = null)
+    {
+        var handler = new SocketsHttpHandler { UseProxy = false };
+        if (!string.IsNullOrWhiteSpace(proxyAddress))
+        {
+            handler.Proxy = new System.Net.WebProxy("socks5://" + proxyAddress.Trim());
+            handler.UseProxy = true;
+        }
+
+        return new HttpClient(handler, disposeHandler: true) { Timeout = timeout ?? TimeSpan.FromSeconds(10) };
+    }
+
+    /// <summary>Relative (not rooted), so a node behind a path prefix (e.g. https://host/monero) is
+    /// probed at the same URL wallet-rpc will actually use via --daemon-address.</summary>
+    private static Uri DaemonEndpoint(Uri baseUri, string path) =>
+        baseUri.AbsolutePath.EndsWith('/') ? new Uri(baseUri, path) : new Uri(baseUri + "/" + path);
 }

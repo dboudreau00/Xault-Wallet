@@ -84,6 +84,7 @@ internal static class Program
         }
 
         CheckHistoryRowSettles();
+        CheckMiningRewardRow();
         if (!OperatingSystem.IsWindows())
         {
             CheckDataFolderIsUnder(configRoot);
@@ -152,6 +153,35 @@ internal static class Program
         else
         {
             Failures.Add($"History row did not settle: at 9 conf '{before}', at 10 conf '{after}'");
+        }
+    }
+
+    /// <summary>
+    /// A coinbase output (solo / P2Pool payout; wallet-rpc type "block") is money IN, labelled as a
+    /// mining reward, and stays "confirming" until its 60th block, not the 10th. It used to render as
+    /// an outgoing "−0.6 XMR" titled "block".
+    /// </summary>
+    private static void CheckMiningRewardRow()
+    {
+        WalletViewModel vm = WalletViewModel.ForPreview(new WalletSecrets { Network = MoneroNetwork.Stagenet });
+        vm.SetHistory([new TransferEntry { TxId = FakeTxId(10), Type = "block", Amount = 600_000_000_000, Height = 2_000, Timestamp = 1 }]);
+        vm.Height = 2_059;
+        HistoryRow confirming = vm.History[0];
+        vm.Height = 2_060;
+        HistoryRow settled = vm.History[0];
+        bool ok = confirming.IsIncoming && !confirming.IsOutgoing
+                  && confirming.Title == "Mining reward"
+                  && confirming.AmountText == "+0.6 XMR"
+                  && confirming.Subtitle.Contains("59/60", StringComparison.Ordinal)
+                  && settled.Subtitle.Contains("block 2,000", StringComparison.Ordinal);
+        if (ok)
+        {
+            Console.WriteLine("History ok: a mining reward is incoming and confirms over 60 blocks.");
+        }
+        else
+        {
+            Failures.Add($"Mining reward row wrong: '{confirming.Title}' '{confirming.AmountText}' incoming={confirming.IsIncoming} " +
+                         $"at 59 conf '{confirming.Subtitle}', at 60 conf '{settled.Subtitle}'");
         }
     }
 
@@ -294,6 +324,7 @@ internal static class Program
         {
             new TransferEntry { TxId = FakeTxId(1), Type = "pool", Amount = 500_000_000_000, Fee = 0, Height = 0, Timestamp = (ulong)(now - 300) },
             new TransferEntry { TxId = FakeTxId(2), Type = "out", Amount = 1_250_000_000_000, Fee = 30_660_000, Height = 1_712_380, Timestamp = (ulong)(now - 4_000) },
+            new TransferEntry { TxId = FakeTxId(5), Type = "block", Amount = 612_000_000_000, Fee = 0, Height = 1_712_371, Timestamp = (ulong)(now - 4_100) },
             new TransferEntry { TxId = FakeTxId(3), Type = "in", Amount = 8_000_000_000_000, Fee = 0, Height = 1_711_902, Timestamp = (ulong)(now - 90_000) },
             new TransferEntry { TxId = FakeTxId(4), Type = "in", Amount = 5_233_017_420_331, Fee = 0, Height = 1_709_115, Timestamp = (ulong)(now - 400_000) },
         };

@@ -40,17 +40,17 @@ jobs:
         run: dotnet test tests/XaultWallet.Core.Tests -c Release --no-build
 
   regtest-integration:
-    name: Integration vs real monero-wallet-rpc (private regtest chain)
+    name: Integration + end-to-end vs real monero-wallet-rpc (private regtest chain)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - name: Install Monero from the Ubuntu archive
+      - name: Install Monero from the Ubuntu archive (and the UI font, for the screenshots)
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends monero
+          sudo apt-get install -y --no-install-recommends monero fonts-cascadia-code
           monero-wallet-rpc --version
       - name: Start a private regtest node (no network, instant mining)
         run: |
@@ -65,6 +65,16 @@ jobs:
           XW_DAEMON: http://127.0.0.1:18081
           XW_NETWORK: regtest
         run: dotnet test tests/XaultWallet.IntegrationTests -c Release --logger "console;verbosity=normal"
+      - name: End-to-end through the real UI (create, verify seed, duress, unlock, receive, send, history)
+        env:
+          XW_E2E_DAEMON: http://127.0.0.1:18081
+        run: dotnet run -c Release --project tests/XaultWallet.E2E.Headless -- e2e-screens
+      - uses: actions/upload-artifact@v4
+        if: always()   # the screenshots matter most when a step failed
+        with:
+          name: e2e-screens-linux
+          path: e2e-screens/
+          if-no-files-found: warn
 
   ui-snapshots:
     name: UI smoke test + screenshots

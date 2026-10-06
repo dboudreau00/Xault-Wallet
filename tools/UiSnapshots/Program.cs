@@ -45,6 +45,8 @@ internal static class Program
         var shots = new (string name, Func<ViewModelBase> screen, Action<Window>? arrange)[]
         {
             ("startup", Startup, null),
+            ("startup-setup", StartupNeedsBackend, null),
+            ("startup-installing", StartupInstalling, null),
             ("create-vault", CreateVault, null),
             ("create-vault-seed", CreateVaultWithSeed, w => ScrollTo(w, 330)),
             ("create-vault-duress", CreateVaultWithSeed, w => ScrollToEnd(w)),
@@ -57,6 +59,8 @@ internal static class Program
             ("wallet-history", Wallet, w => SelectTab(w, 2)),
             ("wallet-upgraded", WalletUpgraded, w => SelectTab(w, 0)),
             ("settings", () => new SettingsViewModel(walletOpen: false), null),
+            ("settings-rpc-installed", () => SettingsAfterInstall(ok: true), null),
+            ("settings-rpc-install-failed", () => SettingsAfterInstall(ok: false), null),
         };
 
         foreach ((string name, Func<ViewModelBase> screen, Action<Window>? arrange) in shots)
@@ -475,6 +479,34 @@ internal static class Program
         Detail = "Monero 'Fluorine Fermi' (v0.18.3.1)",
         Checking = true,
     };
+
+    private static StartupViewModel StartupNeedsBackend() => new(preview: true)
+    {
+        Status = "XaultWallet needs monero-wallet-rpc",
+        Checking = false,
+        CanContinue = true,
+        NeedsBackend = true,
+    };
+
+    private static ViewModelBase StartupInstalling()
+    {
+        StartupViewModel vm = StartupNeedsBackend();
+        vm.Setup.Installing = true;
+        vm.Setup.ProgressKnown = true;
+        vm.Setup.Progress = 45;
+        vm.Setup.StageText = "Downloading the official Monero CLI… 41.2 of 91.6 MB";
+        return vm;
+    }
+
+    private static ViewModelBase SettingsAfterInstall(bool ok)
+    {
+        var vm = new SettingsViewModel(walletOpen: false);
+        vm.Setup.Succeeded = ok;
+        vm.Setup.ResultText = ok
+            ? "Installed monero-wallet-rpc 0.18.5.1. binaryFate's signature and the download's checksum were verified, and it ran on this system."
+            : "The download doesn't match the checksum Monero signed, so it was thrown away and nothing was installed. Try again later, or download and verify monero-wallet-rpc yourself.";
+        return vm;
+    }
 
     private static ViewModelBase CreateVault() => new CreateWalletViewModel
     {

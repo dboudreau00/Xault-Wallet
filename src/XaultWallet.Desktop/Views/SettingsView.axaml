@@ -4,6 +4,7 @@
              xmlns:app="clr-namespace:XaultWallet.Desktop"
              xmlns:conv="clr-namespace:XaultWallet.Desktop"
              xmlns:c="clr-namespace:XaultWallet.Desktop.Controls"
+             xmlns:v="clr-namespace:XaultWallet.Desktop.Views"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="1080" d:DesignHeight="714"
@@ -73,8 +74,9 @@
                         <TextBlock AutomationProperties.AutomationId="Settings.BinaryTestResult" Text="{Binding BinaryTestResult}" Classes="result"
                                    IsVisible="{Binding BinaryTestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                    Foreground="{Binding BinaryTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
-                        <TextBlock Classes="caption" TextWrapping="Wrap"
-                                   Text="Download it from getmonero.org and verify the signed hashes before use — this binary handles your keys."/>
+                        <Separator Margin="0,2"/>
+                        <TextBlock Text="DON'T HAVE IT YET?" Classes="eyebrow"/>
+                        <v:WalletRpcSetupPanel DataContext="{Binding Setup}"/>
                     </StackPanel>
                 </Border>
 

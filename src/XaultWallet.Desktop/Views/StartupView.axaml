@@ -3,6 +3,7 @@
              xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
              xmlns:c="clr-namespace:XaultWallet.Desktop.Controls"
              xmlns:app="clr-namespace:XaultWallet.Desktop"
+             xmlns:v="clr-namespace:XaultWallet.Desktop.Views"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="620"
@@ -24,8 +25,8 @@
 
     </UserControl.Styles>
 
-    <Grid>
-        <StackPanel Width="380" Spacing="28" VerticalAlignment="Center" HorizontalAlignment="Center">
+    <ScrollViewer>
+        <StackPanel Spacing="28" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="16,24">
 
             <!-- X badge with an ambient glow (glow pulses; the mark fades in) -->
             <Grid Width="150" Height="150" HorizontalAlignment="Center">
@@ -62,8 +63,36 @@
                 <TextBlock AutomationProperties.AutomationId="Startup.Detail" Text="{Binding Detail}" Classes="eyebrow" HorizontalAlignment="Center"
                            TextWrapping="Wrap" TextAlignment="Center" MaxWidth="320"/>
                 <Button Content="Continue anyway" AutomationProperties.AutomationId="Startup.Continue" Command="{Binding ContinueCommand}"
-                        IsVisible="{Binding CanContinue}" HorizontalAlignment="Center"/>
+                        IsVisible="{Binding ShowContinue}" HorizontalAlignment="Center"/>
             </StackPanel>
+
+            <!-- No monero-wallet-rpc yet: set it up here instead of failing later. -->
+            <Border Classes="card" IsVisible="{Binding NeedsBackend}" Width="540" Padding="26,22" HorizontalAlignment="Center"
+                    AutomationProperties.AutomationId="Startup.BackendSetup" app:Entrance.Rise="0">
+                <StackPanel Spacing="14">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Every wallet runs on Monero's own wallet program" Classes="h2"/>
+                        <TextBlock Classes="muted" TextWrapping="Wrap"
+                                   Text="XaultWallet hands your keys to monero-wallet-rpc, the official program from the Monero project. It wasn't found next to the app, on PATH, or in Settings."/>
+                    </StackPanel>
+                    <Button HorizontalAlignment="Left" Command="{Binding ChooseOwnCopyCommand}"
+                            AutomationProperties.AutomationId="Startup.ChooseOwn" AutomationProperties.Name="Choose my own monero-wallet-rpc">
+                        <StackPanel Orientation="Horizontal" Spacing="7">
+                            <c:Icon Data="{StaticResource IconFolder}" Width="14" Height="14"/>
+                            <TextBlock Text="I have it: choose my copy…"/>
+                        </StackPanel>
+                    </Button>
+                    <TextBlock Classes="caption" Foreground="{StaticResource WarningBrush}" TextWrapping="Wrap"
+                               Text="{Binding ChooseResult}" IsVisible="{Binding ChooseResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               AutomationProperties.AutomationId="Startup.ChooseResult"/>
+                    <Separator/>
+                    <v:WalletRpcSetupPanel DataContext="{Binding Setup}"/>
+                    <Button Classes="link" HorizontalAlignment="Left" Command="{Binding ContinueCommand}"
+                            AutomationProperties.AutomationId="Startup.SkipBackend" AutomationProperties.Name="Continue without it">
+                        <TextBlock Text="Continue without it (set it later in Settings)"/>
+                    </Button>
+                </StackPanel>
+            </Border>
         </StackPanel>
-    </Grid>
+    </ScrollViewer>
 </UserControl>

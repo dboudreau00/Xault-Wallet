@@ -43,6 +43,16 @@ internal static class Program
 
         string appDir = Path.GetDirectoryName(exe)!;
         HashSet<string> appDirBefore = Directory.EnumerateFileSystemEntries(appDir).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // Without monero-wallet-rpc next to the app (or on PATH), the run starts by installing it with
+        // the app's own "Download & install" button — the real download from getmonero.org.
+        bool installWalletRpc = !File.Exists(Path.Combine(appDir, "monero-wallet-rpc.exe"));
+        string installRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "XaultWallet", "monero-cli");
+        if (installWalletRpc && Directory.Exists(installRoot))
+        {
+            Console.Error.WriteLine($"Refusing to run: {installRoot} already exists, so the install button would not be tested from scratch.");
+            return 2;
+        }
         HashSet<string> sessionsBefore = SessionFolders().ToHashSet(StringComparer.OrdinalIgnoreCase);
         var problems = new List<string>();
 
@@ -61,7 +71,7 @@ internal static class Program
             var driver = new UiaDriver(uia, window, pid, screenshots, log);
             await FitOnScreenAsync(window, driver, log);
 
-            scenario = new WalletScenario(driver, chain, log, timeScale);
+            scenario = new WalletScenario(driver, chain, log, timeScale, installWalletRpc);
             try
             {
                 await scenario.RunAsync();
@@ -99,6 +109,11 @@ internal static class Program
             try { orphan.Kill(); } catch (InvalidOperationException) { /* already gone */ }
         }
 
+        if (installWalletRpc)
+        {
+            problems.AddRange(CheckInstalledWalletRpc(installRoot, profile));
+        }
+
         foreach (string dir in SessionFolders().Where(d => !sessionsBefore.Contains(d)))
         {
             problems.Add($"wallet session folder left in %TEMP%: {dir}");
@@ -120,7 +135,44 @@ internal static class Program
         }
 
         Console.WriteLine($"E2E OK (Windows, real XaultWallet.exe): every step passed, clean shutdown. Main {Short(scenario!.MainAddress)}, decoy {Short(scenario.DecoyAddress)}, tx {scenario.SentTxId}");
+        if (installWalletRpc)
+        {
+            Console.WriteLine("monero-wallet-rpc came from the app's own installer: " + scenario.InstallResult);
+        }
         return 0;
+    }
+
+    /// <summary>After "Download &amp; install": exactly one version folder under the install root with
+    /// monero-wallet-rpc.exe and its install record, no download left behind, and the app's settings
+    /// pointing at that binary (the one every wallet in the run actually used).</summary>
+    private static IEnumerable<string> CheckInstalledWalletRpc(string installRoot, string profile)
+    {
+        string[] versions = Directory.Exists(installRoot) ? Directory.GetDirectories(installRoot, "v*") : [];
+        if (versions.Length != 1)
+        {
+            yield return $"expected one installed version under {installRoot}, found {versions.Length}";
+            yield break;
+        }
+
+        string binary = Path.Combine(versions[0], "monero-wallet-rpc.exe");
+        if (!File.Exists(binary) || !File.Exists(Path.Combine(versions[0], "install.json")))
+        {
+            yield return $"the install in {versions[0]} is incomplete";
+        }
+
+        if (Directory.GetDirectories(installRoot, ".staging-*").Length > 0)
+        {
+            yield return "the installer left its download folder behind";
+        }
+
+        using var settings = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(profile, "settings.json")));
+        string? configured = settings.RootElement.TryGetProperty("WalletRpcBinaryPath", out var p) ? p.GetString() : null;
+        if (!string.Equals(configured, binary, StringComparison.OrdinalIgnoreCase))
+        {
+            yield return $"settings.json points at \"{configured}\", not the installed monero-wallet-rpc";
+        }
+
+        Console.WriteLine($"  installed: {binary}");
     }
 
     /// <summary>A hosted runner's screen can be smaller than the window (1024x768 by default):

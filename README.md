@@ -15,26 +15,9 @@ Built on .NET 8 + Avalonia. Encrypted at rest with AES-256-GCM (Argon2id KDF). D
   <img src="docs/screenshots/wallet-history.png" width="49%" alt="Wallet — transaction history" />
 </p>
 
-# Notification, Documentation assisted by Claude Code.
+| Notification - Documentation and code review assisted by Claude Code. |
 
 
-> ## ⚠️ Unaudited beta — do NOT use with real funds
->
-> This is an **educational, work-in-progress** wallet. It has **not** had a professional security
-> audit. It may contain bugs that cause **permanent, irreversible loss of funds** — Monero
-> transactions cannot be reversed or refunded.
->
-> - **Do not store real (mainnet) XMR in it.** Use **stagenet** (the default) or **testnet**.
-> - Provided **as-is, with no warranty of any kind** (see [LICENSE](LICENSE)).
-> - The **"wipe real wallet on duress"** option is irreversible and destroys your seed on that device.
-> - Always keep an **independent offline backup** of your 25-word seed.
->
-> Want a wallet for actual funds? Use an established, audited one (official Monero GUI/CLI,
-> Feather, Cake). Read [SECURITY.md](SECURITY.md) in full before doing anything with this project.
->
-> An internal code review & security audit (October 2026) found and fixed 20 issues, including two
-> critical ones — see [docs/AUDIT-2026-10.md](docs/AUDIT-2026-10.md). That is not the independent
-> professional audit this project still needs.
 
 ---
 

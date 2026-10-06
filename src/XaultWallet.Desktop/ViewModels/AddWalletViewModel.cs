@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Collections.ObjectModel;
 using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -211,8 +212,10 @@ public sealed partial class AddWalletViewModel : ViewModelBase
                 SeedWords.Add(new SeedWord(i + 1, words[i]));
             }
 
-            // Three random positions to type back: proof the seed was written down.
-            _verifyIndices = Enumerable.Range(0, words.Length).OrderBy(_ => Random.Shared.Next()).Take(3).OrderBy(x => x).ToArray();
+            // Three random positions to type back: proof the seed was written down (CSPRNG).
+            int[] order = Enumerable.Range(0, words.Length).ToArray();
+            RandomNumberGenerator.Shuffle(order.AsSpan());
+            _verifyIndices = order.Take(3).OrderBy(x => x).ToArray();
             VerifyPrompt1 = $"Word #{_verifyIndices[0] + 1}";
             VerifyPrompt2 = $"Word #{_verifyIndices[1] + 1}";
             VerifyPrompt3 = $"Word #{_verifyIndices[2] + 1}";

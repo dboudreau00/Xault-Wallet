@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Security.Cryptography;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using XaultWallet.Core.Models;
@@ -367,11 +368,11 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
     private void SetupVerification(string mnemonic)
     {
         string[] words = mnemonic.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        int[] picks = Enumerable.Range(0, words.Length)
-            .OrderBy(_ => Random.Shared.Next())
-            .Take(3)
-            .OrderBy(x => x)
-            .ToArray();
+        // CSPRNG: Random.Shared is not cryptographic and must not pick which seed words the user
+        // is asked to type back.
+        int[] order = Enumerable.Range(0, words.Length).ToArray();
+        RandomNumberGenerator.Shuffle(order.AsSpan());
+        int[] picks = order.Take(3).OrderBy(x => x).ToArray();
 
         _verifyIndices = picks;
         VerifyPrompt1 = $"Word #{picks[0] + 1}";

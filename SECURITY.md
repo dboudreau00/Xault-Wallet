@@ -67,11 +67,12 @@ so a file planted wherever the app was launched from could be started and handed
 ## What is NOT protected — read this
 
 **Memory forensics.** .NET is a garbage-collected runtime. `SecureBuffer` pins and zeroes the
-buffers *it* owns, but the moment a password exists as a `string` (e.g. bound to a text box)
-the CLR may have already made immutable copies on the managed heap that we cannot reliably
-wipe. A determined attacker with a memory dump of the running, *unlocked* process can likely
-recover secrets. Locking the wallet and closing the app is your defence; an unlocked wallet on
-a compromised machine is compromised.
+buffers *it* owns, but the moment a password exists as a `string` (e.g. the unlock field bound
+in `UnlockViewModel`) the CLR may have already made immutable copies on the managed heap that
+we cannot reliably wipe. The Argon2id library (Konscious) also keeps an internal copy of the
+password bytes that is not zeroed after key derivation. A determined attacker with a memory
+dump of the running, *unlocked* process can likely recover secrets. Locking the wallet and
+closing the app is your defence; an unlocked wallet on a compromised machine is compromised.
 
 **A compromised operating system.** Keyloggers, malicious kernels, screen capture, and
 hypervisor-level attackers defeat any user-space wallet. This app cannot protect a password

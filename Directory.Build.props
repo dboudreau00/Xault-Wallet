@@ -5,6 +5,10 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <!-- Package lock files: generate locally (dotnet restore with the UseLockFile option, in each
+         project or once at the solution) and commit packages.lock.json before CI switches restore
+         to locked mode. Enabled here so the lock files are honoured as soon as they exist. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
   <!-- Release artefacts ship without symbol files (for every project in the single file). -->

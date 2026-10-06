@@ -26,8 +26,12 @@ on:
         default: ''
         type: string
 
+# Default: read-only. Jobs that create a draft release or call a reusable workflow whose nested
+# share-screenshots job asks for write raise the ceiling themselves. Pin action SHAs (not just
+# major tags like @v7) before treating this workflow as supply-chain hardened — left as a follow-up
+# so this change does not invent digests that cannot be verified here.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ inputs.version || github.ref_name }}
@@ -134,6 +138,10 @@ jobs:
     name: Windows end-to-end on the exact zip being released
     needs: [plan, publish]
     if: needs.plan.outputs.build == 'true'
+    # Ceiling for the reusable workflow: its share-screenshots job requests contents: write
+    # (skipped when artifact is set, as here). The nested e2e job itself pins contents: read.
+    permissions:
+      contents: write
     uses: ./.github/workflows/e2e-windows.yml
     with:
       artifact: dist-win-x64
@@ -143,6 +151,8 @@ jobs:
     needs: [plan, publish, e2e-windows]
     if: needs.plan.outputs.publish == 'true'
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     env:
       TAG: ${{ needs.plan.outputs.tag }}
     steps:

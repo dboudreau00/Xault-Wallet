@@ -32,6 +32,12 @@ public sealed class VaultManager
     private VaultFile _file;
     private readonly object _gate = new();
 
+    /// <summary>The slot a duress unlock wiped in memory but couldn't write yet (a file locked by
+    /// AV or backup software). Every later write of this vault wipes it again until one succeeds:
+    /// a session saving its own slot from the file on disk would otherwise quietly bring the wiped
+    /// profile back, without its wipe flag.</summary>
+    private int? _pendingWipe;
+
     private VaultManager(string path, VaultFile file)
     {
         _path = path;
@@ -231,6 +237,11 @@ public sealed class VaultManager
                 return null;
             }
 
+            if (hit.Wiped)
+            {
+                _pendingWipe = OtherSlot(hit.Slot.SlotIndex);
+            }
+
             if (hit.Wiped || hit.Migrated)
             {
                 // Best-effort and SILENT. If the disk write fails (file locked by AV/backup software,
@@ -238,7 +249,11 @@ public sealed class VaultManager
                 // make a duress unlock visibly different from a normal one at exactly the moment
                 // indistinguishability matters most. Deliberately not logged either — a log line
                 // timestamped at the duress unlock would tell the same story to anyone reading it.
-                PersistQuietly();
+                // A wipe that couldn't be written stays pending (see _pendingWipe).
+                if (PersistQuietly())
+                {
+                    _pendingWipe = null;
+                }
             }
 
             if (hit.Wiped)
@@ -280,6 +295,7 @@ public sealed class VaultManager
                 RefuseCollision(newPassword, hit.Slot.SlotIndex);
                 WriteSlotZeroing(_file, hit.Slot.SlotIndex, newPassword, hit.Profile);
                 Persist(_file);
+                _pendingWipe = null; // _file carries any wipe applied in memory
                 if (hit.Wiped)
                 {
                     ShredSiblingCopies();
@@ -327,23 +343,56 @@ public sealed class VaultManager
     /// <summary>Seal an already serialized profile into its slot (the caller zeroes the payload).</summary>
     internal void SaveSlotPayload(int slotIndex, SecureBuffer key, byte[] salt, byte[] payload)
     {
-        if (payload.Length > VaultFile.MaxPayloadBytes)
-        {
-            throw new VaultFullException();
-        }
-
         lock (_gate)
         {
-            VaultFile current = CurrentFileForWrite();
+            VaultFile current = CurrentFileForWrite(slotIndex, salt);
+            if (payload.Length > current.PayloadCapacity)
+            {
+                throw new VaultFullException(current.FormatVersion < VaultFile.CurrentFormat);
+            }
+
             current.SealSlot(slotIndex, key, salt, payload);
             Persist(current);
             _file = current;
+            _pendingWipe = null;
+        }
+    }
+
+    /// <summary>True when the vault is still in the 0.1–0.3 file format (see <see cref="VaultFile"/>).</summary>
+    internal bool IsOldFormat
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _file.FormatVersion < VaultFile.CurrentFormat;
+            }
+        }
+    }
+
+    /// <summary>Convert an old-format vault to the current format and seal the open profile into its
+    /// slot in the new layout. The other slot is carried as it is, still openable by its own password.</summary>
+    internal void UpgradeFormat(int slotIndex, SecureBuffer key, byte[] salt, byte[] payload)
+    {
+        lock (_gate)
+        {
+            VaultFile current = CurrentFileForWrite(slotIndex, salt);
+            current.UpgradeFormat();
+            if (payload.Length > current.PayloadCapacity)
+            {
+                throw new VaultFullException();
+            }
+
+            current.SealSlot(slotIndex, key, salt, payload);
+            Persist(current);
+            _file = current;
+            _pendingWipe = null;
         }
     }
 
     /// <summary>Re-encrypt an open slot under a new password (fresh salt). Returns the new key and salt
     /// for the session to keep. False when <paramref name="currentPassword"/> doesn't open THIS slot.</summary>
-    internal (SecureBuffer key, byte[] salt)? ChangeSlotPassword(int slotIndex, SecureBuffer currentPassword, SecureBuffer newPassword, WalletProfile profile)
+    internal (SecureBuffer key, byte[] salt)? ChangeSlotPassword(int slotIndex, byte[] sessionSalt, SecureBuffer currentPassword, SecureBuffer newPassword, WalletProfile profile)
     {
         ArgumentNullException.ThrowIfNull(newPassword);
         if (newPassword.Length == 0)
@@ -353,7 +402,7 @@ public sealed class VaultManager
 
         lock (_gate)
         {
-            VaultFile current = CurrentFileForWrite();
+            VaultFile current = CurrentFileForWrite(slotIndex, sessionSalt);
             _file = current;
             if (!OpensSlot(currentPassword, slotIndex))
             {
@@ -363,12 +412,19 @@ public sealed class VaultManager
             RefuseCollision(newPassword, slotIndex);
 
             byte[] payload = SlotPayload.Serialize(profile);
+            if (payload.Length > current.PayloadCapacity)
+            {
+                CryptographicOperations.ZeroMemory(payload);
+                throw new VaultFullException(current.FormatVersion < VaultFile.CurrentFormat);
+            }
+
             byte[] salt = VaultCrypto.RandomBytes(VaultCrypto.SaltSizeBytes);
             SecureBuffer key = VaultCrypto.DeriveKey(newPassword, salt, current.Argon);
             try
             {
                 current.SealSlot(slotIndex, key, salt, payload);
                 Persist(current);
+                _pendingWipe = null;
                 return (key, salt);
             }
             catch
@@ -391,20 +447,30 @@ public sealed class VaultManager
         return opened is not null && opened.SlotIndex == slotIndex;
     }
 
-    private VaultFile CurrentFileForWrite()
+    /// <summary>
+    /// The vault as it is on disk now, for an open session to write its slot into (so the other
+    /// slot is kept byte for byte), with any pending wipe applied again. Refuses a file whose
+    /// <paramref name="ownSlot"/> no longer has the session's salt: the vault was replaced (a sync
+    /// client, a restored copy, another vault) and writing into it would mix two vaults.
+    /// </summary>
+    private VaultFile CurrentFileForWrite(int ownSlot, ReadOnlySpan<byte> ownSalt)
     {
-        if (!File.Exists(_path))
+        VaultFile current = _file; // deleted underneath an open session: write back what we hold
+        if (File.Exists(_path))
         {
-            return _file; // deleted underneath an open session: write back what we hold
+            current = ReadFile(_path);
+            if (!current.SlotSalt(ownSlot).SequenceEqual(ownSalt))
+            {
+                throw new IOException("The vault file was replaced while it was open. Lock and unlock again.");
+            }
         }
 
-        VaultFile onDisk = ReadFile(_path);
-        if (onDisk.Argon != _file.Argon)
+        if (_pendingWipe is int wipe)
         {
-            throw new IOException("The vault file was replaced while it was open. Lock and unlock again.");
+            current.FillRandom(wipe);
         }
 
-        return onDisk;
+        return current;
     }
 
     // ------------------------------------------------------------------ policy
@@ -442,7 +508,11 @@ public sealed class VaultManager
                 wiped = true;
             }
 
-            bool migrated = version < SlotPayload.CurrentVersion || slot.IsLegacyLayout;
+            // Re-sealed at once: a 0.1 payload (its real/decoy marker must go) and a slot carried into
+            // an upgraded file. A 0.2/0.3 payload in a file that kept its old format is readable as it
+            // is and is left alone — opening a vault never writes it otherwise, and the slot is
+            // rewritten in the new payload format with the profile's first change.
+            bool migrated = version == SlotPayload.Version01 || slot.IsLegacyLayout;
             if (wiped || migrated)
             {
                 byte[] payload = SlotPayload.Serialize(profile);
@@ -467,15 +537,25 @@ public sealed class VaultManager
 
     private static int OtherSlot(int slotIndex) => slotIndex == 0 ? 1 : 0;
 
-    private void PersistQuietly()
+    /// <summary>Write <see cref="_file"/>, retrying once; false (silently) when both attempts fail.</summary>
+    private bool PersistQuietly()
     {
         try
         {
             Persist(_file);
+            return true;
         }
         catch
         {
-            try { Persist(_file); } catch { /* second attempt; then give up silently */ }
+            try
+            {
+                Persist(_file);
+                return true;
+            }
+            catch
+            {
+                return false; // second attempt; then give up silently
+            }
         }
     }
 
@@ -560,9 +640,9 @@ public sealed class VaultManager
         byte[] payload = SlotPayload.Serialize(profile);
         try
         {
-            if (payload.Length > VaultFile.MaxPayloadBytes)
+            if (payload.Length > file.PayloadCapacity)
             {
-                throw new VaultFullException();
+                throw new VaultFullException(file.FormatVersion < VaultFile.CurrentFormat);
             }
 
             file.WriteSlot(slotIndex, password, payload);
@@ -592,5 +672,22 @@ public sealed class VaultManager
 }
 
 /// <summary>The profile no longer fits in its vault slot.</summary>
-public sealed class VaultFullException() : IOException(
-    "The vault is full: it can't hold more wallets, contacts or notes. Remove some, then try again.");
+public sealed class VaultFullException : IOException
+{
+    public VaultFullException()
+        : this(oldFormat: false)
+    {
+    }
+
+    /// <param name="oldFormat">The vault still has the 0.1–0.3 format (4 KiB per password); upgrading it makes room.</param>
+    public VaultFullException(bool oldFormat)
+        : base(oldFormat
+            ? "This vault still has the format of XaultWallet 0.3, which holds about 4 KB per password, and this doesn't fit. Upgrade the vault in Settings → Vault format to make room."
+            : "The vault is full: it can't hold more wallets, contacts or notes. Remove some, then try again.")
+    {
+        OldFormat = oldFormat;
+    }
+
+    /// <summary>Upgrading the vault's format would make room.</summary>
+    public bool OldFormat { get; }
+}

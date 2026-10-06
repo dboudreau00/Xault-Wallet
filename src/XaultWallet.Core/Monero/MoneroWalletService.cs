@@ -13,6 +13,7 @@ public sealed class MoneroWalletService : IAsyncDisposable
     private readonly WalletRpcOptions _options;
     private MoneroProcessManager? _proc;
     private MoneroRpcClient? _rpc;
+    private string _daemon = string.Empty; // the open wallet's node
 
     public bool IsOpen => _rpc is not null;
 
@@ -188,6 +189,7 @@ public sealed class MoneroWalletService : IAsyncDisposable
         {
             rpc = await proc.StartFromSeedAsync(secrets, ct).ConfigureAwait(false);
             await RestoreAddressesAsync(rpc, secrets.SubaddressCounts, ct).ConfigureAwait(false);
+            _daemon = secrets.DaemonAddress;
             _rpc = rpc;
             _proc = proc; // only assign once fully started, so a failed open leaves us cleanly closed
         }
@@ -228,12 +230,21 @@ public sealed class MoneroWalletService : IAsyncDisposable
 
             uint have = (uint)(await rpc.GetAddressAsync(account, ct).ConfigureAwait(false)).Addresses.Count;
             uint target = Math.Min(wanted, MaxPerAccount);
-            if (target > have)
+            while (target > have)
             {
-                await rpc.CreateSubaddressesAsync(account, target - have, ct).ConfigureAwait(false);
+                // monero-wallet-rpc up to v0.18.4.2 refuses more than 64 per call
+                // ("Count must be between 1 and 64"): a wallet that had handed out more would
+                // otherwise never open again.
+                uint batch = Math.Min(target - have, MaxSubaddressesPerCall);
+                await rpc.CreateSubaddressesAsync(account, batch, ct).ConfigureAwait(false);
+                have += batch;
             }
         }
     }
+
+    /// <summary>The most subaddresses one create_address call may ask for, on every supported
+    /// monero-wallet-rpc (the limit rose from 64 to 65536 only in v0.18.4.3).</summary>
+    internal const uint MaxSubaddressesPerCall = 64;
 
     private MoneroRpcClient Rpc => _rpc ?? throw new InvalidOperationException("No wallet is open.");
 
@@ -297,18 +308,40 @@ public sealed class MoneroWalletService : IAsyncDisposable
         return (r.Good, MoneroRpcClient.AtomicToXmr(r.Total), MoneroRpcClient.AtomicToXmr(r.Spent));
     }
 
-    /// <summary>Re-check which outputs are spent.</summary>
-    public Task RescanSpentAsync(CancellationToken ct = default) => Rpc.RescanSpentAsync(ct);
+    /// <summary>True when the open wallet's node is on this computer: the only node
+    /// <see cref="RescanSpentAsync"/> may be used with.</summary>
+    public bool NodeIsLocal => DaemonAddress.IsLoopback(_daemon);
 
-    /// <summary>Point the open wallet at another node, keeping what it has scanned.</summary>
-    public Task SetDaemonAsync(string daemonAddress, CancellationToken ct = default)
+    /// <summary>
+    /// Re-check which outputs are spent. This sends EVERY key image of the wallet to the node
+    /// (wallet2::rescan_spent → /is_key_image_spent), which lets the node recognise each later spend
+    /// of this wallet — so it is refused unless the node is on this computer, as monero-wallet-cli
+    /// refuses it without a trusted node.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The node isn't local.</exception>
+    public Task RescanSpentAsync(CancellationToken ct = default)
+    {
+        if (!NodeIsLocal)
+        {
+            throw new InvalidOperationException(
+                "Re-checking spent outputs sends all of this wallet's key images to the node, so it is only done with a node on this computer.");
+        }
+
+        return Rpc.RescanSpentAsync(ct);
+    }
+
+    /// <summary>Point the open wallet at another node, keeping what it has scanned. A node on this
+    /// computer stays trusted, as monero-wallet-rpc trusts a local node at launch; any other isn't.</summary>
+    public async Task SetDaemonAsync(string daemonAddress, CancellationToken ct = default)
     {
         if (!DaemonAddress.IsValid(daemonAddress))
         {
             throw new ArgumentException("Daemon address must be a valid http(s) URL.", nameof(daemonAddress));
         }
 
-        return Rpc.SetDaemonAsync(daemonAddress.Trim(), ct);
+        string address = daemonAddress.Trim();
+        await Rpc.SetDaemonAsync(address, DaemonAddress.IsLoopback(address), ct).ConfigureAwait(false);
+        _daemon = address;
     }
 
     /// <summary>The open wallet's private keys and seed, for a backup the user asked to see. The
@@ -495,6 +528,7 @@ public sealed class MoneroWalletService : IAsyncDisposable
         }
         catch { /* ignore */ }
         _rpc = null;
+        _daemon = string.Empty;
 
         MoneroProcessManager? proc = _proc;
         _proc = null;

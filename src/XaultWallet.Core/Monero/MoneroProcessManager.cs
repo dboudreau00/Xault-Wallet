@@ -157,7 +157,6 @@ public sealed class MoneroProcessManager : IAsyncDisposable
 
             // Deliberately no node, height or kind here: the log persists, and per-wallet details
             // (a restore height is unique to a seed) would let it tell two wallets apart.
-            Log.Info("Wallet restored; syncing in the background.");
         }
         catch
         {
@@ -290,12 +289,11 @@ public sealed class MoneroProcessManager : IAsyncDisposable
             // The server parsed its config at startup; the credentials now live only in memory.
             SecureDelete.File(configFile);
 
-            Log.Info($"monero-wallet-rpc ready on port {port}.");
             return client;
         }
         catch (Exception ex)
         {
-            Log.Error("monero-wallet-rpc launch failed", ex);
+            Log.ErrorOnce("wallet-rpc-launch", "monero-wallet-rpc launch failed", ex);
             client?.Dispose(); // don't leak the HttpClient/handler on a failed launch
             await StopAsync().ConfigureAwait(false); // no leaked process / session dir
             throw;
@@ -435,7 +433,7 @@ public sealed class MoneroProcessManager : IAsyncDisposable
             }
             catch (Exception ex)
             {
-                Log.Warn($"Error stopping monero-wallet-rpc: {ex.GetType().Name}");
+                Log.WarnOnce("wallet-rpc-stop", $"Error stopping monero-wallet-rpc: {ex.GetType().Name}");
             }
             finally
             {
@@ -449,7 +447,7 @@ public sealed class MoneroProcessManager : IAsyncDisposable
         {
             // The shred is a privacy guarantee; if it couldn't complete (e.g. a wedged child still
             // holds file locks), at least say so instead of failing silently.
-            Log.Warn("Some temporary wallet files could not be removed; they will be re-shredded on next launch if still present.");
+            Log.WarnOnce("session-shred", "Some temporary wallet files could not be removed; they will be re-shredded on next launch if still present.");
         }
     }
 
@@ -490,7 +488,7 @@ public sealed class MoneroProcessManager : IAsyncDisposable
                     continue;
                 }
 
-                Log.Warn("Shredding an orphaned wallet session directory from a previous session.");
+                Log.WarnOnce("orphan-sweep", "Shredding orphaned wallet session folders from a previous session."); // not one line per wallet
                 SecureDelete.Directory(dir);
             }
         }

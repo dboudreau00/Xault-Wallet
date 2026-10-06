@@ -275,11 +275,15 @@ public sealed partial class WalletViewModel
 
     [ObservableProperty] private string _rescanNotice = string.Empty;
 
+    /// <summary>Re-checking spent outputs hands the node every key image of this wallet (it could
+    /// then recognise each later spend), so it's offered only with a node on this computer.</summary>
+    public bool CanRescanSpent => DaemonAddress.IsLoopback(_secrets.DaemonAddress);
+
     /// <summary>Re-check which outputs are spent: fixes a balance confused by a bad node.</summary>
     [RelayCommand]
     private async Task RescanSpentAsync()
     {
-        if (!IsReady)
+        if (!IsReady || !CanRescanSpent)
         {
             return;
         }

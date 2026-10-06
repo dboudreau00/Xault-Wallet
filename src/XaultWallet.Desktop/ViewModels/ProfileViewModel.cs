@@ -255,7 +255,6 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
 
         Wallets.Add(new WalletChoice(wallet));
         OnPropertyChanged(nameof(HasSeveralWallets));
-        Log.Info("Wallet added to the open vault.");
         Switch(wallet.Id);
         return null;
     }
@@ -362,7 +361,6 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
             }
 
             OnPropertyChanged(nameof(HasSeveralWallets));
-            Log.Info("Wallet removed from the open vault.");
             return null;
         }
         finally

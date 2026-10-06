@@ -320,7 +320,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Log.Error("Wallet startup failed", ex);
+            Log.ErrorOnce("wallet-startup", "Wallet startup failed", ex); // once per run: never a per-wallet count
             StartupFailed = true;
             Status = "Couldn't start the wallet. " + Friendly(ex);
         }
@@ -368,7 +368,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Log.Warn("Auto-refresh loop ended: " + ex.GetType().Name);
+            Log.WarnOnce("refresh-loop", "Auto-refresh loop ended: " + ex.GetType().Name);
         }
     }
 
@@ -426,7 +426,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                Log.Info("Address list not refreshed: " + ex.GetType().Name);
+                Log.InfoOnce("address-refresh", "Address list not refreshed: " + ex.GetType().Name);
             }
 
             // History often isn't available until the wallet finishes scanning; a transient
@@ -445,11 +445,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                if (!_historyNotReadyLogged)
-                {
-                    _historyNotReadyLogged = true; // once per session, not every few seconds
-                    Log.Info("Transaction history not ready yet: " + ex.Message);
-                }
+                Log.InfoOnce("history-not-ready", "Transaction history not ready yet: " + ex.Message);
             }
         }
         catch (OperationCanceledException) { }
@@ -460,7 +456,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             // The startup-failure banner offers Retry, which rebuilds the whole service.
             if (_wallet.BackendExited)
             {
-                Log.Error("Wallet backend process exited unexpectedly.");
+                Log.ErrorOnce("backend-exited", "Wallet backend process exited unexpectedly.");
                 StartupFailed = true;
                 IsReady = false;
                 Status = "The wallet backend stopped unexpectedly. Use Retry to restart it.";
@@ -478,7 +474,6 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     }
 
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
-    private bool _historyNotReadyLogged;
 
     private void UpdateSyncStatus()
     {
@@ -644,7 +639,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         {
             // A wedged monero-wallet-rpc during teardown must not make Lock appear to do
             // nothing (or fault app shutdown) — the process kill is already best-effort.
-            Log.Warn("Wallet service dispose failed: " + ex.GetType().Name);
+            Log.WarnOnce("wallet-dispose", "Wallet service dispose failed: " + ex.GetType().Name);
         }
 
         WipeRevealedSecrets();

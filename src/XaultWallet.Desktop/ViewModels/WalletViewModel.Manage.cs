@@ -120,6 +120,7 @@ public sealed partial class WalletViewModel
             }
 
             Notice("This wallet now uses that node.");
+            OnPropertyChanged(nameof(CanRescanSpent));
             _nextRefreshUtc = DateTime.UtcNow;
         }
         catch (Exception ex)

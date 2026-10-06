@@ -391,7 +391,6 @@ public sealed partial class AddWalletViewModel : ViewModelBase
             return;
         }
 
-        Log.Info("Wallet added.");
         WipeSeed();
         ImportMnemonic = ImportSeedOffset = ImportSpendKey = ImportViewKey = string.Empty;
         // The profile switched to the new wallet: the shell shows it.

@@ -155,10 +155,14 @@
                         <TextBlock Text="Balance looks wrong?" FontWeight="SemiBold" FontSize="14"/>
                         <TextBlock Classes="muted" TextWrapping="Wrap"
                                    Text="Re-check which of this wallet's outputs are spent, against the node. It fixes a balance confused by a misbehaving node; it doesn't rescan the chain."/>
+                        <TextBlock Classes="caption" TextWrapping="Wrap" Foreground="{StaticResource WarningBrush}" IsVisible="{Binding !CanRescanSpent}"
+                                   AutomationProperties.AutomationId="Tools.RescanNeedsLocalNode"
+                                   Text="Only with a node on this computer: it sends the node every key image of this wallet, which would let a remote node recognise your future spends."/>
                         <TextBlock Classes="caption" AutomationProperties.AutomationId="Tools.RescanNotice" Text="{Binding RescanNotice}" TextWrapping="Wrap"
                                    IsVisible="{Binding RescanNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                     </StackPanel>
-                    <Button Grid.Column="2" VerticalAlignment="Center" AutomationProperties.AutomationId="Tools.RescanSpent" AutomationProperties.Name="Re-check spent outputs" Command="{Binding RescanSpentCommand}">
+                    <Button Grid.Column="2" VerticalAlignment="Center" AutomationProperties.AutomationId="Tools.RescanSpent" AutomationProperties.Name="Re-check spent outputs" Command="{Binding RescanSpentCommand}"
+                            IsEnabled="{Binding CanRescanSpent}">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <c:Icon Data="{StaticResource IconRefresh}" Width="16" Height="16" Classes.spin="{Binding RescanSpentCommand.IsRunning}"/>
                             <TextBlock Text="Re-check spent outputs"/>

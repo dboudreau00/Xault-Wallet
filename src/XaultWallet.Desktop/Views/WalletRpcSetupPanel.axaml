@@ -1,0 +1,46 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
+             xmlns:c="clr-namespace:XaultWallet.Desktop.Controls"
+             x:Class="XaultWallet.Desktop.Views.WalletRpcSetupPanel"
+             x:DataType="vm:WalletRpcSetupViewModel">
+
+    <!-- "Download & install" for monero-wallet-rpc (shared by the startup screen and Settings). -->
+    <StackPanel Spacing="10">
+        <TextBlock Classes="caption" TextWrapping="Wrap"
+                   Text="Recommended: download the Monero CLI from getmonero.org yourself, verify it, and choose monero-wallet-rpc. Or let XaultWallet fetch it: it checks the release list's signature against binaryFate's key (built into the app), checks the download against the signed checksum, and installs only monero-wallet-rpc."/>
+        <TextBlock Classes="caption" TextWrapping="Wrap" Text="{Binding RouteNote}"/>
+
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Classes="accent" Command="{Binding InstallCommand}"
+                    AutomationProperties.AutomationId="WalletRpc.Install"
+                    AutomationProperties.Name="Download and install monero-wallet-rpc">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                    <c:Icon Data="{StaticResource IconDownload}" Width="14" Height="14" Foreground="{StaticResource AccentText}"/>
+                    <TextBlock Text="Download &amp; install" Foreground="{StaticResource AccentText}"/>
+                </StackPanel>
+            </Button>
+            <Button Content="Cancel" Command="{Binding CancelCommand}" IsVisible="{Binding Installing}"
+                    AutomationProperties.AutomationId="WalletRpc.CancelInstall"
+                    AutomationProperties.Name="Cancel the install"/>
+        </StackPanel>
+
+        <StackPanel Spacing="6" IsVisible="{Binding Installing}">
+            <ProgressBar Height="4" Minimum="0" Maximum="100" Value="{Binding Progress}" IsIndeterminate="{Binding !ProgressKnown}"/>
+            <TextBlock Classes="caption" Text="{Binding StageText}" TextWrapping="Wrap"
+                       AutomationProperties.AutomationId="WalletRpc.Stage"/>
+        </StackPanel>
+
+        <Border Classes="callout" Classes.success="{Binding Succeeded}" Classes.warning="{Binding !Succeeded}"
+                IsVisible="{Binding HasResult}">
+            <Grid ColumnDefinitions="Auto,10,*">
+                <c:Icon Grid.Column="0" Width="15" Height="15" VerticalAlignment="Top" Margin="0,1,0,0"
+                        Data="{StaticResource IconShield}" IsVisible="{Binding Succeeded}" Foreground="{StaticResource SuccessBrush}"/>
+                <c:Icon Grid.Column="0" Width="15" Height="15" VerticalAlignment="Top" Margin="0,1,0,0"
+                        Data="{StaticResource IconWarning}" IsVisible="{Binding !Succeeded}" Foreground="{StaticResource WarningBrush}"/>
+                <TextBlock Grid.Column="2" Text="{Binding ResultText}" TextWrapping="Wrap"
+                           AutomationProperties.AutomationId="WalletRpc.Result"/>
+            </Grid>
+        </Border>
+    </StackPanel>
+</UserControl>

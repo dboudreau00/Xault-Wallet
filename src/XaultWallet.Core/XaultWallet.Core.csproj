@@ -19,6 +19,14 @@
   <ItemGroup>
     <!-- Argon2id password hashing / key derivation -->
     <PackageReference Include="Konscious.Security.Cryptography.Argon2" Version="1.3.1" />
+    <!-- bzip2, for the official Linux/macOS Monero CLI archives (.tar.bz2) the installer unpacks -->
+    <PackageReference Include="SharpZipLib" Version="1.4.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- binaryFate's public key, unchanged from the Monero source tree (utils/gpg_keys). The
+         installer trusts it only for the fingerprints pinned in MoneroSigningKeys. -->
+    <EmbeddedResource Include="Installer\binaryfate.asc" LogicalName="XaultWallet.Core.Installer.binaryfate.asc" />
   </ItemGroup>
 
 </Project>

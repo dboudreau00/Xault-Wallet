@@ -21,16 +21,23 @@ public sealed partial class WalletScenario
     private readonly TestChain _chain;
     private readonly Action<string> _log;
     private readonly double _timeScale;
+    private readonly bool _installWalletRpc;
     private readonly Dictionary<int, string> _seed = new();
     private int _shot;
 
-    public WalletScenario(IAppDriver app, TestChain chain, Action<string> log, double timeScale = 1.0)
+    /// <param name="installWalletRpc">The app starts without monero-wallet-rpc: the scenario begins
+    /// by installing it with the startup screen's "Download &amp; install" (signed list, checksum).</param>
+    public WalletScenario(IAppDriver app, TestChain chain, Action<string> log, double timeScale = 1.0, bool installWalletRpc = false)
     {
         _app = app;
         _chain = chain;
         _log = log;
         _timeScale = timeScale;
+        _installWalletRpc = installWalletRpc;
     }
+
+    /// <summary>What the install reported, when the scenario installed monero-wallet-rpc.</summary>
+    public string InstallResult { get; private set; } = string.Empty;
 
     public string DecoyAddress { get; private set; } = string.Empty;
 
@@ -69,6 +76,23 @@ public sealed partial class WalletScenario
 
     private async Task StartupAsync()
     {
+        if (_installWalletRpc)
+        {
+            // No monero-wallet-rpc anywhere: startup must stop and offer to set it up, and the button
+            // must fetch it from getmonero.org, verify binaryFate's signature and the checksum, and
+            // install it. Then startup carries on by itself.
+            await _app.WaitForAsync("Startup.BackendSetup", Seconds(60), enabled: false);
+            await ShotAsync("backend-setup");
+            await _app.ClickAsync("WalletRpc.Install");
+            InstallResult = await EventuallyAsync(
+                async () => await _app.IsVisibleAsync("WalletRpc.Result") ? await _app.ReadTextAsync("WalletRpc.Result") : string.Empty,
+                text => text.Length > 0,
+                Seconds(900),
+                "the install result");
+            Check(InstallResult.StartsWith("Installed monero-wallet-rpc", StringComparison.Ordinal), "the install failed: " + InstallResult);
+            await ShotAsync("backend-installed");
+        }
+
         // The splash checks the binary and the default node, then routes to vault creation. When the
         // default node isn't up it offers "Continue anyway": take it instead of waiting out retries.
         await EventuallyAsync(async () =>

@@ -111,9 +111,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public event Action? Closed;
 
-    public string DefaultBinaryHint { get; }
+    [ObservableProperty] private string _defaultBinaryHint = string.Empty;
 
-    /// <summary>"0.3.0-beta" — the informational version without build metadata.</summary>
+    /// <summary>"Download &amp; install" for monero-wallet-rpc.</summary>
+    public WalletRpcSetupViewModel Setup { get; } = new();
+
+    /// <summary>"0.5.0-beta" — the informational version without build metadata.</summary>
     public string AppVersion { get; } =
         (System.Reflection.CustomAttributeExtensions
             .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(SettingsViewModel).Assembly)
@@ -129,16 +132,31 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _autoLockMinutes = s.AutoLockMinutes;
         _proxyAddress = s.ProxyAddress;
         CanRestoreVault = !walletOpen;
-        string detected = AppServices.Instance.ResolvedDefaultWalletRpcBinary;
-        DefaultBinaryHint = detected.Length > 0
-            ? "Leave blank to auto-detect. Currently resolves to: " + detected
-            : "Leave blank to auto-detect (nothing found next to the app or on PATH yet), or enter the full path.";
+        RefreshBinaryHint();
+
+        // A verified install becomes the configured path (the setup view model saved it): show it
+        // here at once, with the same result a Test would give.
+        Setup.Installed += installed =>
+        {
+            WalletRpcBinaryPath = installed.Path;
+            RefreshBinaryHint();
+            BinaryTestOk = true;
+            BinaryTestResult = $"OK \u2014 {installed.VersionLine} ({installed.Path})";
+        };
 
         if (AppSettings.RecoveredFromCorruptFile)
         {
             SavedMessage = "Settings could not be read and were reset to defaults. " +
                            "The unreadable file was kept as settings.json.bad.";
         }
+    }
+
+    private void RefreshBinaryHint()
+    {
+        string detected = AppServices.Instance.ResolvedDefaultWalletRpcBinary;
+        DefaultBinaryHint = detected.Length > 0
+            ? "Leave blank to auto-detect. Currently resolves to: " + detected
+            : "Leave blank to auto-detect (nothing found next to the app, on PATH, or installed by XaultWallet yet), or enter the full path.";
     }
 
     partial void OnWalletRpcBinaryPathChanged(string value) => SavedMessage = string.Empty;

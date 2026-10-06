@@ -125,7 +125,7 @@ internal sealed class UiaDriver : IAppDriver
         }
     }
 
-    public async Task SelectAsync(string id, string item)
+    public async Task SelectAsync(string id, string item, bool navigates = false)
     {
         Hit hit = await WaitForHitAsync(id, DefaultWait, enabled: true);
         PointAt(hit);
@@ -140,6 +140,14 @@ internal sealed class UiaDriver : IAppDriver
         Act(id, () => hit.Element.Patterns.ExpandCollapse.Pattern.Expand());
         AutomationElement option = await PollAsync(() => FindPopupItem(item), TimeSpan.FromSeconds(15), $"\"{item}\" in the '{id}' drop-down");
         Act(id, () => option.Patterns.SelectionItem.Pattern.Select());
+        if (navigates)
+        {
+            // The choice replaced the screen: the combo box (and its drop-down) went with it.
+            try { hit.Element.Patterns.ExpandCollapse.Pattern.Collapse(); } catch (Exception ex) when (IsUiaFailure(ex)) { }
+            await SettleAsync();
+            return;
+        }
+
         Act(id, () => hit.Element.Patterns.ExpandCollapse.Pattern.Collapse());
         await SettleAsync();
         if (Current() != item)

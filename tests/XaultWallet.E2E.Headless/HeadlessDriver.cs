@@ -98,7 +98,7 @@ internal sealed class HeadlessDriver : IAppDriver
         }
     }
 
-    public async Task SelectAsync(string id, string item)
+    public async Task SelectAsync(string id, string item, bool navigates = false)
     {
         await WaitForAsync(id, DefaultWait);
         if (Find(id) is not ComboBox combo)
@@ -121,6 +121,15 @@ internal sealed class HeadlessDriver : IAppDriver
             _window.KeyPressQwerty(key, RawInputModifiers.None);
             _window.KeyReleaseQwerty(key, RawInputModifiers.None);
             await SettleAsync();
+            if (navigates && TopLevel.GetTopLevel(combo) is null)
+            {
+                break; // a step on the way already replaced the screen
+            }
+        }
+
+        if (navigates && TopLevel.GetTopLevel(combo) is null)
+        {
+            return; // gone with its screen: nothing to read back (the caller checks the new screen)
         }
 
         if (combo.SelectedIndex != index)

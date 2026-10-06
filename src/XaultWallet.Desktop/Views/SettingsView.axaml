@@ -160,39 +160,13 @@
                         <StackPanel Orientation="Horizontal" Spacing="12">
                             <Border Classes="sectionIcon"><c:Icon Data="{StaticResource IconShield}"/></Border>
                             <StackPanel Spacing="1" VerticalAlignment="Center">
-                                <TextBlock Text="This wallet" Classes="h2"/>
-                                <TextBlock Classes="caption" Text="Each change applies to the wallet your password opens. Your seed never changes."/>
+                                <TextBlock Text="Vault password" Classes="h2"/>
+                                <TextBlock Classes="caption" Text="Changes the password of the wallets it opens. Your seeds never change."/>
                             </StackPanel>
                         </StackPanel>
 
-                        <TextBlock Text="CHANGE NODE" Classes="eyebrow" Margin="0,4,0,0"/>
-                        <Grid ColumnDefinitions="*,8,Auto">
-                            <TextBox Grid.Column="0" Classes="mono" FontSize="12.5" AutomationProperties.AutomationId="Settings.RepointAddress" AutomationProperties.Name="New node address" Watermark="http://host:port — same network as the wallet"
-                                     Text="{Binding RepointNodeAddress}"/>
-                            <Button Grid.Column="2" Content="Test" AutomationProperties.AutomationId="Settings.TestRepoint" AutomationProperties.Name="Test new node" Command="{Binding TestRepointNodeCommand}" IsEnabled="{Binding !Busy}"/>
-                        </Grid>
-                        <ComboBox x:CompileBindings="False" HorizontalAlignment="Stretch"
-                                  AutomationProperties.AutomationId="Settings.RepointPresets" AutomationProperties.Name="Public nodes for this wallet"
-                                  ItemsSource="{Binding PresetNodes}" SelectedItem="{Binding SelectedRepointPreset}"
-                                  PlaceholderText="Or pick a public node…">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding Display}"/>
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
-                        <TextBlock AutomationProperties.AutomationId="Settings.RepointTestResult" Text="{Binding RepointTestResult}" Classes="result"
-                                   IsVisible="{Binding RepointTestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                   Foreground="{Binding RepointTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
-                        <Grid ColumnDefinitions="*,8,Auto">
-                            <c:SecretTextBox Grid.Column="0" Watermark="Wallet password (confirms the change)" PasswordChar="●" AutomationProperties.AutomationId="Settings.RepointPassword" AutomationProperties.Name="Wallet password" Text="{Binding RepointPassword}"/>
-                            <Button Grid.Column="2" Content="Update node" AutomationProperties.AutomationId="Settings.RepointNode" Command="{Binding RepointNodeCommand}" IsEnabled="{Binding !Busy}"/>
-                        </Grid>
-                        <TextBlock AutomationProperties.AutomationId="Settings.RepointResult" Text="{Binding RepointResult}" Classes="result"
-                                   IsVisible="{Binding RepointResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                   Foreground="{Binding RepointOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
-
-                        <Separator Margin="0,6"/>
+                        <TextBlock Classes="caption" TextWrapping="Wrap"
+                                   Text="A wallet's node, name and keys are in the wallet itself: Manage wallet, next to its name."/>
 
                         <TextBlock Text="CHANGE PASSWORD" Classes="eyebrow"/>
                         <c:SecretTextBox Watermark="Current password" PasswordChar="●" AutomationProperties.AutomationId="Settings.CurrentPassword" AutomationProperties.Name="Current password" Text="{Binding CurrentPassword}"/>

@@ -9,36 +9,52 @@ monero-wallet-rpc orchestration without the Avalonia desktop app.
 >
 > 0.2.0 has breaking changes from 0.1.0 — see [CHANGELOG.md](CHANGELOG.md#breaking-integrators-of-xaultwalletcore).
 > 0.3.0 only adds API (local regtest detection); nothing existing changed.
+> **0.5.0 has breaking changes:** a password now opens a `WalletProfile` (several wallets and an
+> address book), changes are saved through a `VaultSession`, and `ChangeDaemonAddress` is gone. See
+> [CHANGELOG.md](CHANGELOG.md#for-integrators-of-xaultwalletcore).
 
 ## Namespaces & surface
 
 ### `XaultWallet.Core.Security`
-- **`VaultManager`** — create/load/unlock the two-slot vault file. **Every operation is symmetric:**
-  nothing distinguishes the decoy from the real wallet, and no method reports which slot opened.
-  - `Create(path, mainPassword, mainSecrets, duressPassword?, duressSecrets?, argon?)` — rejects an
-    empty main password, a duress password equal to the main password, the same mnemonic in both
-    slots, a half-specified duress profile, and `WipeOtherSlotOnUnlock` on the main wallet (all
-    `ArgumentException`).
+- **`VaultManager`** — create/load/unlock the two-slot vault file. Each slot holds one *profile*
+  (`WalletProfile`: wallets + contacts). **Every operation is symmetric:** nothing distinguishes the
+  decoy from the real profile, and no method reports which slot opened.
+  - `Create(path, mainPassword, mainSecrets, duressPassword?, duressSecrets?, argon?)` — one wallet per
+    profile; and `Create(path, mainPassword, mainProfile, duressPassword?, duressProfile?, argon?)`.
+    Both reject an empty main password, a duress password equal to the main password, the same wallet
+    (mnemonic or address) in both profiles, a half-specified duress profile, and
+    `WipeOtherSlotOnUnlock` on the main profile (all `ArgumentException`).
   - `Load(path)` / `Exists(path)`
-  - `Unlock(password)` → `UnlockResult(Secrets, UpgradedFromLegacyFormat)` for whichever slot the
-    password opens, or null. A password "matches" only by authenticating a slot's AES-GCM tag — no
-    plaintext comparison exists. Applies the opened slot's policy before returning: wipe-on-duress, and
-    re-sealing a legacy (v1) payload as v2. `UpgradedFromLegacyFormat` is true on the unlock that did
-    that re-seal, for either slot alike; show the same notice for both (see SECURITY.md → Upgrading from
-    0.1). A plain unlock never writes the file.
+  - `Unlock(password)` → `UnlockResult(Profile, UpgradedFromLegacyFormat)` for whichever slot the
+    password opens, or null (`Secrets` = the profile's active wallet). A password "matches" only by
+    authenticating a slot's AES-GCM tag — no plaintext comparison exists. Applies the opened slot's
+    policy before returning: wipe-on-duress, and re-sealing an older payload (v1, v2) or a slot carried
+    over from a format 1 file as a v3 profile. `UpgradedFromLegacyFormat` is true on the unlock that
+    re-sealed a payload written by 0.1, for either slot alike; show the same notice for both. Opening a
+    current vault never writes the file.
+  - `OpenSession(password)` → a `VaultSession` for whichever slot opens (the same policy as `Unlock`),
+    or null. **This is how changes are saved.**
   - `ChangePassword(current, new)` — re-seals whichever slot `current` opens under `new`. Returns
     false on a wrong password; throws `ArgumentException` if `new` is empty or would also open the
     OTHER slot (neutral message).
-  - `ChangeDaemonAddress(password, newDaemonAddress)` — repoints whichever slot the password opens;
-    throws on an invalid http(s) URL before any key derivation. Takes effect on the next unlock.
-  - Wipe-on-duress fires on **any** of the three operations above when the opened slot carries
+  - Wipe-on-duress fires on **any** of these operations when the opened profile carries
     `WipeOtherSlotOnUnlock`: the other slot becomes random bytes, the flag is cleared (re-sealed with
     the already-derived key — no extra Argon2 time), and `<vault>.replaced-*` copies beside the vault
     are shredded. It is best-effort and silent on unlock; a failed write never changes what the caller sees.
-- **`VaultFile`** — the on-disk container (magic `XVLT`, v1 container, two equal padded slots,
-  randomized slot order). `Serialize`/`Deserialize` with KDF-parameter validation; `WriteSlot`
-  (fresh salt), `FillRandom`, `TryUnlock` (payload + slot index), and `TryOpen` → `OpenedSlot`
-  (payload + the derived key, for `ResealSlot` with a fresh nonce). Dispose `OpenedSlot` promptly.
+- **`VaultSession`** (`IDisposable`) — an open profile. Change `Profile`, then `Save()` (or
+  `SaveAsync()`: serializes on the calling thread, encrypts and writes in the background). A save
+  re-reads the file and re-seals **only this slot** with the key derived at unlock; the other slot is
+  written back byte for byte. `CheckPassword(password)` / `ChangePassword(current, new)` act on this
+  slot only (false for the other slot's password, too). Throws `VaultFullException` (an `IOException`)
+  when the profile no longer fits; nothing is written. `Dispose()` zeroes the key and waits for a save
+  in progress; a save after that throws `ObjectDisposedException`.
+- **`VaultFile`** — the on-disk container: magic `XVLT`, format 2, two equal slots of
+  `PaddedPlaintextBytes` (256 KiB) each, randomized slot order, `FileBytes` in all. `Deserialize` also
+  reads format 1 (0.2/0.3: 4 KiB slots), carrying each old slot byte for byte into a new slot until its
+  own password re-seals it; a newer format is refused. `Serialize` always writes format 2. `WriteSlot`
+  (fresh salt), `FillRandom`, `TryUnlock` (payload + slot index), and `TryOpen` → `OpenedSlot` (payload,
+  derived key, `IsLegacyLayout`, for `ResealSlot` with a fresh nonce). Every slot is tried both ways on
+  every open, so a carried slot costs the same work. Dispose `OpenedSlot` promptly.
 - **`VaultCrypto`** — Argon2id key derivation (bounded params) + AES-256-GCM encrypt/decrypt, `RandomBytes`.
 - **`PasswordStrength`** — `Evaluate(password)` → `(StrengthLevel, bitsEstimate)`, discounting repeats,
   sequences, keyboard runs and very common passwords. `MinimumAccepted` is the floor the app enforces.
@@ -49,14 +65,22 @@ monero-wallet-rpc orchestration without the Avalonia desktop app.
   never follows symlinks). The vault, settings and log writers all go through it.
 
 The sealed payload (internal `SlotPayload`) is identical in shape for every slot:
-`{"v":2,"network":…,"mnemonic":…,"seedOffset":…,"restoreHeight":…,"daemonAddress":…,"ephemeralWalletPassword":…,"wipeOther":…}`.
-v1 payloads (`kind` / `label` / `duressWipeReal`, no `v`) are read and migrated; a `v` newer than 2
+`{"v":3,"wallets":[{"id","name","type","network","mnemonic","seedOffset","address","viewKey","spendKey","restoreHeight","daemonAddress","ephemeralWalletPassword","subaddresses","labels","accountLabels","notes"}…],"contacts":[{"id","name","address","note"}…],"active":…,"wipeOther":…}`.
+(A wallet's kind is `type`; 0.1's real/decoy marker was `kind`, and nothing like it exists.) v1 and v2
+payloads are read and become a one-wallet profile; a `v` newer than 3, or a profile without wallets,
 is refused with `InvalidDataException`.
 
 ### `XaultWallet.Core.Models`
-- **`WalletSecrets`** — everything one wallet needs: `Network`, `Mnemonic`, `SeedOffset`,
-  `RestoreHeight`, `DaemonAddress`, `EphemeralWalletPassword`, `WipeOtherSlotOnUnlock` (decoy only).
-  Deliberately no "kind" or label.
+- **`WalletProfile`** — what one password opens: `Wallets`, `Contacts`, `ActiveWalletId` (opens
+  first), `WipeOtherSlotOnUnlock` (input when creating a duress profile), `ActiveWallet`, and
+  `OfOne(wallet)` for a one-wallet profile.
+- **`WalletSecrets`** — one wallet: `Id`, `Name`, `Kind` (`WalletKind.Seed` / `Keys` / `ViewOnly`),
+  `Network`, `Mnemonic` + `SeedOffset` (seed), `Address` + `ViewKey` (+ `SpendKey`) (keys,
+  watch-only), `RestoreHeight`, `DaemonAddress`, `EphemeralWalletPassword`, and the wallet's own
+  `SubaddressCounts` (per account, so a restored wallet re-creates what it handed out), `Labels`
+  (`"account/index"` → label), `AccountLabels` and `TxNotes`. `CanSpend` is false for watch-only.
+  Nothing in it says real or decoy.
+- **`Contact`** — `Id`, `Name`, `Address`, `Note`.
 - **`SeedOffsetPolicy`** — `ForSeed(wasGenerated, userOffset)` → the offset that is safe to seal: empty
   for a generated seed, the user's offset **byte-for-byte** for an imported one.
 - **`MoneroNetwork`** — `Mainnet` / `Stagenet` / `Testnet`.
@@ -68,16 +92,26 @@ is refused with `InvalidDataException`.
     **before** the seed exists, via `RestoreHeights.ForNewSeed` (capped by the clock, minus
     `GeneratedSeedRestoreMargin` = 720), or 0 if the node is unreachable. The backend's ownership is
     checked before `create_wallet`.
-  - `ValidateSeedOpensAsync(secrets)` → opens a wallet once and returns its primary address
-  - `OpenAsync(secrets)` → restores into a private session directory (shredded on close)
-  - `GetBalanceAsync` / `GetPrimaryAddressAsync` / `GetHeightAsync` / `GetHistoryAsync` / `RefreshAsync`
-  - `PrepareSendAsync(address, amountXmr, priority)` → `TransferResult` with the **exact fee**, `TxKey`
-    and `TxMetadata`; builds the signed tx WITHOUT broadcasting. Discarding it cancels the send.
+  - `ValidateWalletOpensAsync(secrets)` → opens a wallet once (from seed or keys) and returns its
+    primary address. For keys it also proves they belong to the address: `generate_from_keys` doesn't
+    check, so the wallet is reopened, where wallet2's key check runs; a mismatch throws, naming the key.
+    (`ValidateSeedOpensAsync` is the same method under its old name.)
+  - `OpenAsync(secrets)` → restores into a private session directory (shredded on close), then
+    re-creates the accounts and subaddresses recorded in `SubaddressCounts`
+  - `GetBalanceAsync(account)` / `GetPrimaryAddressAsync` / `GetHeightAsync` / `GetHistoryAsync(account)` / `RefreshAsync`
+  - Accounts and addresses: `GetAccountsAsync`, `NewAccountAsync`, `GetAddressesAsync(account)` (with
+    `Used`), `NewSubaddressAsync(account, label)` → (index, address)
+  - `PrepareSendAsync(destinations, account, priority)` → `TransferResult` with the **exact fee**,
+    `TxKey` and `TxMetadata`; builds the signed tx WITHOUT broadcasting (up to `MaxDestinations` = 15
+    recipients; a transaction has at most 16 outputs). Discarding it cancels the send.
+    `PrepareSendAsync(address, amountXmr, priority)` is the one-recipient form.
   - `RelaySendAsync(txMetadata)` → tx hash. Broadcasts a prepared tx; its fee cannot change.
-  - `PrepareSweepAllAsync(address, priority)` → `SweepAllResult` (parallel lists; relay each metadata entry)
+  - `PrepareSweepAllAsync(address, account, priority)` → `SweepAllResult` (parallel lists; relay each metadata entry)
   - `SendAsync(address, amountXmr, priority)` — builds AND broadcasts in one step (no review); prefer prepare/relay
-  - `GetTxKeyAsync(txid)` (throws if the backend returns no key) / `CheckTxKeyAsync(txid, txKey, address)` — payment proofs
-  - `NewSubaddressAsync(label)`
+  - Proofs: `GetTxKeyAsync(txid)` (throws if the backend returns no key) / `CheckTxKeyAsync(txid, txKey, address)`;
+    `SignMessageAsync(message)` (main address) / `VerifyMessageAsync(message, address, signature)`;
+    `GetReserveProofAsync(amount?, account, message)` / `CheckReserveProofAsync(address, message, proof)` → (good, total, spent)
+  - `SetDaemonAsync(daemon)` (switch node live, URL validated), `RescanSpentAsync`, `GetKeysAsync` → (mnemonic, viewKey, spendKey)
   - `BackendExited` — the wallet-rpc child died underneath an open wallet
   - `IsLocalTestChain` — the open wallet syncs from a private regtest chain on this machine (see
     `MoneroDiagnostics.IsLocalTestChainAsync`); label it as such rather than as its address network
@@ -116,6 +150,11 @@ is refused with `InvalidDataException`.
   passes anything else through unchanged. `EnsureLaunchable(path)` throws `FileNotFoundException` unless
   the path is fully qualified and exists.
 - **`MoneroAddress`** — `Problem(address, network)` → null or a human-readable reason (charset/length/prefix only).
+- **`MoneroUri`** — `monero:` payment links. `Build(MoneroPaymentRequest)` (address, optional
+  `tx_amount`, `tx_description`, `recipient_name`); `IsUri(text)`; `TryParse(uri, out problem)` →
+  `MoneroPaymentRequest` or null with a reason. Strict: an amount is digits with an optional `.` and
+  up to 12 decimals (`1,5` is refused, never read as 1.5 or 15), and links with `tx_payment_id` or
+  several addresses are refused.
 - **`DaemonAddress`** — the one definition of a valid node URL. `IsLoopback(address)`: `localhost` or a
   loopback IP (`127.0.0.0/8`, `::1`).
 - **`MoneroDiagnostics`** — `ProbeWalletRpcAsync(binaryPath)` (runs `--version`; same full-path rule as a launch),
@@ -124,6 +163,25 @@ is refused with `InvalidDataException`.
   `nettype: "fakechain"` (what `monerod --regtest` runs). A remote node is never asked; any failure
   (unreachable, not JSON, an odd answer) is `false`. 5 s timeout.
 - **`SecretRedactor`** — structural JSON redaction of seeds, passwords, keys and signed-tx blobs.
+
+### `XaultWallet.Core.Installer`
+- **`WalletRpcInstaller`** — `new WalletRpcInstaller(installRoot, proxyAddress?)`;
+  `InstallAsync(progress?, ct)` → `InstalledWalletRpc(Path, Version, VersionLine)`: fetches
+  `OfficialHashListUrl` (getmonero.org `hashes.txt`), verifies its clearsigned OpenPGP signature
+  against `MoneroSigningKeys.Trusted`, picks this platform's CLI archive from the signed list,
+  downloads it from `OfficialDownloadBase`, requires the signed SHA-256, extracts only
+  `monero-wallet-rpc`, runs `--version`, and moves it to `<installRoot>/v<version>/` (older versions
+  removed). Every failure is a `WalletRpcInstallException` with a message fit to show, and leaves
+  nothing installed. `FindInstalled(installRoot)` → the installed binary, or null.
+  `InstallProgress(Stage, BytesDone, BytesTotal)` reports `InstallStage`.
+- **`MoneroSigningKeys`** — `Trusted`: binaryFate's RSA keys, read from the copy of Monero's
+  `binaryfate.asc` embedded in the assembly and accepted only if they are exactly the pinned
+  `BinaryFatePrimary` and `BinaryFateSubkey` fingerprints.
+- **`MoneroReleaseList`** — `Parse(signedLines)` → `MoneroCliArchive(FileName, Platform, Version, Sha256)`
+  for the CLI builds; `Select(signedLines, platform)`; `CurrentPlatform()` / `PlatformName(os, arch)`
+  (`win-x64`, `linux-x64`, `linux-armv8`, `mac-armv8`…); `WalletRpcFileName(platform)`.
+- `PgpRsaKey` (a key's `Fingerprint`) and `SignatureCheckException` are public for those; the OpenPGP
+  reader itself is internal.
 
 ### `XaultWallet.Core.Diagnostics`
 - **`Log`** — `Initialize(dir)`, `Info/Warn/Error`. Thread-safe file logger. Never log secrets — or

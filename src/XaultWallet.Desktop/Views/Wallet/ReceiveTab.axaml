@@ -1,0 +1,156 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
+             xmlns:c="clr-namespace:XaultWallet.Desktop.Controls"
+             xmlns:w="clr-namespace:XaultWallet.Desktop.Views.Wallet"
+             x:Class="XaultWallet.Desktop.Views.Wallet.ReceiveTab"
+             x:DataType="vm:WalletViewModel">
+    <ScrollViewer Margin="0,14,0,0">
+        <StackPanel Spacing="14">
+            <!-- The address shown, its QR code, and an optional payment request -->
+            <Border Classes="card" Padding="24">
+                <Grid ColumnDefinitions="Auto,28,*">
+                    <StackPanel Grid.Column="0" Spacing="8" VerticalAlignment="Top">
+                        <Border Width="208" Height="208" CornerRadius="14" ClipToBounds="True" Background="White">
+                            <c:QrCodeView AutomationProperties.AutomationId="Receive.Qr" AutomationProperties.Name="Receive QR code" x:Name="ReceiveQr"
+                                          Text="{Binding ReceiveUri}" Width="208" Height="208"/>
+                        </Border>
+                        <TextBlock Classes="caption" HorizontalAlignment="Center" TextAlignment="Center" MaxWidth="208" TextWrapping="Wrap"
+                                   Text="Includes the amount and description" IsVisible="{Binding HasRequest}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Spacing="12" VerticalAlignment="Center">
+                        <TextBlock Classes="eyebrow" AutomationProperties.AutomationId="Receive.Title" Text="{Binding ReceiveTitle}"/>
+                        <SelectableTextBlock Classes="mono" FontSize="14" LineHeight="22" TextWrapping="Wrap"
+                                             AutomationProperties.AutomationId="Receive.Address" Text="{Binding ReceiveAddress}" Foreground="{StaticResource TextPrimary}"/>
+                        <WrapPanel Orientation="Horizontal" Margin="0,2,0,0">
+                            <Button Classes="accent" Margin="0,0,8,8" AutomationProperties.AutomationId="Receive.Copy" AutomationProperties.Name="Copy address"
+                                    Command="{Binding CopyAddressCommand}" CommandParameter="{x:Null}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <c:Icon Data="{StaticResource IconCopy}" Width="16" Height="16"/>
+                                    <TextBlock Text="Copy address" Foreground="{StaticResource AccentText}"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Margin="0,0,8,8" AutomationProperties.AutomationId="Receive.CopyLink" AutomationProperties.Name="Copy payment link"
+                                    Command="{Binding CopyPaymentLinkCommand}" IsVisible="{Binding HasRequest}"
+                                    ToolTip.Tip="A monero: link with the amount and description, for wallets that open them">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <c:Icon Data="{StaticResource IconLink}" Width="16" Height="16"/>
+                                    <TextBlock Text="Copy payment link"/>
+                                </StackPanel>
+                            </Button>
+                        </WrapPanel>
+
+                        <!-- Payment request: amount and description go into the QR code and the link -->
+                        <Border Classes="inset" Padding="14,12">
+                            <StackPanel Spacing="9">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Text="REQUEST A PAYMENT (OPTIONAL)" Classes="eyebrow" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1" Classes="link" Content="Clear" AutomationProperties.AutomationId="Receive.ClearRequest"
+                                            Command="{Binding ClearRequestCommand}" IsVisible="{Binding HasRequest}"/>
+                                </Grid>
+                                <Grid ColumnDefinitions="150,10,*">
+                                    <TextBox Grid.Column="0" Classes="mono" Watermark="Amount" AutomationProperties.AutomationId="Receive.RequestAmount"
+                                             AutomationProperties.Name="Requested amount" Text="{Binding RequestAmountText}">
+                                        <TextBox.InnerRightContent>
+                                            <TextBlock Text="XMR" Classes="eyebrow" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                        </TextBox.InnerRightContent>
+                                    </TextBox>
+                                    <TextBox Grid.Column="2" Watermark="What it's for (shown to the payer)" MaxLength="100"
+                                             AutomationProperties.AutomationId="Receive.RequestDescription" AutomationProperties.Name="Payment description"
+                                             Text="{Binding RequestDescription}"/>
+                                </Grid>
+                                <TextBlock Classes="caption" Foreground="{StaticResource WarningBrush}" Text="{Binding RequestAmountError}"
+                                           IsVisible="{Binding RequestAmountError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock AutomationProperties.AutomationId="Receive.Error" Text="{Binding ReceiveNotice}" Classes="caption" TextWrapping="Wrap"
+                                   Foreground="{StaticResource WarningBrush}"
+                                   IsVisible="{Binding ReceiveNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                        <TextBlock Classes="muted" TextWrapping="Wrap" MaxWidth="560" HorizontalAlignment="Left"
+                                   Text="Give each person who pays you their own subaddress: they all reach this wallet, but nobody can link them to each other."/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Every address of this account: label them, see which have been paid, show one's QR -->
+            <Border Classes="card" Padding="14,14,14,12">
+                <StackPanel Spacing="8">
+                    <Grid ColumnDefinitions="*,Auto,8,Auto" Margin="10,2,4,4">
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock Text="ADDRESSES" Classes="eyebrow"/>
+                            <TextBlock Classes="caption" Text="Labels are kept in your vault, never in the wallet file."/>
+                        </StackPanel>
+                        <TextBox Grid.Column="1" Width="200" Watermark="Label (optional)" MaxLength="40" VerticalAlignment="Center"
+                                 AutomationProperties.AutomationId="Receive.NewLabel" AutomationProperties.Name="Label for the new subaddress"
+                                 Text="{Binding NewAddressLabel}"/>
+                        <Button Grid.Column="3" VerticalAlignment="Center" AutomationProperties.AutomationId="Receive.NewSubaddress" AutomationProperties.Name="New subaddress"
+                                Command="{Binding NewAddressCommand}" ToolTip.Tip="A fresh, unlinkable address for the same wallet">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <c:Icon Data="{StaticResource IconPlus}" Width="16" Height="16"/>
+                                <TextBlock Text="New subaddress"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <ItemsControl AutomationProperties.AutomationId="Receive.Addresses" AutomationProperties.Name="Addresses" ItemsSource="{Binding Addresses}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:AddressRow">
+                                <Border Classes="txRow" Classes.open="{Binding IsShown}">
+                                    <Grid ColumnDefinitions="Auto,14,*,12,Auto">
+                                        <Border Grid.Column="0" Classes="txIcon" Background="{StaticResource InfoSoft}">
+                                            <c:Icon Data="{StaticResource IconReceive}" Foreground="{StaticResource InfoBrush}" Width="16" Height="16"
+                                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+
+                                        <!-- name + address, or the label editor -->
+                                        <StackPanel Grid.Column="2" Spacing="3" VerticalAlignment="Center" IsVisible="{Binding !IsEditing}">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13.5"/>
+                                                <Border Classes="pill warning" Padding="7,1" IsVisible="{Binding Used}"
+                                                        ToolTip.Tip="This address has received a payment. Give a new payer a new subaddress.">
+                                                    <TextBlock Text="used" FontSize="10.5"/>
+                                                </Border>
+                                                <Border Classes="pill success" Padding="7,1" IsVisible="{Binding IsShown}">
+                                                    <TextBlock Text="in the QR code" FontSize="10.5"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Classes="caption mono" Text="{Binding ShortAddress}"/>
+                                        </StackPanel>
+                                        <Grid Grid.Column="2" ColumnDefinitions="*,8,Auto,6,Auto" VerticalAlignment="Center" IsVisible="{Binding IsEditing}">
+                                            <TextBox Grid.Column="0" MaxLength="40" Watermark="Label" AutomationProperties.AutomationId="Receive.LabelEditor"
+                                                     AutomationProperties.Name="Address label" Text="{Binding LabelDraft}"/>
+                                            <Button Grid.Column="2" Classes="accent" AutomationProperties.AutomationId="Receive.SaveLabel" AutomationProperties.Name="Save label"
+                                                    Command="{Binding $parent[w:ReceiveTab].((vm:WalletViewModel)DataContext).SaveLabelCommand}" CommandParameter="{Binding}">
+                                                <TextBlock Text="Save" Foreground="{StaticResource AccentText}"/>
+                                            </Button>
+                                            <Button Grid.Column="4" Content="Cancel"
+                                                    Command="{Binding $parent[w:ReceiveTab].((vm:WalletViewModel)DataContext).CancelLabelCommand}" CommandParameter="{Binding}"/>
+                                        </Grid>
+
+                                        <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" IsVisible="{Binding !IsEditing}">
+                                            <Button Classes="ghost icon" AutomationProperties.AutomationId="Receive.ShowAddress" AutomationProperties.Name="Show QR code"
+                                                    ToolTip.Tip="Show this address and its QR code"
+                                                    Command="{Binding $parent[w:ReceiveTab].((vm:WalletViewModel)DataContext).ShowAddressCommand}" CommandParameter="{Binding}">
+                                                <c:Icon Data="{StaticResource IconQr}" Width="16" Height="16"/>
+                                            </Button>
+                                            <Button Classes="ghost icon" AutomationProperties.AutomationId="Receive.CopyRow" AutomationProperties.Name="Copy this address"
+                                                    ToolTip.Tip="Copy this address"
+                                                    Command="{Binding $parent[w:ReceiveTab].((vm:WalletViewModel)DataContext).CopyAddressCommand}" CommandParameter="{Binding}">
+                                                <c:Icon Data="{StaticResource IconCopy}" Width="16" Height="16"/>
+                                            </Button>
+                                            <Button Classes="ghost icon" AutomationProperties.AutomationId="Receive.EditLabel" AutomationProperties.Name="Edit label"
+                                                    ToolTip.Tip="Name this address"
+                                                    Command="{Binding $parent[w:ReceiveTab].((vm:WalletViewModel)DataContext).EditLabelCommand}" CommandParameter="{Binding}">
+                                                <c:Icon Data="{StaticResource IconEdit}" Width="16" Height="16"/>
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

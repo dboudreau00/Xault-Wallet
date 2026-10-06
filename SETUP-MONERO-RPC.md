@@ -5,6 +5,13 @@ should not trust a copy from anyone (including this project) without verifying i
 binary handles your keys — a tampered copy can steal every seed you generate. Verifying the
 maintainers' signature is the one step that protects you, so it is not optional for real funds.
 
+**The recommended way is below: download and verify it yourself.** If you'd rather not, the app's
+**Download & install** (startup screen, or Settings → *Wallet backend*) performs the same checks for
+you — `hashes.txt` must carry a good signature by binaryFate's key (pinned inside XaultWallet by
+fingerprint), and the archive must match its signed SHA-256 — and installs nothing if either fails.
+That trusts the copy of the key inside the XaultWallet release you run; see
+[SECURITY.md → The monero-wallet-rpc installer](SECURITY.md#the-monero-wallet-rpc-installer).
+
 ## 1. Download from the official source only
 
 Get the CLI archive for your OS from **one** of these (identical binaries; GitHub is preferred

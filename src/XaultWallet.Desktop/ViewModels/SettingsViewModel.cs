@@ -56,37 +56,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// vault file with only the exported backup in hand.</summary>
     public bool CanRestoreVault { get; }
 
-    // Change THIS wallet's node (repoint an existing vault's daemon address)
-    [ObservableProperty] private string _repointNodeAddress = string.Empty;
-    [ObservableProperty] private string _repointPassword = string.Empty;
-    [ObservableProperty] private string _repointResult = string.Empty;
-    [ObservableProperty] private bool _repointOk;
-    [ObservableProperty] private string _repointTestResult = string.Empty;
-    [ObservableProperty] private bool _repointTestOk;
+    /// <summary>The open profile, when Settings was opened from an unlocked wallet. Password changes
+    /// then go through its session (and only ever change its own password).</summary>
+    private readonly ProfileViewModel? _profile;
 
-    /// <summary>Selecting a preset fills the repoint address field below (network is unchanged).</summary>
-    [ObservableProperty] private RemoteNode? _selectedRepointPreset;
-
-    /// <summary>Only show the repoint card when there's actually a wallet to repoint.</summary>
+    /// <summary>The password card and the export button need a vault to act on.</summary>
     public bool VaultExists { get; } = VaultManager.Exists(AppServices.Instance.VaultPath);
-
-    partial void OnSelectedRepointPresetChanged(RemoteNode? value)
-    {
-        if (value is null)
-        {
-            return;
-        }
-
-        RepointNodeAddress = value.Url;
-        RepointResult = string.Empty;
-        RepointTestResult = string.Empty;
-    }
-
-    partial void OnRepointNodeAddressChanged(string value)
-    {
-        RepointResult = string.Empty;
-        RepointTestResult = string.Empty;
-    }
 
     /// <summary>Selecting a preset fills the daemon address and network below.</summary>
     [ObservableProperty] private RemoteNode? _selectedPreset;
@@ -122,8 +97,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
             .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(SettingsViewModel).Assembly)
             ?.InformationalVersion ?? "").Split('+')[0];
 
-    public SettingsViewModel(bool walletOpen = false)
+    public SettingsViewModel(ProfileViewModel? profile = null)
     {
+        _profile = profile;
         AppSettings s = AppServices.Instance.Settings;
         _walletRpcBinaryPath = s.WalletRpcBinaryPath;
         _defaultDaemonAddress = s.DefaultDaemonAddress;
@@ -131,7 +107,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _autoRefreshSeconds = s.AutoRefreshSeconds;
         _autoLockMinutes = s.AutoLockMinutes;
         _proxyAddress = s.ProxyAddress;
-        CanRestoreVault = !walletOpen;
+        CanRestoreVault = profile is null;
         RefreshBinaryHint();
 
         // A verified install becomes the configured path (the setup view model saved it): show it
@@ -325,19 +301,21 @@ public sealed partial class SettingsViewModel : ViewModelBase
             // Argon2id at these parameters takes seconds — keep it OFF the UI thread so the
             // window never looks hung (a user who kills a "frozen" app mid-rewrite is the
             // failure mode the atomic vault write exists to survive, not to invite).
-            bool changed = await Task.Run(() =>
-            {
-                // Take ownership of the password chars FIRST (FromPassword zeroes them): if
-                // Load throws, the passwords must not be left un-zeroed on the heap.
-                using var cur = SecureBuffer.FromPassword(curChars);
-                using var next = SecureBuffer.FromPassword(nextChars);
-                VaultManager mgr = VaultManager.Load(AppServices.Instance.VaultPath);
-
-                // Symmetric: re-seals whichever wallet the current password opens. The wording below
-                // is identical either way — an asymmetric rule or message would tell a coercer
-                // holding the duress password that another wallet exists.
-                return mgr.ChangePassword(cur, next);
-            });
+            // With a wallet open, the open session changes ITS OWN password only (the same rule
+            // whichever password opened it). From the unlock screen, whichever profile the current
+            // password opens. Either way the wording below is identical: an asymmetric rule or
+            // message would tell a coercer holding the duress password that another wallet exists.
+            bool changed = _profile is not null
+                ? await _profile.ChangePasswordAsync(curChars, nextChars)
+                : await Task.Run(() =>
+                {
+                    // Take ownership of the password chars FIRST (FromPassword zeroes them): if
+                    // Load throws, the passwords must not be left un-zeroed on the heap.
+                    using var cur = SecureBuffer.FromPassword(curChars);
+                    using var next = SecureBuffer.FromPassword(nextChars);
+                    VaultManager mgr = VaultManager.Load(AppServices.Instance.VaultPath);
+                    return mgr.ChangePassword(cur, next);
+                });
 
             if (changed)
             {
@@ -348,7 +326,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
             else
             {
                 ChangePasswordOk = false;
-                ChangePasswordResult = "That password didn't unlock this vault.";
+                ChangePasswordResult = _profile is not null
+                    ? "That isn't the password of the wallet that's open."
+                    : "That password didn't unlock this vault.";
             }
         }
         catch (ArgumentException ex)
@@ -362,101 +342,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
             ChangePasswordOk = false;
             ChangePasswordResult = "Couldn't change password: " + ex.Message;
             Log.Error("Change password failed", ex);
-        }
-        finally
-        {
-            Busy = false;
-        }
-    }
-
-    [RelayCommand]
-    private async Task TestRepointNodeAsync()
-    {
-        Busy = true;
-        RepointTestOk = false;
-        RepointTestResult = "Contacting node…";
-        try
-        {
-            ulong height = await MoneroDiagnostics.ProbeDaemonAsync(RepointNodeAddress, ProxyAddress);
-            RepointTestOk = true;
-            RepointTestResult = $"OK — node at height {height}.";
-        }
-        catch (Exception ex)
-        {
-            RepointTestOk = false;
-            RepointTestResult = ex.Message;
-        }
-        finally
-        {
-            Busy = false;
-        }
-    }
-
-    [RelayCommand]
-    private async Task RepointNodeAsync()
-    {
-        if (Busy)
-        {
-            return; // never interleave two vault-mutating operations (lost-update risk)
-        }
-
-        RepointResult = string.Empty;
-        RepointOk = false;
-
-        if (string.IsNullOrWhiteSpace(RepointNodeAddress))
-        {
-            RepointResult = "Enter the new node address.";
-            return;
-        }
-
-        if (string.IsNullOrEmpty(RepointPassword))
-        {
-            RepointResult = "Enter your wallet password to confirm the change.";
-            return;
-        }
-
-        Busy = true;
-        try
-        {
-            char[] pwChars = RepointPassword.ToCharArray();
-            RepointPassword = string.Empty;
-            string address = RepointNodeAddress.Trim();
-
-            // Argon2id derivation off the UI thread — same reasoning as ChangePassword.
-            bool changed = await Task.Run(() =>
-            {
-                // SecureBuffer first — same heap-hygiene reasoning as ChangePassword.
-                using var pw = SecureBuffer.FromPassword(pwChars);
-                VaultManager mgr = VaultManager.Load(AppServices.Instance.VaultPath);
-
-                // ChangeDaemonAddress repoints whichever profile the password opens (real or
-                // duress), so the wording here stays neutral and never hints at a second wallet.
-                return mgr.ChangeDaemonAddress(pw, address);
-            });
-
-            if (changed)
-            {
-                RepointOk = true;
-                RepointResult = "Node updated. Lock and unlock your wallet for the change to take effect.";
-                // Deliberately not logging the address — which node you use is not something the log needs.
-                Log.Info("Wallet daemon address repointed.");
-            }
-            else
-            {
-                RepointOk = false;
-                RepointResult = "That password didn't unlock a wallet in this vault.";
-            }
-        }
-        catch (ArgumentException ex)
-        {
-            RepointOk = false;
-            RepointResult = ex.Message;
-        }
-        catch (Exception ex)
-        {
-            RepointOk = false;
-            RepointResult = "Couldn't update the node: " + ex.Message;
-            Log.Error("Repoint node failed", ex);
         }
         finally
         {

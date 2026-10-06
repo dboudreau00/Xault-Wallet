@@ -48,3 +48,19 @@ public sealed class AtomicToXmrConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
+
+/// <summary>True when an int property equals the parameter; checking the radio button sets the
+/// property to it (the history filter chips).</summary>
+public sealed class IntEqualsConverter : IValueConverter
+{
+    public static readonly IntEqualsConverter Instance = new();
+
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => value is int i && TryParameter(parameter, out int p) && i == p;
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => value is true && TryParameter(parameter, out int p) ? p : Avalonia.Data.BindingOperations.DoNothing;
+
+    private static bool TryParameter(object? parameter, out int value) =>
+        int.TryParse(parameter as string, NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
+}

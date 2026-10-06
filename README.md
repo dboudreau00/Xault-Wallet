@@ -15,7 +15,7 @@ Built on .NET 8 + Avalonia. Encrypted at rest with AES-256-GCM (Argon2id KDF). D
   <img src="docs/screenshots/wallet-history.png" width="49%" alt="Wallet — transaction history" />
 </p>
 
-| Notification - Documentation and code review assisted by Claude Code. |
+## Notification - Documentation and code review assisted by Claude Code.
 
 
 

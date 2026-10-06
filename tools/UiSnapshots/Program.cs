@@ -121,6 +121,9 @@ internal static partial class Program
         CheckManageOpensWithSecretsHidden();
         CheckAccountAddressTitles();
         CheckSameWalletIsRecognised();
+        CheckAddWalletWhileTheNodeIsSlow();
+        CheckSameSeedOnAnotherNetwork();
+        CheckOverspendKeepsTheBalanceHidden();
         CheckTemporaryBackendsEnd();
         CheckMotion();
         if (!OperatingSystem.IsWindows())

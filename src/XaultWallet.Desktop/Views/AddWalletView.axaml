@@ -63,7 +63,7 @@
                 </Grid>
 
                 <!-- ============ What kind ============ -->
-                <UniformGrid Columns="4" Margin="-5,0" app:Entrance.Rise="60">
+                <UniformGrid Columns="4" Margin="-5,0" app:Entrance.Rise="60" IsEnabled="{Binding !Busy}">
                     <RadioButton Classes="modeCard" GroupName="AddMode" AutomationProperties.AutomationId="AddWallet.Mode.New" AutomationProperties.Name="New wallet"
                                  IsChecked="{Binding Mode, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0}">
                         <StackPanel Spacing="6">

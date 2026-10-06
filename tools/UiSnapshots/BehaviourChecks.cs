@@ -4,6 +4,7 @@ using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using XaultWallet.Core.Models;
 using XaultWallet.Desktop;
 using XaultWallet.Desktop.ViewModels;
 using XaultWallet.Desktop.Views;
@@ -52,6 +53,20 @@ internal static partial class Program
         }
 
         task.GetAwaiter().GetResult();
+    }
+
+    /// <summary>Like <see cref="Run"/>, but reports whether <paramref name="task"/> finished in time
+    /// instead of throwing.</summary>
+    private static bool Finished(Task task, int seconds)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (!task.IsCompleted && sw.Elapsed < TimeSpan.FromSeconds(seconds))
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(5);
+        }
+
+        return task.IsCompleted;
     }
 
     private static void Expect(bool ok, string passed, string failed)
@@ -216,7 +231,7 @@ internal static partial class Program
         ProfileViewModel profile = ProfileViewModel.ForPreview(DemoProfile());
         WalletViewModel everyday = profile.Start();
         string address = FakeAddress('5', 7);
-        profile.NoteAddress(everyday.WalletId, address); // what opening it does
+        Run(profile.NoteAddressAsync(everyday.WalletId, address)); // what opening it does
         var add = new AddWalletViewModel(profile)
         {
             Mode = 3,
@@ -243,6 +258,105 @@ internal static partial class Program
         Expect(add.Error == "That wallet is already in this vault, as “Everyday”." && profile.Wallets.Count == 3,
             "Duplicates ok: a seed wallet added again watch-only is recognised by its recorded address.",
             $"Duplicate wallet: error '{add.Error}', wallets {profile.Wallets.Count}");
+    }
+
+    /// <summary>Runs <paramref name="check"/> with monero-wallet-rpc pointed at a file that doesn't exist,
+    /// so an import check fails fast instead of starting a real one found on PATH.</summary>
+    private static void WithoutWalletRpc(Action check)
+    {
+        AppSettings settings = AppServices.Instance.Settings;
+        string configured = settings.WalletRpcBinaryPath;
+        settings.WalletRpcBinaryPath = Path.Combine(Path.GetTempPath(), "no-such-dir", "monero-wallet-rpc");
+        try
+        {
+            check();
+        }
+        finally
+        {
+            settings.WalletRpcBinaryPath = configured;
+        }
+    }
+
+    private const string NoWalletRpc = "monero-wallet-rpc isn't available, so the wallet can't be checked. Set it up in Settings first.";
+
+    private static readonly string TwentyFiveWords = string.Join(' ', Enumerable.Repeat("abbey", 24).Append("ability"));
+
+    /// <summary>
+    /// The add-wallet screen while a slow node is asked for its height (it answers nothing; the probe
+    /// gives up after 10 s): the import goes on with what was pressed, however the form changes in the
+    /// meantime — never saved unchecked as a "new" wallet — and leaving the screen stops it, adding
+    /// nothing. A node that times out counts as unreachable, never as a lock.
+    /// </summary>
+    private static void CheckAddWalletWhileTheNodeIsSlow()
+    {
+        using var silent = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        silent.Start(); // connections complete in the backlog; nothing is ever answered
+        string node = $"http://127.0.0.1:{((System.Net.IPEndPoint)silent.LocalEndpoint).Port}";
+        ProfileViewModel profile = ProfileViewModel.ForPreview(DemoProfile());
+        profile.Start();
+
+        bool waited = false;
+        string imported = "?", left = "?";
+        WithoutWalletRpc(() =>
+        {
+            var add = new AddWalletViewModel(profile) { Mode = 1, Name = "Restored", DaemonAddress = node, ImportMnemonic = TwentyFiveWords };
+            Task adding = add.AddCommand.ExecuteAsync(null);
+            Pump(500);
+            waited = add.Busy && !adding.IsCompleted;
+            add.Mode = 0; // "New wallet", picked while it waits
+            imported = Finished(adding, 30) ? $"error '{add.Error}', {profile.Wallets.Count} wallets" : "still running after 30 s";
+
+            // Another seed, so this part doesn't depend on how the first one ended.
+            var leaving = new AddWalletViewModel(profile) { Mode = 1, Name = "Left", DaemonAddress = node, ImportMnemonic = TwentyFiveWords.Replace("ability", "able", StringComparison.Ordinal) };
+            int before = profile.Wallets.Count;
+            Task stopping = leaving.AddCommand.ExecuteAsync(null);
+            Pump(500);
+            leaving.CancelCommand.Execute(null);
+            left = Finished(stopping, 5) // the wait stops with the screen, not when the probe gives up
+                ? $"error '{leaving.Error}', busy {leaving.Busy}, {profile.Wallets.Count - before} added"
+                : "still running 5 s after leaving";
+        });
+
+        string importedOk = $"error '{NoWalletRpc}', 3 wallets";
+        string leftOk = "error '', busy False, 0 added";
+        Expect(waited && imported == importedOk && left == leftOk,
+            "Add wallet ok: a slow node delays an import but can't turn it into an unchecked one, and leaving stops it.",
+            $"Add wallet with a slow node: waited={waited}; import after the mode changed: {imported}; after leaving: {left}");
+    }
+
+    /// <summary>The same seed is the same wallet only on the same network.</summary>
+    private static void CheckSameSeedOnAnotherNetwork()
+    {
+        var stagenet = new WalletSecrets { Name = "Stagenet", Network = MoneroNetwork.Stagenet, Mnemonic = TwentyFiveWords };
+        ProfileViewModel profile = ProfileViewModel.ForPreview(new WalletProfile { Wallets = { stagenet }, ActiveWalletId = stagenet.Id });
+        profile.Start();
+        string onMainnet = string.Empty, onStagenet = string.Empty;
+        WithoutWalletRpc(() =>
+        {
+            var mainnet = new AddWalletViewModel(profile) { Mode = 1, NetworkIndex = 0, Name = "Mainnet", DaemonAddress = "http://127.0.0.1:9", ImportMnemonic = TwentyFiveWords };
+            Run(mainnet.AddCommand.ExecuteAsync(null));
+            onMainnet = mainnet.Error;
+            var again = new AddWalletViewModel(profile) { Mode = 1, NetworkIndex = 1, Name = "Again", DaemonAddress = "http://127.0.0.1:9", ImportMnemonic = TwentyFiveWords };
+            Run(again.AddCommand.ExecuteAsync(null));
+            onStagenet = again.Error;
+        });
+
+        Expect(onMainnet == NoWalletRpc && onStagenet == "That wallet is already in this vault, as “Stagenet”.",
+            "Duplicates ok: the same seed on another network is another wallet; on the same network it is refused.",
+            $"Same seed: on mainnet '{onMainnet}', on stagenet '{onStagenet}'");
+    }
+
+    /// <summary>Hidden amounts stay hidden in Send's "more than your balance" message.</summary>
+    private static void CheckOverspendKeepsTheBalanceHidden()
+    {
+        WalletViewModel vm = Wallet();
+        vm.HideBalances = true;
+        vm.SendAddress = FakeAddress('5', 40);
+        vm.SendAmountText = "100";
+        Run(vm.ReviewSendCommand.ExecuteAsync(null));
+        Expect(vm.SendResult.StartsWith("That's more than your spendable balance.", StringComparison.Ordinal) && !vm.SendResult.Contains("11.98", StringComparison.Ordinal),
+            "Hide amounts ok: Send's overspend message doesn't print the hidden balance.",
+            $"Overspend with amounts hidden: '{vm.SendResult}'");
     }
 
     /// <summary>Only account 0's first address is the main address.</summary>

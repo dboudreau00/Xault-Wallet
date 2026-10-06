@@ -306,7 +306,7 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>A wallet opened and reported its main address: keep it with the wallet (a seed
     /// wallet's isn't known before), so adding the same wallet again by its keys or watch-only is
     /// recognised in later sessions too, before this one is opened.</summary>
-    internal void NoteAddress(string walletId, string address)
+    internal async Task NoteAddressAsync(string walletId, string address)
     {
         WalletSecrets? wallet = Profile.Wallets.FirstOrDefault(w => w.Id == walletId);
         if (wallet is null || wallet.Address.Length > 0 || address.Length == 0)
@@ -315,8 +315,16 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
         }
 
         wallet.Address = address;
-        _ = SaveAsync(); // if it can't be written now, the next save carries it
+        if (await SaveAsync() is not null)
+        {
+            // Not recorded this time (it is learned again at the next opening). Kept, it would ride on
+            // every later save — and in a full old-format vault make each of them fail.
+            wallet.Address = string.Empty;
+        }
     }
+
+    /// <summary>The vault has been locked (or is being): work started from this profile is moot.</summary>
+    internal bool IsLocked => _disposed;
 
     /// <summary>Hide or show amounts in every open wallet (it is one setting, kept for next time).</summary>
     internal void SetHideBalances(bool hide)
@@ -338,9 +346,14 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
     }
 
     /// <summary>Run work that starts a monero-wallet-rpc of its own (a seed being generated, an import
-    /// being checked): locking cancels it and waits for its backend to stop.</summary>
-    internal Task<T> RunWithBackendAsync<T>(Func<CancellationToken, Task<T>> work) =>
-        AppServices.Instance.TemporaryBackends.RunAsync(work, _lockToken);
+    /// being checked): locking cancels it and waits for its backend to stop, as does
+    /// <paramref name="cancel"/> (the screen that started it closing).</summary>
+    internal Task<T> RunWithBackendAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken cancel = default) =>
+        AppServices.Instance.TemporaryBackends.RunAsync(async ct =>
+        {
+            using var either = CancellationTokenSource.CreateLinkedTokenSource(ct, cancel);
+            return await work(either.Token);
+        }, _lockToken);
 
     /// <summary>The name of the wallet in this profile whose main address this is, if any. Key-restored
     /// wallets store their address; a seed wallet's is known once it has been opened.</summary>
@@ -654,7 +667,9 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
-            Log.Error("Saving the vault failed", ex);
+            // Once per run: some saves happen once per wallet (opening one records its address), so a
+            // line per failure would tell how many wallets this profile has.
+            Log.ErrorOnce("vault-save", "Saving the vault failed", ex);
             return "Couldn't save to the vault: " + ex.Message;
         }
         finally

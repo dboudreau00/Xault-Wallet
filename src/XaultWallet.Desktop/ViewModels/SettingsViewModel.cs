@@ -349,6 +349,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
             char[] curChars = CurrentPassword.ToCharArray();
             char[] nextChars = NewPassword.ToCharArray();
             CurrentPassword = NewPassword = NewPasswordConfirm = string.Empty;
+            if (_profile is null)
+            {
+                // From the unlock screen: a lock's last save could otherwise land after this rewrite
+                // and put the old password back, after "Password changed." was shown.
+                await _closing;
+            }
 
             // Argon2id at these parameters takes seconds — keep it OFF the UI thread so the
             // window never looks hung (a user who kills a "frozen" app mid-rewrite is the
@@ -426,6 +432,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 return; // cancelled
             }
 
+            await _closing; // a lock's last save belongs in the backup
             byte[] bytes = File.ReadAllBytes(AppServices.Instance.VaultPath);
             VaultFile.Deserialize(bytes); // sanity: never export a corrupt vault as a "backup"
             PrivateFiles.WriteAllBytes(dest, bytes); // 0600, like the vault itself

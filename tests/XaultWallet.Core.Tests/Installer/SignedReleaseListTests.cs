@@ -63,9 +63,11 @@ public class SignedReleaseListTests
     [Fact]
     public void Trailing_Whitespace_Is_Not_Part_Of_The_Signed_Text()
     {
-        // RFC 4880 §7.1: trailing spaces/tabs are stripped before hashing, as gpg does.
-        string padded = RealHashList.V0_18_5_1.Replace("#\n## CLI", "#  \t\n## CLI");
-        Assert.NotEqual(RealHashList.V0_18_5_1, padded);
+        // RFC 4880 §7.1: trailing spaces/tabs are stripped before hashing, as gpg does. (The source
+        // file may be checked out with CRLF line endings, as on Windows: normalise first.)
+        string text = RealHashList.V0_18_5_1.Replace("\r\n", "\n");
+        string padded = text.Replace("#\n## CLI", "#  \t\n## CLI");
+        Assert.NotEqual(text, padded);
         Assert.NotEmpty(OpenPgp.VerifyClearSigned(padded, MoneroSigningKeys.Trusted));
     }
 

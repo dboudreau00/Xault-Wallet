@@ -235,6 +235,12 @@ public sealed class MoneroProcessManager : IAsyncDisposable
             Arg("--config-file", configFile);
             Arg("--wallet-dir", walletDir);
             Arg("--daemon-address", daemonAddress.Trim());
+            if (DaemonSslMode(daemonAddress) == "enabled")
+            {
+                // An https:// node must really be reached over verified TLS: see DaemonSslMode.
+                Arg("--daemon-ssl", "enabled");
+            }
+
             if (_options.ProxyAddress is not null)
             {
                 // Route daemon traffic through the user's SOCKS proxy (e.g. Tor at 127.0.0.1:9050)
@@ -372,6 +378,24 @@ public sealed class MoneroProcessManager : IAsyncDisposable
 
         throw new TimeoutException($"monero-wallet-rpc did not become ready in time. {LastStderr()}");
     }
+
+    /// <summary>
+    /// wallet-rpc's <c>--daemon-ssl</c> (and <c>set_daemon</c>'s <c>ssl_support</c>) for a node
+    /// address: <c>"enabled"</c> for an <c>https://</c> node, otherwise <c>"autodetect"</c>, which is
+    /// wallet-rpc's own default (so <c>http://</c> nodes behave exactly as before).
+    /// Why: under "autodetect" wallet-rpc accepts a certificate it could not verify (it only logs
+    /// a warning) and, when the TLS handshake fails, reconnects without TLS, so anyone on the path
+    /// can strip the encryption the user asked for by typing https. Under "enabled" the connection
+    /// must be TLS and the certificate must verify against the system CAs for the node's host
+    /// name, or it fails. Consequence: an https node with a self-signed certificate no longer
+    /// connects. Some monero-wallet-rpc builds also refuse to start with "enabled" unless a CA file
+    /// or certificate fingerprint is given (the error names --daemon-ssl-allowed-fingerprints);
+    /// that error then reaches the user through the launch failure's stderr tail.
+    /// </summary>
+    internal static string DaemonSslMode(string daemonAddress) =>
+        Uri.TryCreate(daemonAddress.Trim(), UriKind.Absolute, out Uri? uri) && uri.Scheme == Uri.UriSchemeHttps
+            ? "enabled"
+            : "autodetect";
 
     /// <summary>
     /// Throw unless the server on our port is provably the child we started and that child is still

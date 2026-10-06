@@ -17,6 +17,12 @@ public sealed record RemoteNode(string Name, string Url, int NetworkIndex)
 ///
 /// Ports follow each operator's published convention (Rino uses the default 18081/38081;
 /// MoneroDevs and Cake expose public RPC on the 18089/28089/38089 range).
+///
+/// Every preset is plain http:// (unencrypted): the operator's network, and anyone between,
+/// sees the wallet's traffic. An https:// address the user types is held to verified TLS
+/// (MoneroProcessManager.DaemonSslMode).
+/// TODO(#3): add https:// and .onion presets once each one's address and certificate have been
+/// confirmed with its operator — none are listed until then, rather than guessed.
 /// </summary>
 public static class RemoteNodes
 {

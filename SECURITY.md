@@ -246,6 +246,16 @@ transactions' timing/origin. For maximum privacy run your own `monerod`, or rout
 connection over Tor. XaultWallet passes your daemon address straight through to
 `monero-wallet-rpc`; it does not add network-level privacy on its own.
 
+**Encryption to the node.** An `http://` node address is unencrypted: anyone on the network path
+sees (and can alter) the wallet's traffic with that node. The built-in presets are all `http://`.
+For an `https://` address the app starts monero-wallet-rpc with `--daemon-ssl enabled` (and asks
+for the same when you switch a wallet's node): the connection must be TLS with a certificate that
+verifies against your system's certificate authorities for that host name, or it fails. Without it,
+wallet-rpc's default would accept an unverified certificate and fall back to plain HTTP if the TLS
+handshake failed, so an attacker on the path could quietly remove the encryption. A node with a
+self-signed certificate therefore does not connect over `https://`. A `.onion` node reached through
+Tor (Settings → SOCKS proxy) is encrypted and authenticated by Tor itself.
+
 A node also supplies the chain height a *new* seed starts scanning from. A height above the block
 that holds a payment would hide that payment until the wallet is restored with an earlier height,
 so the app never accepts more than the clock-based estimate monero's own wallet uses

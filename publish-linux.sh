@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a single-file, self-contained Linux release of XaultWallet. Requires the .NET 8 SDK.
+# Build a single-file, self-contained Linux release of XaultWallet. Requires the .NET 10 SDK.
 set -euo pipefail
 cd "$(dirname "$0")"
 RID="linux-x64"

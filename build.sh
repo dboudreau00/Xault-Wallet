@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-shot restore + build + unit tests. Requires the .NET 8 SDK.
+# One-shot restore + build + unit tests. Requires the .NET 10 SDK.
 set -euo pipefail
 cd "$(dirname "$0")"
 

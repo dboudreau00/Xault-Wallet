@@ -1,11 +1,11 @@
 # XaultWallet
 
 **A privacy-first desktop Monero (XMR) wallet with a duress password that opens a decoy wallet.**
-Built on .NET 8 + Avalonia. Encrypted at rest with AES-256-GCM (Argon2id KDF). Drives the official
+Built on .NET 10 + Avalonia. Encrypted at rest with AES-256-GCM (Argon2id KDF). Drives the official
 `monero-wallet-rpc` — it never reimplements Monero's cryptography.
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
-![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4)
+![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4)
 ![Avalonia 11](https://img.shields.io/badge/Avalonia-11-8B44AC)
 ![Status](https://img.shields.io/badge/status-unaudited%20beta-red)
 ![Platforms](https://img.shields.io/badge/release-Windows%20%7C%20Linux%20%7C%20macOS-blue)
@@ -395,7 +395,7 @@ tools/   TestRunner                    reflection test runner (fails on zero dis
 
 ## Build from source
 
-Requires the **.NET 8 SDK**.
+Requires the **.NET 10 SDK**.
 
 ```bash
 ./build.sh                                      # restore, build (warnings = errors), unit tests

@@ -1,4 +1,4 @@
-# One-shot restore + build + unit tests. Requires the .NET 8 SDK.
+# One-shot restore + build + unit tests. Requires the .NET 10 SDK.
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 

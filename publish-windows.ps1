@@ -1,5 +1,5 @@
 # Build a single-file, self-contained Windows release of XaultWallet.
-# Requires the .NET 8 SDK. Run from the project root:  ./publish-windows.ps1
+# Requires the .NET 10 SDK. Run from the project root:  ./publish-windows.ps1
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 

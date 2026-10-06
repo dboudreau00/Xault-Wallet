@@ -214,8 +214,10 @@ public sealed class MoneroRpcClient : IDisposable
         CallAsync<JsonElement>("rescan_spent", null, ct);
 
     /// <summary>Point the open wallet at another node without closing it.</summary>
-    public Task SetDaemonAsync(string address, CancellationToken ct = default) =>
-        CallAsync<JsonElement>("set_daemon", new { address, trusted = false }, ct);
+    /// <summary>Switch the open wallet's node. <paramref name="trusted"/> enables commands that hand
+    /// the node more than it would otherwise learn (rescan_spent sends every key image).</summary>
+    public Task SetDaemonAsync(string address, bool trusted, CancellationToken ct = default) =>
+        CallAsync<JsonElement>("set_daemon", new { address, trusted }, ct);
 
     public Task<GetHeightResult> GetHeightAsync(CancellationToken ct = default) =>
         CallAsync<GetHeightResult>("get_height", null, ct);

@@ -126,6 +126,24 @@ public sealed class WalletFeatureTests
     }
 
     [Fact]
+    public async Task A_Wallet_That_Handed_Out_Many_Subaddresses_Still_Opens()
+    {
+        if (Skip()) { return; }
+
+        // monero-wallet-rpc up to v0.18.4.2 creates at most 64 per call; 150 takes three.
+        await using MoneroWalletService svc = IntegrationEnv.NewService();
+        WalletSecrets wallet = await NewSeedWalletAsync(svc);
+        wallet.SubaddressCounts[1] = 150;
+
+        await svc.OpenAsync(wallet);
+        IReadOnlyList<AddressInfo> addresses = await svc.GetAddressesAsync(1);
+        Assert.Equal(150, addresses.Count);
+        Assert.Equal(150, addresses.Select(a => a.Address).Distinct().Count());
+        (uint index, _) = await svc.NewSubaddressAsync(1, string.Empty);
+        Assert.Equal(150u, index);
+    }
+
+    [Fact]
     public async Task One_Transaction_Pays_Two_Subaddresses_And_Proofs_Verify()
     {
         if (Skip(needsMining: true)) { return; }

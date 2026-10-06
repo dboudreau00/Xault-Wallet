@@ -85,6 +85,34 @@ public sealed class VaultSession : IDisposable
         });
     }
 
+    /// <summary>The vault still has the 0.1–0.3 file format: 4 KiB per password, and still openable by
+    /// 0.3. Changes that don't fit throw <see cref="VaultFullException"/> with
+    /// <see cref="VaultFullException.OldFormat"/> set; <see cref="UpgradeFormat"/> makes room.</summary>
+    public bool IsOldFormat => _vault.IsOldFormat;
+
+    /// <summary>
+    /// Convert an old-format vault to the current format, re-sealing THIS profile in the new layout.
+    /// The other slot is carried unchanged and converts when its own password next opens it — until
+    /// then, whoever holds that password could tell another password was used after the upgrade,
+    /// which is why this only ever happens when the user asks (see SECURITY.md).
+    /// </summary>
+    public void UpgradeFormat()
+    {
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            byte[] payload = SlotPayload.Serialize(Profile);
+            try
+            {
+                _vault.UpgradeFormat(_slotIndex, _key, _salt, payload);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(payload);
+            }
+        }
+    }
+
     /// <summary>True when <paramref name="password"/> is THIS profile's password (for confirming
     /// something destructive or revealing, like removing a wallet or showing its seed).</summary>
     public bool CheckPassword(SecureBuffer password)
@@ -109,7 +137,7 @@ public sealed class VaultSession : IDisposable
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            (SecureBuffer key, byte[] salt)? next = _vault.ChangeSlotPassword(_slotIndex, currentPassword, newPassword, Profile);
+            (SecureBuffer key, byte[] salt)? next = _vault.ChangeSlotPassword(_slotIndex, _salt, currentPassword, newPassword, Profile);
             if (next is null)
             {
                 return false;

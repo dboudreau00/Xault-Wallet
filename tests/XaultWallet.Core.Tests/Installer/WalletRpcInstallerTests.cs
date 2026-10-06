@@ -164,6 +164,40 @@ public sealed class WalletRpcInstallerTests : IDisposable
     }
 
     [Fact]
+    public async Task Older_Than_Already_Installed_Is_Refused()
+    {
+        string exe = Core.Monero.ExecutableLocator.WalletRpcFileName;
+        string keep = Directory.CreateDirectory(Path.Combine(_root, "v0.19.0.0")).FullName;
+        File.WriteAllBytes(Path.Combine(keep, exe), RpcBytes);
+
+        byte[] archive = TarBz2($"monero-x86_64-linux-gnu-v{Version}/monero-wallet-rpc", RpcBytes);
+        var server = Serve("linux-x64", $"monero-linux-x64-v{Version}.tar.bz2", archive);
+
+        var ex = await Assert.ThrowsAsync<WalletRpcInstallException>(() => Installer(server, "linux-x64").InstallAsync(null, default));
+
+        Assert.Contains("newer", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Nothing was installed", ex.Message);
+        Assert.DoesNotContain(server.Requests, r => r.EndsWith(".tar.bz2", StringComparison.Ordinal));
+        Assert.Equal(Path.Combine(keep, exe), WalletRpcInstaller.FindInstalled(_root));
+        Assert.True(Directory.Exists(keep));
+    }
+
+    [Fact]
+    public async Task Below_The_Built_In_Minimum_Is_Refused()
+    {
+        const string tooOld = "0.18.0.0";
+        byte[] archive = TarBz2($"monero-x86_64-linux-gnu-v{tooOld}/monero-wallet-rpc", RpcBytes);
+        var server = Serve("linux-x64", $"monero-linux-x64-v{tooOld}.tar.bz2", archive);
+
+        var ex = await Assert.ThrowsAsync<WalletRpcInstallException>(() => Installer(server, "linux-x64").InstallAsync(null, default));
+
+        Assert.Contains("minimum", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Nothing was installed", ex.Message);
+        Assert.DoesNotContain(server.Requests, r => r.EndsWith(".tar.bz2", StringComparison.Ordinal));
+        AssertNothingInstalled();
+    }
+
+    [Fact]
     public async Task A_Newer_Install_Replaces_Older_Versions()
     {
         string exe = Core.Monero.ExecutableLocator.WalletRpcFileName;

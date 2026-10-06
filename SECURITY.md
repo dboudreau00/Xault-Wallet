@@ -232,7 +232,10 @@ every step succeeds:
    SHA-256 to be the signed one.
 3. It extracts only `monero-wallet-rpc`, runs it once with `--version` (after the checks, never
    before), and installs it in your user profile (on Windows `%LOCALAPPDATA%\XaultWallet\monero-cli`,
-   on Linux `~/.local/share/XaultWallet/monero-cli`), replacing an older one.
+   on Linux `~/.local/share/XaultWallet/monero-cli`), replacing an older one — but never a *newer*
+   one already on disk, and never a release older than the app's built-in minimum
+   (`WalletRpcInstaller.MinimumVersion`). The signature's creation time is not checked (the
+   verifier does not parse it).
 
 What this trusts: the copy of binaryFate's key in the XaultWallet release you are running (verify
 that release's `SHA256SUMS.txt`), and that key itself. A build signed with it is accepted; one that

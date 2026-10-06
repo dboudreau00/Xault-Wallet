@@ -57,6 +57,13 @@ public sealed class WalletRpcInstaller
     private const string ManifestName = "install.json";
     private static readonly JsonSerializerOptions ManifestJson = new() { WriteIndented = true };
 
+    /// <summary>
+    /// The oldest monero-wallet-rpc this app will install. Bump when a release drops features or
+    /// RPC behaviour the app depends on. Not a substitute for refusing a downgrade of whatever is
+    /// already on disk — see <see cref="RefuseIfOlderThanInstalled"/>.
+    /// </summary>
+    public static readonly Version MinimumVersion = new(0, 18, 5, 1);
+
     private readonly string _root;
     private readonly string? _proxy;
 
@@ -108,6 +115,9 @@ public sealed class WalletRpcInstaller
         {
             throw new WalletRpcInstallException(ex.Message + " Nothing was installed.", ex);
         }
+
+        RefuseIfBelowMinimum(archive);
+        RefuseIfOlderThanInstalled(archive);
 
         string staging = System.IO.Path.Combine(_root, ".staging-" + Convert.ToHexString(RandomNumberGenerator.GetBytes(6)).ToLowerInvariant());
         try
@@ -182,6 +192,62 @@ public sealed class WalletRpcInstaller
             {
                 // best effort: a later install starts its own staging folder
             }
+        }
+    }
+
+    /// <summary>Refuse a signed release older than <see cref="MinimumVersion"/>.</summary>
+    private static void RefuseIfBelowMinimum(MoneroCliArchive archive)
+    {
+        if (!Version.TryParse(archive.Version, out Version? candidate) || candidate < MinimumVersion)
+        {
+            throw new WalletRpcInstallException(
+                $"Monero's signed release list offers v{archive.Version}, which is older than the " +
+                $"minimum this app accepts (v{MinimumVersion}). Nothing was installed.");
+        }
+    }
+
+    /// <summary>Refuse a signed release older than the newest install already under <see cref="_root"/>.
+    /// Equal versions are allowed (re-install). The signature's creation time is not checked: the
+    /// OpenPGP verifier does not parse it.</summary>
+    private void RefuseIfOlderThanInstalled(MoneroCliArchive archive)
+    {
+        if (!Version.TryParse(archive.Version, out Version? candidate))
+        {
+            throw new WalletRpcInstallException(
+                $"Monero's signed release list offers an unreadable version ({archive.Version}). Nothing was installed.");
+        }
+
+        Version? newest = NewestInstalledVersion();
+        if (newest is not null && candidate < newest)
+        {
+            throw new WalletRpcInstallException(
+                $"Monero's signed release list offers v{archive.Version}, but v{newest} is already installed. " +
+                "Refusing to replace a newer install with an older one. Nothing was installed.");
+        }
+    }
+
+    /// <summary>The newest version folder under <see cref="_root"/> that still holds a wallet-rpc
+    /// binary, or null.</summary>
+    private Version? NewestInstalledVersion()
+    {
+        try
+        {
+            if (!Directory.Exists(_root))
+            {
+                return null;
+            }
+
+            string fileName = ExecutableLocator.WalletRpcFileName;
+            return Directory.EnumerateDirectories(_root, "v*")
+                .Select(dir => (dir, version: Version.TryParse(System.IO.Path.GetFileName(dir)[1..], out Version? v) ? v : null))
+                .Where(x => x.version is not null && File.Exists(System.IO.Path.Combine(x.dir, fileName)))
+                .Select(x => x.version!)
+                .OrderByDescending(v => v)
+                .FirstOrDefault();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
         }
     }
 

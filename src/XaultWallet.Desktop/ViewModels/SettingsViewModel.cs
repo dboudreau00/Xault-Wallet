@@ -63,6 +63,53 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <summary>The password card and the export button need a vault to act on.</summary>
     public bool VaultExists { get; } = VaultManager.Exists(AppServices.Instance.VaultPath);
 
+    // ---- Vault format (a vault from 0.1–0.3, upgraded only on request) ----
+
+    /// <summary>Shown while a wallet is open in a vault that still has the old format (the upgrade
+    /// re-seals the open profile). Stays up after upgrading, to show the result.</summary>
+    public bool ShowFormatCard { get; }
+
+    /// <summary>The vault still has the old format: the upgrade button is offered.</summary>
+    public bool VaultIsOldFormat => _profile?.VaultIsOldFormat == true;
+
+    /// <summary>Second step: the warning is read, the button now upgrades.</summary>
+    [ObservableProperty] private bool _confirmFormatUpgrade;
+    [ObservableProperty] private string _formatUpgradeResult = string.Empty;
+    [ObservableProperty] private bool _formatUpgradeOk;
+
+    [RelayCommand]
+    private void AskFormatUpgrade()
+    {
+        FormatUpgradeResult = string.Empty;
+        ConfirmFormatUpgrade = true;
+    }
+
+    [RelayCommand]
+    private void CancelFormatUpgrade() => ConfirmFormatUpgrade = false;
+
+    [RelayCommand]
+    private async Task UpgradeFormatAsync()
+    {
+        if (_profile is null || Busy)
+        {
+            return;
+        }
+
+        ConfirmFormatUpgrade = false;
+        Busy = true;
+        try
+        {
+            string? error = await _profile.UpgradeVaultFormatAsync();
+            FormatUpgradeOk = error is null;
+            FormatUpgradeResult = error ?? "Upgraded. The wallets, contacts and notes of this password now have room to grow.";
+            OnPropertyChanged(nameof(VaultIsOldFormat));
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
     /// <summary>Selecting a preset fills the daemon address and network below.</summary>
     [ObservableProperty] private RemoteNode? _selectedPreset;
 
@@ -97,9 +144,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
             .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(SettingsViewModel).Assembly)
             ?.InformationalVersion ?? "").Split('+')[0];
 
-    public SettingsViewModel(ProfileViewModel? profile = null)
+    /// <summary>What remains of the last lock (its final save may still be writing the vault).</summary>
+    private readonly Task _closing;
+
+    public SettingsViewModel(ProfileViewModel? profile = null, Task? closing = null)
     {
         _profile = profile;
+        _closing = closing ?? Task.CompletedTask;
         AppSettings s = AppServices.Instance.Settings;
         _walletRpcBinaryPath = s.WalletRpcBinaryPath;
         _defaultDaemonAddress = s.DefaultDaemonAddress;
@@ -108,6 +159,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _autoLockMinutes = s.AutoLockMinutes;
         _proxyAddress = s.ProxyAddress;
         CanRestoreVault = profile is null;
+        ShowFormatCard = profile?.VaultIsOldFormat == true;
         RefreshBinaryHint();
 
         // A verified install becomes the configured path (the setup view model saved it): show it
@@ -441,6 +493,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
             byte[] bytes = File.ReadAllBytes(source);
             VaultFile.Deserialize(bytes); // validate BEFORE touching the live vault
+            await _closing; // a lock's last save must not land on the restored file
 
             // Durable write of the replacement FIRST (flushed to disk), then a single atomic
             // swap — matching VaultManager.Persist's discipline. The live vault path holds

@@ -3,7 +3,10 @@ using System.ComponentModel;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using XaultWallet.Desktop.ViewModels;
 
 namespace XaultWallet.Desktop.Views;
@@ -28,6 +31,52 @@ public partial class WalletView : UserControl
                 _ = Motion.RiseInAsync(page, distance: 8, milliseconds: 240);
             }
         };
+
+        // Choosing a wallet starts it (a monero-wallet-rpc and a restore). A closed combo box steps
+        // its selection on Up/Down and on the mouse wheel, which would start every wallet on the
+        // way: here those keys open the list instead, and the choice is made in it (Enter or a click).
+        Switcher.AddHandler(KeyDownEvent, OnSwitcherKeyDown, RoutingStrategies.Tunnel);
+        Switcher.AddHandler(PointerWheelChangedEvent, OnSwitcherWheel, RoutingStrategies.Tunnel);
+    }
+
+    private void OnSwitcherKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Up or Key.Down) || e.KeyModifiers != KeyModifiers.None)
+        {
+            return;
+        }
+
+        if (!Switcher.IsDropDownOpen)
+        {
+            Switcher.IsDropDownOpen = true;
+            e.Handled = true;
+            // The combo box tries this itself on opening, before its list is laid out (then nothing
+            // gets focus, and the arrow keys do nothing in the list): again once it is.
+            Dispatcher.UIThread.Post(FocusShownWallet, DispatcherPriority.Loaded);
+        }
+        else if (Switcher.IsFocused)
+        {
+            FocusShownWallet(); // open, but focus never went into the list
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>Put keyboard focus on the shown wallet's entry in the open list: from there the arrow
+    /// keys move through the list, and Enter chooses.</summary>
+    private void FocusShownWallet()
+    {
+        if (Switcher.IsDropDownOpen && Switcher.ContainerFromIndex(Math.Max(0, Switcher.SelectedIndex)) is { } entry)
+        {
+            entry.Focus(NavigationMethod.Directional);
+        }
+    }
+
+    private void OnSwitcherWheel(object? sender, PointerWheelEventArgs e)
+    {
+        if (!Switcher.IsDropDownOpen && Switcher.IsFocused)
+        {
+            e.Handled = true;
+        }
     }
 
     protected override void OnDataContextChanged(EventArgs e)

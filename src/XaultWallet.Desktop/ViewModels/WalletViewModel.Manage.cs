@@ -17,6 +17,8 @@ public sealed partial class WalletViewModel
     [RelayCommand]
     private void OpenManage()
     {
+        WipeRevealedSecrets(); // the sheet always opens with the seed and keys hidden
+        RevealPassword = RemovePassword = RemoveConfirmName = string.Empty;
         ManageNotice = string.Empty;
         RenameText = _secrets.Name;
         NodeAddress = _secrets.DaemonAddress;
@@ -140,6 +142,10 @@ public sealed partial class WalletViewModel
 
     public bool HasMnemonic => RevealedMnemonic.Length > 0;
 
+    /// <summary>Changes whenever the secrets are hidden (the sheet closing included): a reveal still
+    /// waiting on the password check or on wallet-rpc then shows nothing.</summary>
+    private int _revealEpoch;
+
     /// <summary>Show this wallet's seed and private keys, after the vault password (someone at an
     /// unlocked computer shouldn't be able to read them off the screen).</summary>
     [RelayCommand]
@@ -153,9 +159,15 @@ public sealed partial class WalletViewModel
 
         char[] password = RevealPassword.ToCharArray();
         RevealPassword = string.Empty;
+        int epoch = _revealEpoch;
+        bool StillWanted() => epoch == _revealEpoch && ShowManage && !_disposed;
         if (!await _profile.CheckPasswordAsync(password))
         {
-            Notice("Incorrect password.", error: true);
+            if (StillWanted())
+            {
+                Notice("Incorrect password.", error: true);
+            }
+
             return;
         }
 
@@ -164,6 +176,11 @@ public sealed partial class WalletViewModel
             (string mnemonic, string viewKey, string spendKey) = IsReady
                 ? await _wallet.GetKeysAsync(_cts.Token)
                 : (_secrets.Mnemonic, _secrets.ViewKey, _secrets.SpendKey);
+            if (!StillWanted())
+            {
+                return; // the sheet closed (or the secrets were hidden) while this was running
+            }
+
             RevealedMnemonic = _secrets.Kind == WalletKind.Seed ? _secrets.Mnemonic : mnemonic.Trim();
             RevealedSeedOffset = _secrets.SeedOffset;
             RevealedViewKey = viewKey.Length > 0 ? viewKey : _secrets.ViewKey;
@@ -172,9 +189,13 @@ public sealed partial class WalletViewModel
             SecretsShown = true;
             Notice("Anyone who sees the seed or the spend key can take everything in this wallet. Hide them when you're done.", error: true);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (StillWanted())
         {
             Notice("Couldn't read the keys: " + Friendly(ex), error: true);
+        }
+        catch (Exception)
+        {
+            // closed, hidden or locked meanwhile: nothing to say
         }
     }
 
@@ -187,6 +208,7 @@ public sealed partial class WalletViewModel
 
     private void WipeRevealedSecrets()
     {
+        _revealEpoch++;
         SecretsShown = false;
         RevealedMnemonic = RevealedSeedOffset = RevealedViewKey = RevealedSpendKey = string.Empty;
         OnPropertyChanged(nameof(HasMnemonic));

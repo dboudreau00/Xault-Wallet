@@ -41,7 +41,8 @@ public sealed partial class WalletViewModel
 
     private void RebuildHistoryRows()
     {
-        string? expanded = History.FirstOrDefault(r => r.IsExpanded)?.TxId;
+        // The open row stays open, with the note being typed in it (rows rebuild as blocks arrive).
+        HistoryRow? open = History.FirstOrDefault(r => r.IsExpanded);
         History.Clear();
         string query = HistorySearch.Trim();
         foreach (TransferEntry t in _entries)
@@ -56,7 +57,12 @@ public sealed partial class WalletViewModel
             };
             if (shown && row.Matches(query))
             {
-                row.IsExpanded = row.TxId == expanded;
+                if (open is not null && row.TxId == open.TxId)
+                {
+                    row.IsExpanded = true;
+                    row.NoteDraft = open.NoteDraft;
+                }
+
                 History.Add(row);
             }
         }
@@ -75,7 +81,12 @@ public sealed partial class WalletViewModel
             uint a = t.SubaddrIndex.Major;
             uint i = t.SubaddrIndex.Minor;
             string label = LabelOf(a, i);
-            string name = label.Length > 0 ? label : i == 0 ? "the main address" : $"subaddress #{i}";
+            string name = label.Length > 0 ? label : (a, i) switch
+            {
+                (0, 0) => "the main address",
+                (_, 0) => "the account's address",
+                _ => $"subaddress #{i}",
+            };
             string account = HasSeveralAccounts ? $" of {Accounts.FirstOrDefault(c => c.Index == a)?.Name ?? $"account #{a}"}" : string.Empty;
             receivedAt = $"Received at {name}{account}";
         }

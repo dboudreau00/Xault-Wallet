@@ -101,10 +101,12 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
     private readonly VaultSession? _session;
     private readonly Dictionary<string, WalletViewModel> _open = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _cts = new();
+    private readonly CancellationToken _lockToken;
     private readonly SemaphoreSlim _saveGate = new(1, 1);
     private Task? _lockLoop;
     private bool _disposed;
     private bool _switching;
+    private bool _previewOldFormat;
     private DateTime _lastActivityUtc = DateTime.UtcNow;
 
     public ProfileViewModel(VaultSession session)
@@ -117,6 +119,7 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
     private ProfileViewModel(WalletProfile profile, VaultSession? session)
     {
         _session = session;
+        _lockToken = _cts.Token;
         Profile = profile;
         foreach (WalletSecrets w in profile.Wallets)
         {
@@ -132,7 +135,8 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
     }
 
     /// <summary>A profile with no vault behind it — for UI snapshots and tests only (saves do nothing).</summary>
-    internal static ProfileViewModel ForPreview(WalletProfile profile) => new(profile, session: null);
+    internal static ProfileViewModel ForPreview(WalletProfile profile, bool oldFormat = false) =>
+        new(profile, session: null) { _previewOldFormat = oldFormat };
 
     public WalletProfile Profile { get; }
 
@@ -162,8 +166,10 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>Raised when another wallet comes on screen.</summary>
     public event Action<WalletViewModel>? ActiveChanged;
 
-    /// <summary>Raised once the vault is locked (session closed, backends stopped).</summary>
-    public event Action? Locked;
+    /// <summary>Raised once when a lock starts, with what remains of it still running (backends
+    /// stopping, the last save, the session closing): the shell takes the wallets off screen at once,
+    /// and opens the vault again only after that task has finished.</summary>
+    public event Action<Task>? Locking;
 
     public event Action? SettingsRequested;
 
@@ -290,9 +296,51 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
 
     public const int MaxNameLength = 40;
 
+    /// <summary>The wallet has been opened this session (its backend started) — for tests.</summary>
+    internal bool IsOpen(string id) => _open.ContainsKey(id);
+
     /// <summary>A wallet found out where it syncs from: its switcher entry says so.</summary>
     internal void NoteLocalTestChain(string walletId, bool onLocalTestChain) =>
         Wallets.FirstOrDefault(c => c.Id == walletId)?.SetLocalTestChain(onLocalTestChain);
+
+    /// <summary>A wallet opened and reported its main address: keep it with the wallet (a seed
+    /// wallet's isn't known before), so adding the same wallet again by its keys or watch-only is
+    /// recognised in later sessions too, before this one is opened.</summary>
+    internal void NoteAddress(string walletId, string address)
+    {
+        WalletSecrets? wallet = Profile.Wallets.FirstOrDefault(w => w.Id == walletId);
+        if (wallet is null || wallet.Address.Length > 0 || address.Length == 0)
+        {
+            return;
+        }
+
+        wallet.Address = address;
+        _ = SaveAsync(); // if it can't be written now, the next save carries it
+    }
+
+    /// <summary>Hide or show amounts in every open wallet (it is one setting, kept for next time).</summary>
+    internal void SetHideBalances(bool hide)
+    {
+        foreach (WalletViewModel vm in _open.Values)
+        {
+            vm.HideBalances = hide;
+        }
+
+        try
+        {
+            AppServices.Instance.Settings.HideBalances = hide;
+            AppServices.Instance.SaveSettings();
+        }
+        catch
+        {
+            // Persisting the preference is best-effort; the toggle itself already applied.
+        }
+    }
+
+    /// <summary>Run work that starts a monero-wallet-rpc of its own (a seed being generated, an import
+    /// being checked): locking cancels it and waits for its backend to stop.</summary>
+    internal Task<T> RunWithBackendAsync<T>(Func<CancellationToken, Task<T>> work) =>
+        AppServices.Instance.TemporaryBackends.RunAsync(work, _lockToken);
 
     /// <summary>The name of the wallet in this profile whose main address this is, if any. Key-restored
     /// wallets store their address; a seed wallet's is known once it has been opened.</summary>
@@ -329,10 +377,17 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
                 return "Incorrect password.";
             }
 
+            // The check took a moment: look again. Another removal may have left this one the last,
+            // and a vault with no wallet can't be opened.
             WalletSecrets? wallet = Profile.Wallets.FirstOrDefault(w => w.Id == id);
-            if (wallet is null)
+            if (_disposed || wallet is null)
             {
-                return null;
+                return _disposed ? "The vault was locked before the wallet could be removed." : null;
+            }
+
+            if (Profile.Wallets.Count <= 1)
+            {
+                return "This is the only wallet in the vault, so it can't be removed.";
             }
 
             int index = Profile.Wallets.IndexOf(wallet);
@@ -422,6 +477,11 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
             return "Keep the note under 200 characters.";
         }
 
+        if (existing is not null && !Profile.Contacts.Contains(existing.Model))
+        {
+            return "That contact was deleted meanwhile.";
+        }
+
         if (Contacts.Any(c => !ReferenceEquals(c, existing) && string.Equals(c.Address, a, StringComparison.Ordinal)))
         {
             return "That address is already saved as " + Contacts.First(c => string.Equals(c.Address, a, StringComparison.Ordinal)).Name + ".";
@@ -439,6 +499,10 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
             }
 
             InsertSorted(new ContactRow(contact));
+            foreach (WalletViewModel vm in _open.Values)
+            {
+                vm.OnContactNamesChanged();
+            }
         }
         else
         {
@@ -456,8 +520,8 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
             }
 
             existing.Changed();
-            Contacts.Remove(existing);
-            InsertSorted(existing);
+            Reposition(existing);
+            ContactChanged(existing, oldAddress, removed: false);
         }
 
         HasContacts = Contacts.Count > 0;
@@ -482,13 +546,37 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
 
         Contacts.Remove(row);
         HasContacts = Contacts.Count > 0;
+        ContactChanged(row, row.Address, removed: true);
         return null;
+    }
+
+    /// <summary>Every open wallet hears of it, not only the one whose Contacts tab made the change:
+    /// a send form paying that contact follows it, and names shown for addresses are redrawn.</summary>
+    private void ContactChanged(ContactRow row, string oldAddress, bool removed)
+    {
+        foreach (WalletViewModel vm in _open.Values)
+        {
+            vm.OnContactChanged(row, oldAddress, removed);
+        }
     }
 
     /// <summary>The saved name for an address, if any.</summary>
     public string? ContactNameFor(string? address) =>
         string.IsNullOrWhiteSpace(address) ? null
             : Contacts.FirstOrDefault(c => string.Equals(c.Address, address.Trim(), StringComparison.Ordinal))?.Name;
+
+    /// <summary>Put an edited contact where its name now sorts. A move only when it changes place:
+    /// a list moving its selected item makes a picker drop the selection.</summary>
+    private void Reposition(ContactRow row)
+    {
+        int from = Contacts.IndexOf(row);
+        int to = Contacts.Count(c => !ReferenceEquals(c, row)
+            && string.Compare(c.Name, row.Name, StringComparison.CurrentCultureIgnoreCase) <= 0);
+        if (from >= 0 && from != to)
+        {
+            Contacts.Move(from, to);
+        }
+    }
 
     private void InsertSorted(ContactRow row)
     {
@@ -499,6 +587,43 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
         }
 
         Contacts.Insert(i, row);
+    }
+
+    // ------------------------------------------------------------------ vault format
+
+    /// <summary>The vault still has the format of 0.1–0.3: about 4 KB per password, and still
+    /// openable by 0.3. See SECURITY.md → Upgrading to 0.5.</summary>
+    public bool VaultIsOldFormat => _session?.IsOldFormat ?? _previewOldFormat;
+
+    /// <summary>Upgrade the vault to the current format, re-sealing this profile in it (Settings).
+    /// Returns null on success, else a message to show.</summary>
+    public async Task<string?> UpgradeVaultFormatAsync()
+    {
+        if (_session is null)
+        {
+            return null;
+        }
+
+        await _saveGate.WaitAsync();
+        try
+        {
+            await _session.UpgradeFormatAsync();
+            OnPropertyChanged(nameof(VaultIsOldFormat));
+            return null;
+        }
+        catch (ObjectDisposedException)
+        {
+            return "The vault was locked before it could be upgraded.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            Log.Error("Upgrading the vault failed", ex);
+            return "Couldn't upgrade the vault: " + ex.Message;
+        }
+        finally
+        {
+            _saveGate.Release();
+        }
     }
 
     // ------------------------------------------------------------------ saving
@@ -525,7 +650,7 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
         }
         catch (ObjectDisposedException)
         {
-            return null; // locked before this save's turn came
+            return "The vault was locked before this change could be saved."; // its turn came too late
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
@@ -598,8 +723,8 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
 
     // ------------------------------------------------------------------ lock
 
-    /// <summary>Lock: stop every wallet's backend (shredding its files), close the session (zeroing
-    /// its key), and tell the shell.</summary>
+    /// <summary>Lock: tell the shell at once (the wallets leave the screen while the rest runs), then
+    /// stop every wallet's backend (shredding its files) and close the session (zeroing its key).</summary>
     [RelayCommand]
     public async Task LockAsync()
     {
@@ -608,8 +733,9 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        await DisposeAsync();
-        Locked?.Invoke();
+        Task teardown = DisposeAsync().AsTask(); // marks this profile disposed before it yields
+        Locking?.Invoke(teardown);
+        await teardown;
     }
 
     public async ValueTask DisposeAsync()
@@ -628,9 +754,11 @@ public sealed partial class ProfileViewModel : ViewModelBase, IAsyncDisposable
         }
 
         // Stop all backends together: each kill waits for its process, no reason to queue them.
+        // That includes one the add-wallet screen started (its work saw the cancellation above).
         WalletViewModel[] open = _open.Values.ToArray();
         _open.Clear();
-        await Task.WhenAll(open.Select(vm => vm.DisposeAsync().AsTask()));
+        await Task.WhenAll(open.Select(vm => vm.DisposeAsync().AsTask())
+            .Append(AppServices.Instance.TemporaryBackends.WhenEndedAsync(_lockToken)));
 
         // A save in flight finishes first: locking mid-write would drop the change it carries.
         await _saveGate.WaitAsync();

@@ -85,9 +85,10 @@ public sealed class VaultSession : IDisposable
         });
     }
 
-    /// <summary>The vault still has the 0.1–0.3 file format: 4 KiB per password, and still openable by
-    /// 0.3. Changes that don't fit throw <see cref="VaultFullException"/> with
-    /// <see cref="VaultFullException.OldFormat"/> set; <see cref="UpgradeFormat"/> makes room.</summary>
+    /// <summary>The vault still has the 0.1–0.3 file format: 4 KiB per password (0.3 opens the file,
+    /// and each slot this version hasn't saved). Changes that don't fit throw
+    /// <see cref="VaultFullException"/> with <see cref="VaultFullException.OldFormat"/> set;
+    /// <see cref="UpgradeFormat"/> makes room.</summary>
     public bool IsOldFormat => _vault.IsOldFormat;
 
     /// <summary>
@@ -111,6 +112,34 @@ public sealed class VaultSession : IDisposable
                 CryptographicOperations.ZeroMemory(payload);
             }
         }
+    }
+
+    /// <summary><see cref="UpgradeFormat"/> for a UI: the profile is serialized now, on the calling
+    /// thread, and the conversion and write run in the background (as <see cref="SaveAsync"/>).</summary>
+    public Task UpgradeFormatAsync()
+    {
+        byte[] payload;
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            payload = SlotPayload.Serialize(Profile);
+        }
+
+        return Task.Run(() =>
+        {
+            try
+            {
+                lock (_gate)
+                {
+                    ObjectDisposedException.ThrowIf(_disposed, this);
+                    _vault.UpgradeFormat(_slotIndex, _key, _salt, payload);
+                }
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(payload);
+            }
+        });
     }
 
     /// <summary>True when <paramref name="password"/> is THIS profile's password (for confirming

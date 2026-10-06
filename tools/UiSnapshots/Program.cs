@@ -17,7 +17,7 @@ namespace XaultWallet.UiSnapshots;
 /// demo data and writes one PNG per screen. Any binding error makes the run fail, so this doubles
 /// as a smoke test that every view loads against its view-model.
 /// </summary>
-internal static class Program
+internal static partial class Program
 {
     private static readonly List<string> BindingErrors = new();
 
@@ -76,6 +76,7 @@ internal static class Program
             ("add-wallet-keys", AddWalletKeys, null),
             ("add-wallet-confirm", AddWalletConfirm, null),
             ("settings", () => new SettingsViewModel(), null),
+            ("settings-vault-format", SettingsVaultFormat, w => ScrollTo(w, 520)),
             ("settings-rpc-installed", () => SettingsAfterInstall(ok: true), null),
             ("settings-rpc-install-failed", () => SettingsAfterInstall(ok: false), null),
         };
@@ -113,6 +114,14 @@ internal static class Program
         CheckHistoryRowSettles();
         CheckMiningRewardRow();
         CheckSwitcherItemsAreNamed();
+        CheckSwitcherKeysOpenTheList();
+        CheckContactEditsReachSendForms();
+        CheckHideAmountsEverywhere();
+        CheckNoteDraftSurvivesRebuild();
+        CheckManageOpensWithSecretsHidden();
+        CheckAccountAddressTitles();
+        CheckSameWalletIsRecognised();
+        CheckTemporaryBackendsEnd();
         CheckMotion();
         if (!OperatingSystem.IsWindows())
         {
@@ -646,6 +655,14 @@ internal static class Program
             new TransferEntry { TxId = FakeTxId(4), Type = "in", Amount = 5_233_017_420_331, Fee = 0, Height = 1_709_115, Timestamp = (ulong)(now - 400_000) },
         };
         vm.SetHistory(history);
+        return vm;
+    }
+
+    /// <summary>Settings from a wallet of a vault made by 0.3: the format card, upgrade asked for.</summary>
+    private static ViewModelBase SettingsVaultFormat()
+    {
+        var vm = new SettingsViewModel(ProfileViewModel.ForPreview(DemoProfile(), oldFormat: true));
+        vm.AskFormatUpgradeCommand.Execute(null);
         return vm;
     }
 

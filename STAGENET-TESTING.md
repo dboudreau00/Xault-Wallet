@@ -57,6 +57,10 @@ Launch the app, click **Settings**, and:
   it by pasting the copied `monero:` link into another wallet's Send; pay two recipients at once.
 - **Tools:** prove a payment from History (*Prove this payment*), sign and check a message, make and
   check a reserve proof.
+- **A vault from 0.3** (a copy — keep the original): it opens in 0.5 unchanged, and Settings shows
+  *Vault format*. Following [Coming from 0.3](README.md#9-coming-from-03), unlock with the duress
+  password first, upgrade from there, then unlock with the main password; both open their wallets,
+  and the file is now 256 KiB per password. 0.3 should refuse the upgraded copy.
 
 ## Automated integration tests (regtest)
 

@@ -62,7 +62,7 @@ Built on .NET 8 + Avalonia. Encrypted at rest with AES-256-GCM (Argon2id KDF). D
 |---|---|
 | 🔐 **Encrypted vault** | Your seeds are sealed with **AES-256-GCM**, key derived by **Argon2id** (256 MiB, 4 iterations). The only file that persists is `vault.xv`. |
 | 👛 **Several wallets, one password** | Keep as many wallets as you like behind one password and switch between them from the top of the screen: new ones, restored from a seed or from keys, or **watch-only** (address + view key). Each runs its own backend and keeps syncing in the background. |
-| 🎭 **Duress password** | A second password opens a **decoy profile** that looks completely normal. Both slots are equal-size (256 KiB, whatever they hold) and position-randomised, and **their decrypted contents have exactly the same shape** — even someone holding the vault file *and* the duress password finds no marker of a second profile. Optional: using the decoy can **wipe** the real profile from the device. |
+| 🎭 **Duress password** | A second password opens a **decoy profile** that looks completely normal. Both slots are equal-size whatever they hold (256 KiB each in 0.5's vault format) and position-randomised, and **their decrypted contents have exactly the same shape** — even someone holding the vault file *and* the duress password finds no marker of a second profile. Optional: using the decoy can **wipe** the real profile from the device. |
 | 📇 **Contacts, labels, notes** | An address book, names for your subaddresses and accounts, and a note on any transaction — all sealed in the vault with the wallets (never in wallet files, which are shredded on lock). |
 | 🧾 **Pay several people at once** | Up to 15 recipients in one transaction, one fee. Paste a `monero:` payment link and the form fills itself; ask for a payment with your own link and QR code (amount and description included). |
 | 🧾 **Exact fee before you send** | The transaction is built and signed first (unbroadcast); the confirmation shows the **exact fee and total**. Confirm broadcasts that same signed transaction. |
@@ -302,6 +302,24 @@ password opens. Your seeds don't change. It works the same for the main and the 
 asymmetric rule would reveal which is which). A new password that would also open the *other* profile
 is refused.
 
+### 9) Coming from 0.3
+
+<img src="docs/screenshots/settings-vault-format.png" width="50%" align="right" alt="Settings: the vault format card, asking before it upgrades" />
+
+Your vault opens in 0.5 as it is and keeps 0.3's format — about 4 KB per password, enough for a
+wallet or two with some labels and contacts — until you upgrade it in Settings → **Vault format**
+(256 KB per password, the size of every vault 0.5 creates). Before you start:
+
+1. **Export a backup** (Settings → *Export backup*) if you might go back to 0.3. 0.3 can't open an
+   upgraded vault, nor a password's part once 0.5 has saved it.
+2. **If you have a duress password** (without wipe-on-duress), unlock with it first and wait until its
+   wallet is ready; upgrade from there if you want the room. Then use your main password as usual.
+   Until a password has been used in 0.5, someone holding it and the vault file could tell that the
+   other one was — [Upgrading to 0.5](SECURITY.md#upgrading-to-05-vault-format-2) explains why, and
+   what to do if wipe-on-duress is on.
+
+<br clear="right"/>
+
 ---
 
 ## What syncs from where (restore heights)
@@ -340,10 +358,11 @@ Deleting `vault.xv` without a seed backup means the funds are gone — the seed 
 - **At rest:** seeds and keys sealed with AES-256-GCM; key derived by Argon2id (256 MiB / 4
   iterations). A wrong password is detected only by an authentication-tag failure — **no plaintext
   password comparison**.
-- **Deniability:** two equal slots of 256 KiB each (whatever they hold), order randomised, unused slot
-  random. Both slots' plaintexts have the same fields; every operation is symmetric; a duress unlock
-  takes the same time as a normal one. Limits (snapshots over time, a wipe flag examined before it
-  fires, several wallets on one remote node): [SECURITY.md](SECURITY.md).
+- **Deniability:** two equal slots of 256 KiB each (whatever they hold; 4 KiB in a vault from 0.2/0.3
+  until you upgrade it), order randomised, unused slot random. Both slots' plaintexts have the same
+  fields; every operation is symmetric; a duress unlock takes the same time as a normal one. Limits
+  (snapshots over time, a wipe flag examined before it fires, a vault from 0.3 used with only one of
+  its passwords since, several wallets on one remote node): [SECURITY.md](SECURITY.md).
 - **In memory:** passwords/keys pass through pinned, zero-on-dispose buffers — best-effort in a managed runtime.
 - **On the wire:** wallet-rpc binds `127.0.0.1` on a random port, exists only while unlocked, and
   requires **per-session random digest credentials** (never on its command line). Before a seed is sent,
@@ -359,7 +378,7 @@ XaultWallet.Core                ← class library, no UI deps, unit-tested
 ├── Security/
 │   ├── VaultManager          create / unlock / open a session / change password / duress policy (all symmetric)
 │   ├── VaultSession          an open profile: save its own slot with the unlock key, check / change its password
-│   ├── VaultFile             on-disk format 2: magic XVLT, two equal 256 KiB slots, randomized order (reads format 1)
+│   ├── VaultFile             on-disk format 2: magic XVLT, two equal 256 KiB slots, randomized order (keeps format 1 until upgraded)
 │   ├── SlotPayload           the sealed JSON (v3: wallets + contacts, one field set for every slot; reads v1, v2)
 │   ├── VaultCrypto           Argon2id (bounded params) + AES-256-GCM
 │   ├── SecureBuffer          pinned, zeroed memory for secrets
@@ -425,6 +444,7 @@ released; see [RELEASE.md](RELEASE.md#automated-releases-github-actions).
 | **"Another program is answering on the wallet backend's port"** | Something else grabbed the random port before wallet-rpc could. Close other wallet software and **Retry** — a fresh port is chosen each time. |
 | Stuck on **"Connecting to node…"** | The node is down, syncing, or on the wrong network. **Manage** → *Node*: *Test*, or switch this wallet to another node ([How-to #6](#6-several-wallets-add-switch-manage)). |
 | **"The vault is full"** | One password's profile has to fit in 256 KiB: hundreds of wallets, contacts and notes do, but not without limit. Remove some (long notes first), then try again. Nothing was written. |
+| **"This vault still has the format of XaultWallet 0.3…"** | That format holds about 4 KB per password. Settings → **Vault format** → *Upgrade* makes room; if you have a duress password, read [Coming from 0.3](#9-coming-from-03) first. Nothing was written. |
 | **Watch-only balance looks too high** | A watch-only wallet sees what it receives but not what was spent (that needs the spend key). Its figure is labelled *received*. |
 | **Imported wallet shows 0 balance** | Wrong **seed offset**, wrong **network**, or a too-recent **scan from** choice. Re-import with *Full history* and compare the derived address at the confirmation step. |
 | **Balance says maturing** | Fresh coins need 10 confirmations (~20 min) to unlock; change and mining rewards too. |

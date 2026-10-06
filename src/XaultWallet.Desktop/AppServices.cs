@@ -88,6 +88,9 @@ public sealed class AppServices
 
     public MoneroWalletService CreateWalletService() => new(WalletRpcBinaryPath, Settings.ProxyAddress);
 
+    /// <summary>Backends started for a moment outside an open wallet (seed generation, import checks).</summary>
+    public TemporaryBackends TemporaryBackends { get; } = new();
+
     private string ResolveDefaultWalletRpcBinary()
     {
         string exe = ExecutableLocator.WalletRpcFileName;

@@ -31,11 +31,45 @@ public sealed partial class RecipientRow : ObservableObject
     /// <summary>Picked from the address book (fills the address).</summary>
     [ObservableProperty] private ContactRow? _contact;
 
+    /// <summary>The contact this row pays: picked, its address not edited since. Kept apart from the
+    /// picker's selection, which a picker drops when the contact list moves the item.</summary>
+    private ContactRow? _payee;
+
     partial void OnContactChanged(ContactRow? value)
     {
         if (value is not null)
         {
+            _payee = value;
             Address = value.Address;
+        }
+    }
+
+    partial void OnAddressChanged(string value)
+    {
+        if (_payee is { } payee && payee.Address != value.Trim())
+        {
+            _payee = null; // edited away from the picked contact
+            Contact = null;
+        }
+    }
+
+    /// <summary>A contact was edited or deleted: a row paying it follows (or lets it go).</summary>
+    internal void OnContactChanged(ContactRow row, bool removed)
+    {
+        if (!ReferenceEquals(_payee, row))
+        {
+            return;
+        }
+
+        if (removed)
+        {
+            _payee = null; // the address stays as it was
+            Contact = null;
+        }
+        else
+        {
+            Address = row.Address;
+            Contact = row;
         }
     }
 
@@ -81,6 +115,10 @@ public sealed partial class WalletViewModel
     /// <summary>Picked from the address book: fills the address.</summary>
     [ObservableProperty] private ContactRow? _selectedSendContact;
 
+    /// <summary>The contact the form pays: picked, its address not edited since. Kept apart from the
+    /// picker's selection, which a picker drops when the contact list moves the item.</summary>
+    private ContactRow? _payee;
+
     /// <summary>The contact the typed address belongs to, if any.</summary>
     public string SendRecipientName => _profile.ContactNameFor(SendAddress) is { } name ? "Contact: " + name : string.Empty;
 
@@ -88,8 +126,54 @@ public sealed partial class WalletViewModel
     {
         if (value is not null)
         {
+            _payee = value;
             SendAddress = value.Address;
         }
+    }
+
+    /// <summary>A contact was edited or deleted, from any wallet's Contacts tab. A form paying it
+    /// follows: to the new address, or (deleted) it keeps the address and drops the name. A payment
+    /// already built for its old address is set aside, to be reviewed again.</summary>
+    internal void OnContactChanged(ContactRow row, string oldAddress, bool removed)
+    {
+        if (removed && ReferenceEquals(_editingContact, row))
+        {
+            CancelContact(); // deleted from another wallet's Contacts tab while being edited here
+        }
+
+        if (ReferenceEquals(_payee, row))
+        {
+            if (removed)
+            {
+                _payee = null;
+                SelectedSendContact = null;
+            }
+            else
+            {
+                SendAddress = row.Address;
+                SelectedSendContact = row; // back in the picker if the list move dropped it
+            }
+        }
+
+        foreach (RecipientRow r in ExtraRecipients)
+        {
+            r.OnContactChanged(row, removed);
+        }
+
+        if (ShowSendConfirm && !removed && oldAddress != row.Address && ConfirmLines.Any(l => l.Address == oldAddress))
+        {
+            CancelSend();
+            SendResult = $"{row.Name}'s address changed, so nothing was sent. Review the payment again.";
+        }
+
+        OnContactNamesChanged();
+    }
+
+    /// <summary>The address book changed: names shown for addresses are redrawn.</summary>
+    internal void OnContactNamesChanged()
+    {
+        OnPropertyChanged(nameof(SendRecipientName));
+        RebuildHistoryRows(); // destinations show contact names
     }
 
     partial void OnSendAddressChanged(string value)
@@ -119,9 +203,10 @@ public sealed partial class WalletViewModel
             return;
         }
 
-        if (SelectedSendContact is { } contact && contact.Address != value.Trim())
+        if (_payee is { } payee && payee.Address != value.Trim())
         {
-            SelectedSendContact = null; // edited away from the picked contact
+            _payee = null; // edited away from the picked contact
+            SelectedSendContact = null;
         }
 
         if (PaymentRequestNote.Length > 0 && value.Trim() != _paymentRequestAddress)
@@ -583,6 +668,7 @@ public sealed partial class WalletViewModel
     {
         SendAddress = string.Empty;
         SendAmountText = string.Empty;
+        _payee = null;
         SelectedSendContact = null;
         PaymentRequestNote = string.Empty;
         ExtraRecipients.Clear();
@@ -644,10 +730,13 @@ public sealed partial class WalletViewModel
         }
     }
 
-    /// <summary>"Pay" from the Contacts tab: fill the form with that contact.</summary>
+    /// <summary>"Pay" from the Contacts tab: fill the form with that contact — its address as it is
+    /// now, even when the form already had the contact picked.</summary>
     internal void PayContact(ContactRow contact)
     {
         SendResult = string.Empty;
+        _payee = contact;
+        SendAddress = contact.Address;
         SelectedSendContact = contact;
         SelectedTab = 1;
     }

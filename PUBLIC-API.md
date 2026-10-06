@@ -28,10 +28,10 @@ monero-wallet-rpc orchestration without the Avalonia desktop app.
   - `Unlock(password)` → `UnlockResult(Profile, UpgradedFromLegacyFormat)` for whichever slot the
     password opens, or null (`Secrets` = the profile's active wallet). A password "matches" only by
     authenticating a slot's AES-GCM tag — no plaintext comparison exists. Applies the opened slot's
-    policy before returning: wipe-on-duress, and re-sealing an older payload (v1, v2) or a slot carried
-    over from a format 1 file as a v3 profile. `UpgradedFromLegacyFormat` is true on the unlock that
-    re-sealed a payload written by 0.1, for either slot alike; show the same notice for both. Opening a
-    current vault never writes the file.
+    policy before returning: wipe-on-duress, and re-sealing as a v3 profile a 0.1 payload (v1) or a slot
+    carried by a format upgrade. A 0.2/0.3 payload (v2) is read as a one-wallet profile and becomes v3
+    at its first save. `UpgradedFromLegacyFormat` is true on the unlock that re-sealed a payload written
+    by 0.1, for either slot alike; show the same notice for both. Opening never writes the file otherwise.
   - `OpenSession(password)` → a `VaultSession` for whichever slot opens (the same policy as `Unlock`),
     or null. **This is how changes are saved.**
   - `ChangePassword(current, new)` — re-seals whichever slot `current` opens under `new`. Returns
@@ -46,15 +46,21 @@ monero-wallet-rpc orchestration without the Avalonia desktop app.
   re-reads the file and re-seals **only this slot** with the key derived at unlock; the other slot is
   written back byte for byte. `CheckPassword(password)` / `ChangePassword(current, new)` act on this
   slot only (false for the other slot's password, too). Throws `VaultFullException` (an `IOException`)
-  when the profile no longer fits; nothing is written. `Dispose()` zeroes the key and waits for a save
-  in progress; a save after that throws `ObjectDisposedException`.
+  when the profile no longer fits, with `OldFormat` set when upgrading the vault would make room;
+  nothing is written. A save also refuses (`IOException`) to write into a file that no longer holds
+  this session's slot (the vault was replaced while open). `IsOldFormat`: the file still has the
+  0.2/0.3 format; `UpgradeFormat()` / `UpgradeFormatAsync()` convert it, re-sealing this slot and
+  carrying the other (see SECURITY.md → Upgrading to 0.5 before offering it). `Dispose()` zeroes the
+  key and waits for a save in progress; a save after that throws `ObjectDisposedException`.
 - **`VaultFile`** — the on-disk container: magic `XVLT`, format 2, two equal slots of
   `PaddedPlaintextBytes` (256 KiB) each, randomized slot order, `FileBytes` in all. `Deserialize` also
-  reads format 1 (0.2/0.3: 4 KiB slots), carrying each old slot byte for byte into a new slot until its
-  own password re-seals it; a newer format is refused. `Serialize` always writes format 2. `WriteSlot`
+  reads format 1 (0.2/0.3: 4 KiB slots), which stays format 1 (`FormatVersion`, `PayloadCapacity` of
+  `LegacyMaxPayloadBytes`) until `UpgradeFormat()` carries each old slot byte for byte into the start
+  of a new one; a newer format is refused. `Serialize` writes the file's own format. `WriteSlot`
   (fresh salt), `FillRandom`, `TryUnlock` (payload + slot index), and `TryOpen` → `OpenedSlot` (payload,
-  derived key, `IsLegacyLayout`, for `ResealSlot` with a fresh nonce). Every slot is tried both ways on
-  every open, so a carried slot costs the same work. Dispose `OpenedSlot` promptly.
+  derived key, `IsLegacyLayout` = carried by an upgrade, for `ResealSlot` with a fresh nonce). Every
+  slot of a format 2 file is tried both ways on every open, so a carried slot costs the same work.
+  Dispose `OpenedSlot` promptly.
 - **`VaultCrypto`** — Argon2id key derivation (bounded params) + AES-256-GCM encrypt/decrypt, `RandomBytes`.
 - **`PasswordStrength`** — `Evaluate(password)` → `(StrengthLevel, bitsEstimate)`, discounting repeats,
   sequences, keyboard runs and very common passwords. `MinimumAccepted` is the floor the app enforces.
@@ -111,7 +117,9 @@ is refused with `InvalidDataException`.
   - Proofs: `GetTxKeyAsync(txid)` (throws if the backend returns no key) / `CheckTxKeyAsync(txid, txKey, address)`;
     `SignMessageAsync(message)` (main address) / `VerifyMessageAsync(message, address, signature)`;
     `GetReserveProofAsync(amount?, account, message)` / `CheckReserveProofAsync(address, message, proof)` → (good, total, spent)
-  - `SetDaemonAsync(daemon)` (switch node live, URL validated), `RescanSpentAsync`, `GetKeysAsync` → (mnemonic, viewKey, spendKey)
+  - `SetDaemonAsync(daemon)` (switch node live, URL validated; trusted only when it is on this computer),
+    `RescanSpentAsync` (sends every key image to the node: refused unless `NodeIsLocal`),
+    `GetKeysAsync` → (mnemonic, viewKey, spendKey)
   - `BackendExited` — the wallet-rpc child died underneath an open wallet
   - `IsLocalTestChain` — the open wallet syncs from a private regtest chain on this machine (see
     `MoneroDiagnostics.IsLocalTestChainAsync`); label it as such rather than as its address network

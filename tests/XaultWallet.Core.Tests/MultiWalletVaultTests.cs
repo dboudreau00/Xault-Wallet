@@ -427,10 +427,32 @@ public sealed class MultiWalletVaultTests : IDisposable
 
     // ------------------------------------------------------------ vaults from 0.1–0.3
 
-    [Fact]
-    public void A_0_3_Vault_Opens_And_Becomes_A_Version_2_File()
+    /// <summary>Open a version-1 slot exactly as 0.2/0.3 did: AES-GCM over a 4096-byte padded
+    /// plaintext, associated data "XV",1,slot. Returns its JSON, or null.</summary>
+    private static string? OpenAs03(byte[] file, int slot, string password)
     {
-        File.WriteAllBytes(_path, LegacyFile((MainPw, V2Payload("real seed words")), (DuressPw, V2Payload("decoy seed words"))));
+        byte[] raw = file.AsSpan(HeaderBytes + (slot * LegacySlotBytes), LegacySlotBytes).ToArray();
+        byte[] salt = raw[..VaultCrypto.SaltSizeBytes];
+        using SecureBuffer pw = Pw(password);
+        using SecureBuffer key = VaultCrypto.DeriveKey(pw, salt, FastArgon);
+        using SecureBuffer? padded = VaultCrypto.TryDecrypt(key, raw.AsSpan(VaultCrypto.SaltSizeBytes), [(byte)'X', (byte)'V', 1, (byte)slot]);
+        if (padded is null)
+        {
+            return null;
+        }
+
+        int len = (int)BinaryPrimitives.ReadUInt32LittleEndian(padded.Span);
+        return Encoding.UTF8.GetString(padded.Span.Slice(4, len));
+    }
+
+    private static int SlotOf(byte[] file, string password) =>
+        OpenAs03(file, 0, password) is not null ? 0 : OpenAs03(file, 1, password) is not null ? 1 : -1;
+
+    [Fact]
+    public void A_0_3_Vault_Opens_With_Either_Password_And_Is_Not_Rewritten()
+    {
+        byte[] legacy = LegacyFile((MainPw, V2Payload("real seed words")), (DuressPw, V2Payload("decoy seed words")));
+        File.WriteAllBytes(_path, legacy);
 
         using (var mp = Pw(MainPw))
         {
@@ -442,32 +464,24 @@ public sealed class MultiWalletVaultTests : IDisposable
             Assert.False(r.UpgradedFromLegacyFormat); // 0.2/0.3 payloads need no notice
         }
 
-        byte[] after = File.ReadAllBytes(_path);
-        Assert.Equal(VaultFile.FileBytes, after.Length);
-        Assert.Equal(2, after[4]);
-        Assert.Equal(3, (int)Examine(MainPw)["v"]!);
-
-        // The decoy was carried, not converted: its password still opens it, and converts it.
         using (var dp = Pw(DuressPw))
+        using (VaultSession s = VaultManager.Load(_path).OpenSession(dp)!)
         {
-            Assert.Equal("decoy seed words", VaultManager.Load(_path).Unlock(dp)!.Secrets.Mnemonic);
+            Assert.Equal("decoy seed words", s.Profile.ActiveWallet!.Mnemonic);
+            Assert.True(s.IsOldFormat);
         }
 
-        Assert.Equal(3, (int)Examine(DuressPw)["v"]!);
-        using (var mp = Pw(MainPw))
-        {
-            Assert.Equal("real seed words", VaultManager.Load(_path).Unlock(mp)!.Secrets.Mnemonic);
-        }
+        // Opening is reading: the file is exactly what 0.3 wrote (and 0.3 can still open it).
+        Assert.Equal(legacy, File.ReadAllBytes(_path));
     }
 
     [Fact]
-    public void A_Carried_Slot_Is_Kept_Byte_For_Byte_Until_Its_Own_Password_Opens_It()
+    public void A_Save_Keeps_A_0_3_Vault_In_Its_Format_And_The_Other_Slot_As_It_Was()
     {
         byte[] legacy = LegacyFile((MainPw, V2Payload("real seed words")), (DuressPw, V2Payload("decoy seed words")));
         File.WriteAllBytes(_path, legacy);
-        byte[] oldDecoySlot = legacy.AsSpan(HeaderBytes + LegacySlotBytes, LegacySlotBytes).ToArray();
+        int decoySlot = SlotOf(legacy, DuressPw);
 
-        // Several saves through the real profile…
         for (int i = 0; i < 3; i++)
         {
             using VaultSession s = Open(MainPw);
@@ -475,11 +489,110 @@ public sealed class MultiWalletVaultTests : IDisposable
             s.Save();
         }
 
-        // …leave the old decoy slot exactly as it was, at the start of its new slot.
         byte[] now = File.ReadAllBytes(_path);
-        Assert.True(oldDecoySlot.AsSpan().SequenceEqual(now.AsSpan(HeaderBytes + SlotBytes, LegacySlotBytes)));
-        using var dp = Pw(DuressPw);
-        Assert.Equal("decoy seed words", VaultManager.Load(_path).Unlock(dp)!.Secrets.Mnemonic);
+        Assert.Equal(legacy.Length, now.Length);
+        Assert.Equal(1, now[4]);
+
+        // The decoy's slot is byte for byte what 0.3 wrote, and still opens the 0.3 way.
+        int at = HeaderBytes + (decoySlot * LegacySlotBytes);
+        Assert.True(legacy.AsSpan(at, LegacySlotBytes).SequenceEqual(now.AsSpan(at, LegacySlotBytes)));
+        Assert.Equal(2, (int)JsonNode.Parse(OpenAs03(now, decoySlot, DuressPw)!)!["v"]!);
+
+        // The real slot was written in the 0.3 layout too, with the new payload.
+        JsonObject real = JsonNode.Parse(OpenAs03(now, 1 - decoySlot, MainPw)!)!.AsObject();
+        Assert.Equal(3, (int)real["v"]!);
+        Assert.Equal(3, real["contacts"]!.AsArray().Count);
+    }
+
+    [Fact]
+    public void A_0_3_Vault_Refuses_What_Does_Not_Fit_And_Writes_Nothing()
+    {
+        File.WriteAllBytes(_path, LegacyFile((MainPw, V2Payload("real seed words")), null));
+        using VaultSession s = Open(MainPw);
+        byte[] before = File.ReadAllBytes(_path);
+        VaultFullException? full = null;
+        for (int i = 0; i < 100 && full is null; i++)
+        {
+            s.Profile.Contacts.Add(new Contact { Name = "Contact " + i, Address = new string('4', 95), Note = "A note that takes some room." });
+            full = Record.Exception(s.Save) as VaultFullException;
+            if (full is null)
+            {
+                before = File.ReadAllBytes(_path);
+            }
+        }
+
+        Assert.NotNull(full);
+        Assert.True(full!.OldFormat);
+        Assert.Contains("Vault format", full.Message);
+        Assert.Equal(before, File.ReadAllBytes(_path)); // the last write that fitted, untouched
+        Assert.True(s.IsOldFormat);
+    }
+
+    [Fact]
+    public void Upgrading_Converts_The_File_And_Carries_The_Other_Slot()
+    {
+        byte[] legacy = LegacyFile((MainPw, V2Payload("real seed words")), (DuressPw, V2Payload("decoy seed words")));
+        File.WriteAllBytes(_path, legacy);
+        int decoySlot = SlotOf(legacy, DuressPw);
+        byte[] oldDecoySlot = legacy.AsSpan(HeaderBytes + (decoySlot * LegacySlotBytes), LegacySlotBytes).ToArray();
+
+        using (VaultSession s = Open(MainPw))
+        {
+            s.UpgradeFormat();
+            Assert.False(s.IsOldFormat);
+            s.Profile.Contacts.Add(new Contact { Name = "after", Address = "4…" });
+            s.Save(); // the upgraded profile has room now
+        }
+
+        byte[] now = File.ReadAllBytes(_path);
+        Assert.Equal(VaultFile.FileBytes, now.Length);
+        Assert.Equal(2, now[4]);
+        Assert.Equal(3, (int)Examine(MainPw)["v"]!);
+
+        // The decoy was carried byte for byte. Until its own password opens it, whoever holds that
+        // password can see it was carried (the caveat SECURITY.md explains, and the reason upgrading
+        // is the user's choice)…
+        Assert.True(oldDecoySlot.AsSpan().SequenceEqual(now.AsSpan(HeaderBytes + (decoySlot * SlotBytes), LegacySlotBytes)));
+        using (var dp = Pw(DuressPw))
+        using (OpenedSlot carried = VaultFile.Deserialize(now).TryOpen(dp)!)
+        {
+            Assert.True(carried.IsLegacyLayout);
+        }
+
+        // …and opening it once re-seals it in the new layout; the real profile is untouched.
+        using (var dp = Pw(DuressPw))
+        {
+            Assert.Equal("decoy seed words", VaultManager.Load(_path).Unlock(dp)!.Secrets.Mnemonic);
+        }
+
+        using (var dp = Pw(DuressPw))
+        using (OpenedSlot converted = VaultFile.Deserialize(File.ReadAllBytes(_path)).TryOpen(dp)!)
+        {
+            Assert.False(converted.IsLegacyLayout);
+        }
+
+        Assert.Equal(3, (int)Examine(DuressPw)["v"]!);
+        using var mp = Pw(MainPw);
+        Assert.Equal("after", VaultManager.Load(_path).Unlock(mp)!.Profile.Contacts.Single().Name);
+    }
+
+    [Fact]
+    public void Upgrading_From_The_Decoy_First_Leaves_Its_Holder_Nothing_To_See()
+    {
+        File.WriteAllBytes(_path, LegacyFile((MainPw, V2Payload("real seed words")), (DuressPw, V2Payload("decoy seed words"))));
+        using (VaultSession s = Open(DuressPw))
+        {
+            s.UpgradeFormat();
+        }
+
+        using (var dp = Pw(DuressPw))
+        using (OpenedSlot decoy = VaultFile.Deserialize(File.ReadAllBytes(_path)).TryOpen(dp)!)
+        {
+            Assert.False(decoy.IsLegacyLayout); // its own slot: current layout, current payload
+        }
+
+        using var mp = Pw(MainPw);
+        Assert.Equal("real seed words", VaultManager.Load(_path).Unlock(mp)!.Secrets.Mnemonic);
     }
 
     [Fact]
@@ -507,17 +620,18 @@ public sealed class MultiWalletVaultTests : IDisposable
     }
 
     [Fact]
-    public void A_0_3_Decoy_With_Wipe_On_Duress_Still_Wipes_After_Conversion()
+    public void A_0_3_Decoy_With_Wipe_On_Duress_Still_Wipes()
     {
         File.WriteAllBytes(_path, LegacyFile((MainPw, V2Payload("real seed words")), (DuressPw, V2Payload("decoy seed words", wipeOther: true))));
 
-        // The real profile is opened (and converted) first, as most upgrades go…
-        using (var mp = Pw(MainPw))
+        // The real profile is opened and changed first, as most upgrades go…
+        using (VaultSession s = Open(MainPw))
         {
-            Assert.NotNull(VaultManager.Load(_path).Unlock(mp));
+            s.Profile.Contacts.Add(new Contact { Name = "c", Address = "4…" });
+            s.Save();
         }
 
-        // …and the carried decoy keeps its wipe-on-duress.
+        // …and the decoy keeps its wipe-on-duress.
         using (var dp = Pw(DuressPw))
         {
             Assert.Equal("decoy seed words", VaultManager.Load(_path).Unlock(dp)!.Secrets.Mnemonic);
@@ -529,10 +643,61 @@ public sealed class MultiWalletVaultTests : IDisposable
         }
 
         Assert.False((bool)Examine(DuressPw)["wipeOther"]!);
+        Assert.Equal(1, File.ReadAllBytes(_path)[4]); // still the old format
     }
 
     [Fact]
-    public void A_0_3_Single_Wallet_Vault_Converts_With_Its_Filler_Slot()
+    public void A_Duress_Wipe_That_Could_Not_Be_Written_Is_Applied_By_The_Next_Write()
+    {
+        CreateVault(withDecoy: true, decoyWipes: true);
+
+        // The write at the duress unlock fails (here: something occupies the temp file's name).
+        string blocker = _path + ".tmp";
+        Directory.CreateDirectory(blocker);
+        using (VaultSession s = Open(DuressPw))
+        {
+            using (var mp = Pw(MainPw))
+            {
+                Assert.NotNull(VaultManager.Load(_path).Unlock(mp)); // nothing was written yet
+            }
+
+            Directory.Delete(blocker);
+
+            // The decoy's next change re-seals its slot from the file on disk — and wipes again.
+            s.Profile.Contacts.Add(new Contact { Name = "c", Address = "4…" });
+            s.Save();
+        }
+
+        using (var mp = Pw(MainPw))
+        {
+            Assert.Null(VaultManager.Load(_path).Unlock(mp));
+        }
+
+        Assert.False((bool)Examine(DuressPw)["wipeOther"]!);
+    }
+
+    [Fact]
+    public void A_Session_Will_Not_Write_Into_A_Vault_That_Was_Replaced()
+    {
+        CreateVault(withDecoy: false);
+        using VaultSession s = Open(MainPw);
+
+        // Another vault arrives under the same name (a sync client, a restored copy…).
+        string other = _path + ".other";
+        using (var pw = Pw(MainPw))
+        {
+            VaultManager.Create(other, pw, Wallet("other seed words"), argon: FastArgon);
+        }
+
+        File.Copy(other, _path, overwrite: true);
+        byte[] replaced = File.ReadAllBytes(_path);
+        s.Profile.Contacts.Add(new Contact { Name = "c", Address = "4…" });
+        Assert.Throws<IOException>(s.Save);
+        Assert.Equal(replaced, File.ReadAllBytes(_path));
+    }
+
+    [Fact]
+    public void A_0_3_Single_Wallet_Vault_Takes_A_Second_Wallet_Then_Upgrades()
     {
         File.WriteAllBytes(_path, LegacyFile(null, (MainPw, V2Payload("real seed words"))));
 
@@ -540,7 +705,9 @@ public sealed class MultiWalletVaultTests : IDisposable
         using (VaultSession s = VaultManager.Load(_path).OpenSession(mp)!)
         {
             s.Profile.Wallets.Add(Wallet("another seed", "Spending"));
-            s.Save();
+            s.Save(); // fits in the old format
+            Assert.Equal(1, File.ReadAllBytes(_path)[4]);
+            s.UpgradeFormat();
         }
 
         Assert.Equal(VaultFile.FileBytes, File.ReadAllBytes(_path).Length);

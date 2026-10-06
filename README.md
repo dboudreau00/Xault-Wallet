@@ -128,8 +128,8 @@ This wallet's whole trust model rests on that binary being genuine. Two ways:
 ### Step 3 — First launch & settings
 
 1. Run XaultWallet. The splash checks for the binary and a node. Without a binary it stops and offers
-   *Download & install* or *Choose my own copy*; without a reachable node it offers **Continue anyway**
-   (expected on a fresh machine).
+   *Download & install* or *I have it: choose my copy…*; without a reachable node it offers
+   **Continue anyway** (expected on a fresh machine).
 2. To use your own copy: **Settings** (top-right) → **Wallet backend**: *Browse…* to
    `monero-wallet-rpc` (or leave it blank if it's on your PATH — the resolved path is shown) → **Test**.
    A typed path must be a full path; a bare `monero-wallet-rpc` is looked up on PATH, and relative

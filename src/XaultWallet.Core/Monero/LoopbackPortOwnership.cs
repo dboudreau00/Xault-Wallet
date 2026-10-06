@@ -14,14 +14,16 @@ namespace XaultWallet.Core.Monero;
 /// </summary>
 internal static class LoopbackPortOwnership
 {
-    /// <summary>Platforms where ownership can be checked. Elsewhere (macOS) the check reports null.</summary>
+    /// <summary>Platforms where ownership can be checked. Elsewhere (macOS) the check reports null
+    /// and <see cref="IsTrusted"/> fails closed.</summary>
     public static bool IsSupported => OperatingSystem.IsLinux() || OperatingSystem.IsWindows();
 
     /// <summary>
-    /// Fail-closed reading of <see cref="IsListenerOwnedBy"/>: on a supported platform only a definite
-    /// "yes" is trusted — "can't tell" (an unreadable table, a process that vanished mid-check) is a no.
+    /// Fail-closed reading of <see cref="IsListenerOwnedBy"/>: only a definite "yes" is trusted.
+    /// "Can't tell" (macOS, an unreadable table, a process that vanished mid-check) is a no —
+    /// seed-bearing RPC must not proceed without a confirmed owner.
     /// </summary>
-    public static bool IsTrusted(bool? owned) => owned == true || (owned is null && !IsSupported);
+    public static bool IsTrusted(bool? owned) => owned == true;
 
     /// <summary>True/false when the platform can tell; null when it cannot (e.g. macOS).</summary>
     public static bool? IsListenerOwnedBy(int pid, int port)

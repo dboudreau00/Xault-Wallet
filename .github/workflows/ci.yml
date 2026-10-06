@@ -23,8 +23,9 @@ jobs:
       fail-fast: false
       matrix:
         # Windows matters beyond the release target: it exercises the GetExtendedTcpTable
-        # port-ownership check and the kill-on-close job object.
-        os: [ubuntu-24.04, windows-latest]
+        # port-ownership check and the kill-on-close job object. macOS covers the fail-closed
+        # path where ownership cannot yet be checked.
+        os: [ubuntu-24.04, windows-latest, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7

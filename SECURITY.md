@@ -55,7 +55,8 @@ process's command line — and the file is shredded once the server is up. This 
 cannot authenticate the *server* (monero sends no `rspauth`), so before any seed is sent — and before
 a new seed is generated — the app checks that every listener that could answer on that port belongs
 to the process it started and that the process is still running (Linux, Windows). The check fails
-closed: if ownership can't be confirmed, nothing is sent. wallet-rpc's own log and ring database
+closed: if ownership can't be confirmed — including on macOS, where the check is not yet
+implemented — nothing is sent. wallet-rpc's own log and ring database
 are kept in the same session folder, which is shredded on lock.
 
 **The wallet-rpc binary.** It is only ever started from a fully-qualified path. A bare name in
@@ -114,8 +115,9 @@ swap, crash dumps, file-system journals). Specifically:
   decoy *offline* — without the app ever opening it — can read `wipeOther: true` and infer a second
   wallet existed. The instruction has to be readable with the duress password; once the app opens the
   decoy, the flag is consumed and gone. Without wipe-on-duress the decoy is indistinguishable.
-- **macOS:** the port-ownership check is not implemented there; the app relies on the per-session
-  digest credentials alone.
+- **macOS:** the port-ownership check is not implemented there. The app fails closed: it refuses to
+  send a seed (or generate one) to the wallet backend until a macOS ownership check exists. Releases
+  still build an osx-arm64 binary, but seed-bearing use on macOS is non-functional until then.
 - **Vaults upgraded from 0.1** — see [Upgrading from 0.1](#upgrading-from-01).
 - **The ring database** now lives only for the session. Monero keeps it so a wallet re-uses the same
   rings across a chain split; losing it each session only matters during a contentious fork.

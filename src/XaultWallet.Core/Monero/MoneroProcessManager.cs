@@ -400,8 +400,9 @@ public sealed class MoneroProcessManager : IAsyncDisposable
     /// <summary>
     /// Throw unless the server on our port is provably the child we started and that child is still
     /// alive. Called when the server first answers AND right before the first call that carries a
-    /// secret. Fails closed: where ownership can be checked (Linux, Windows) only a definite "yes"
-    /// passes — a child that already died after losing the port to another process reads as "no".
+    /// secret. Fails closed: only a definite "yes" passes. Where ownership cannot be checked
+    /// (macOS) the call always throws. A child that already died after losing the port to another
+    /// process also reads as "no".
     /// </summary>
     public void EnsureBackendIsOurs()
     {
@@ -410,6 +411,16 @@ public sealed class MoneroProcessManager : IAsyncDisposable
         {
             throw new InvalidOperationException(
                 $"monero-wallet-rpc is not running (it may have failed to start). {LastStderr()}");
+        }
+
+        if (!LoopbackPortOwnership.IsSupported)
+        {
+            // macOS (and anything else without a port-owner check): refuse seed-bearing RPC rather
+            // than trust digest auth alone. Digest authenticates the client, not the server.
+            throw new InvalidOperationException(
+                "XaultWallet can't yet confirm on this system (macOS) that the wallet backend's port " +
+                "belongs to it, so it refuses to send your wallet to it. Use Linux or Windows for now, " +
+                "or wait for a release that implements the macOS ownership check.");
         }
 
         if (!LoopbackPortOwnership.IsTrusted(LoopbackPortOwnership.IsListenerOwnedBy(p.Id, _port)) || HasProcessExited)

@@ -106,8 +106,8 @@ public class LoopbackPortOwnershipTests
     {
         Assert.True(LoopbackPortOwnership.IsTrusted(true));
         Assert.False(LoopbackPortOwnership.IsTrusted(false));
-        // "Can't tell" fails closed on Linux/Windows; only where no check exists (macOS) does it pass.
-        Assert.Equal(!Supported, LoopbackPortOwnership.IsTrusted(null));
+        // "Can't tell" — including macOS, where no check exists — fails closed everywhere.
+        Assert.False(LoopbackPortOwnership.IsTrusted(null));
     }
 
     [Fact]

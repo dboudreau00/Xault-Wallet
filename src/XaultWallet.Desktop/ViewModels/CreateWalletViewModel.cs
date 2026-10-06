@@ -688,8 +688,8 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
 
             // Hard stop for imports: a wrong seed or seed-offset opens a valid but DIFFERENT, empty
             // wallet with no error. Echo the derived address(es) and require the user to confirm the
-            // match BEFORE sealing. If no address could be derived (binary missing) there is nothing
-            // to echo, so fall through and seal as before.
+            // match BEFORE sealing. Imports without monero-wallet-rpc never reach here (Validate
+            // returns false); generated-only wallets have nothing to echo and seal directly.
             if (realAddr is not null || duressAddr is not null)
             {
                 // Snapshot the seal inputs and clear the live password fields. Phase 2 seals from
@@ -818,8 +818,8 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
     /// <summary>
     /// Validates an imported seed by actually opening it via monero-wallet-rpc, returning
     /// (true, primaryAddress) so the caller can echo the address for a confirmation hard stop.
-    /// If the binary isn't available it degrades to a word-count check and returns (true, null) —
-    /// there is no address to echo. Returns (false, null) and sets Error on an invalid seed.
+    /// Without the binary the import is refused — a word-count check cannot catch a wrong seed
+    /// or seed-offset. Returns (false, null) and sets Error on an invalid seed or a missing binary.
     /// </summary>
     private async Task<(bool ok, string? address)> ValidateImportedSeedAddressAsync(WalletSecrets secrets, string what)
     {
@@ -834,15 +834,10 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         }
         catch (FileNotFoundException)
         {
-            // Binary not available — degrade gracefully to a structural check (no address to echo).
-            int words = secrets.Mnemonic.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
-            if (words is 25 or 13)
-            {
-                return (true, null);
-            }
-
-            Error = $"Your {what} has {words} words; a Monero seed is normally 25 words. " +
-                    "Couldn't fully validate it (monero-wallet-rpc not found). Double-check it.";
+            // Same posture as AddWalletViewModel: importing without the binary would skip the
+            // address echo and seal a seed that has never been opened.
+            Error = "Importing a seed needs monero-wallet-rpc so the wallet's address can be " +
+                    "confirmed before sealing. Install it (Download & install) and try again.";
             return (false, null);
         }
         catch (Exception ex)

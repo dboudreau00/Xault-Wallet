@@ -745,7 +745,13 @@ public sealed partial class WalletViewModel
         }
         catch (OperationCanceledException)
         {
-            // wallet locked/closed before anything went out
+            // Same honesty as the single-send path: the in-flight relay (relayed == 0 here —
+            // a cancel after a successful relay is handled above) may already have reached the
+            // network. Point at the first prepared txid when we have one.
+            string tip = sweep.TxHashList.Count > 0 ? $"txid {sweep.TxHashList[0]}" : "the sweep";
+            SendResult = "Sweep interrupted — a transaction MAY still have been broadcast. " +
+                         $"Check History for {tip} before sweeping again.";
+            SendOutcome = SendOutcome.NeedsCheck;
         }
         finally
         {

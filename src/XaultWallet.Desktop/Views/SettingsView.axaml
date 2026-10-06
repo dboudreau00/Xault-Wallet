@@ -185,6 +185,38 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ============ Vault format (a vault from 0.1–0.3; same words for either password) ============ -->
+                <Border Classes="section" app:Entrance.Rise="210" IsVisible="{Binding ShowFormatCard}" AutomationProperties.AutomationId="Settings.FormatCard">
+                    <StackPanel Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Border Classes="sectionIcon"><c:Icon Data="{StaticResource IconRefresh}"/></Border>
+                            <StackPanel Spacing="1" VerticalAlignment="Center">
+                                <TextBlock Text="Vault format" Classes="h2"/>
+                                <TextBlock Classes="caption" Text="This vault was made by XaultWallet 0.3 or earlier."/>
+                            </StackPanel>
+                        </StackPanel>
+                        <TextBlock Classes="muted" TextWrapping="Wrap"
+                                   Text="It keeps that format until you upgrade it: about 4 KB for the wallets, contacts and notes of each password. Upgrading makes room for many more (256 KB per password); 0.3 can't open the vault afterwards. It can't be undone: export a backup first if you might go back to 0.3."/>
+                        <Border Classes="callout warning">
+                            <TextBlock Foreground="#EBD9AE" TextWrapping="Wrap"
+                                       Text="Upgrading converts only the part of the vault that the password you unlocked with opens. If this vault has a second password, its part stays in the old format until that password is used in 0.5 — and until then, anyone holding it and the vault file can tell that another password was used. So upgrade from the second password first. If that password is set to wipe the other wallets when used, don't use it: rebuild the vault instead (SECURITY.md, “Upgrading to 0.5”)."/>
+                        </Border>
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding VaultIsOldFormat}">
+                            <Button Content="Upgrade vault…" AutomationProperties.AutomationId="Settings.AskUpgradeFormat" Command="{Binding AskFormatUpgradeCommand}"
+                                    IsVisible="{Binding !ConfirmFormatUpgrade}"/>
+                            <Button Classes="accent" AutomationProperties.AutomationId="Settings.UpgradeFormat" AutomationProperties.Name="Upgrade now"
+                                    Command="{Binding UpgradeFormatCommand}" IsVisible="{Binding ConfirmFormatUpgrade}" IsEnabled="{Binding !Busy}">
+                                <TextBlock Text="Upgrade now" Foreground="{StaticResource AccentText}"/>
+                            </Button>
+                            <Button Content="Cancel" AutomationProperties.AutomationId="Settings.CancelUpgradeFormat" Command="{Binding CancelFormatUpgradeCommand}"
+                                    IsVisible="{Binding ConfirmFormatUpgrade}"/>
+                        </StackPanel>
+                        <TextBlock AutomationProperties.AutomationId="Settings.FormatUpgradeResult" Text="{Binding FormatUpgradeResult}" Classes="result" TextWrapping="Wrap"
+                                   IsVisible="{Binding FormatUpgradeResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                   Foreground="{Binding FormatUpgradeOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+                    </StackPanel>
+                </Border>
+
                 <!-- ============ Backup ============ -->
                 <Border Classes="section" app:Entrance.Rise="210">
                     <StackPanel Spacing="12">

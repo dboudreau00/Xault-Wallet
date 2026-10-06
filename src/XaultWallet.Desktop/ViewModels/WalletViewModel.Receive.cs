@@ -38,7 +38,14 @@ public sealed partial class AddressRow : ObservableObject
     /// <summary>It is the address the QR code shows.</summary>
     [ObservableProperty] private bool _isShown;
 
-    public string Title => Label.Length > 0 ? Label : Index == 0 ? "Main address" : $"Subaddress #{Index}";
+    /// <summary>Only account 0's first address is the wallet's main address; another account's first
+    /// address is a subaddress like the rest (it starts with 8 on mainnet, not 4).</summary>
+    public string Title => Label.Length > 0 ? Label : (Account, Index) switch
+    {
+        (0, 0) => "Main address",
+        (_, 0) => "Account address",
+        _ => $"Subaddress #{Index}",
+    };
 
     public string ShortAddress => Address.Length > 24 ? Address[..10] + "…" + Address[^10..] : Address;
 }

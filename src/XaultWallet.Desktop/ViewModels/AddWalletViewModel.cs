@@ -182,8 +182,13 @@ public sealed partial class AddWalletViewModel : ViewModelBase
         Busy = true;
         try
         {
-            await using MoneroWalletService svc = AppServices.Instance.CreateWalletService();
-            (string mnemonic, ulong height) = await svc.GenerateNewSeedAsync(Network, DaemonAddress.Trim());
+            MoneroNetwork network = Network;
+            string daemon = DaemonAddress.Trim();
+            (string mnemonic, ulong height) = await _profile.RunWithBackendAsync(async ct =>
+            {
+                await using MoneroWalletService svc = AppServices.Instance.CreateWalletService();
+                return await svc.GenerateNewSeedAsync(network, daemon, ct);
+            });
             _mnemonic = mnemonic;
             _generatedHeight = height;
             SeedWords.Clear();
@@ -201,6 +206,10 @@ public sealed partial class AddWalletViewModel : ViewModelBase
             VerifyInput1 = VerifyInput2 = VerifyInput3 = VerifyMessage = string.Empty;
             SeedVerified = false;
             SeedGenerated = true;
+        }
+        catch (OperationCanceledException)
+        {
+            // the vault was locked meanwhile: this screen is gone
         }
         catch (Exception ex)
         {
@@ -329,14 +338,20 @@ public sealed partial class AddWalletViewModel : ViewModelBase
             }
 
             // Open it in monero-wallet-rpc first: a bad seed or keys must never reach the vault.
-            await using MoneroWalletService svc = AppServices.Instance.CreateWalletService();
-            string address = await svc.ValidateWalletOpensAsync(wallet);
+            string address = await _profile.RunWithBackendAsync(async ct =>
+            {
+                await using MoneroWalletService svc = AppServices.Instance.CreateWalletService();
+                return await svc.ValidateWalletOpensAsync(wallet, ct);
+            });
             if (_profile.NameOfWalletWithAddress(address) is { } same)
             {
                 Error = $"That wallet is already in this vault, as “{same}”.";
                 return;
             }
 
+            // Kept with the wallet (a seed's address too): the next import of the same wallet, by
+            // seed or by keys, is recognised even before this one has been opened.
+            wallet.Address = address;
             _pending = wallet;
             ConfirmAddress = address;
             ShowConfirm = true;
@@ -344,6 +359,10 @@ public sealed partial class AddWalletViewModel : ViewModelBase
         catch (FileNotFoundException)
         {
             Error = "monero-wallet-rpc isn't available, so the wallet can't be checked. Set it up in Settings first.";
+        }
+        catch (OperationCanceledException)
+        {
+            // the vault was locked meanwhile: this screen is gone
         }
         catch (Exception ex)
         {

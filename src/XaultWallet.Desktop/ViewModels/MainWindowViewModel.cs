@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using XaultWallet.Core.Diagnostics;
 using XaultWallet.Core.Models;
 using XaultWallet.Core.Security;
 
@@ -16,6 +17,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private ProfileViewModel? _profile;
 
+    /// <summary>The last lock's remaining work (backends stopping, the last save, the session
+    /// closing): nothing opens or replaces the vault until it has finished.</summary>
+    private Task _closing = Task.CompletedTask;
+
     /// <summary>A shell showing <paramref name="screen"/> with no startup flow — for UI snapshots and tests only.</summary>
     internal MainWindowViewModel(ViewModelBase screen) => _current = screen;
 
@@ -30,7 +35,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private UnlockViewModel BuildUnlock()
     {
-        var vm = new UnlockViewModel();
+        var vm = new UnlockViewModel(_closing);
         vm.Unlocked += OnUnlocked;
         return vm;
     }
@@ -59,15 +64,18 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 Current = vm;
             }
         };
-        profile.Locked += () =>
+        profile.Locking += closing =>
         {
-            // Locked can be raised by a manual Lock racing the inactivity lock: act once.
+            // A manual Lock can race the inactivity lock: act once.
             if (!ReferenceEquals(_profile, profile))
             {
                 return;
             }
 
+            // The wallets leave the screen now, not after their backends have stopped: until then
+            // the screen would stay usable, and a change made on it couldn't be saved any more.
             _profile = null;
+            _closing = EndedAsync(closing);
 
             // If the auto-lock fires while Settings is open, close the Settings state too —
             // otherwise its Closed handler later re-navigates over whatever screen is showing
@@ -103,7 +111,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
 
         ViewModelBase before = Current;
-        var settings = new SettingsViewModel(_profile);
+        var settings = new SettingsViewModel(_profile, _closing);
         settings.Closed += () =>
         {
             SettingsOpen = false;
@@ -129,11 +137,28 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         Current = settings;
     }
 
+    /// <summary>Completes when <paramref name="work"/> has ended, whichever way: a lock that failed
+    /// to finish must not keep the vault from being opened again.</summary>
+    private static async Task EndedAsync(Task work)
+    {
+        try
+        {
+            await work;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Locking did not finish cleanly", ex);
+        }
+    }
+
     public async Task ShutdownAsync()
     {
         if (_profile is not null)
         {
             await _profile.DisposeAsync();
         }
+
+        await _closing; // a lock still finishing
+        await AppServices.Instance.TemporaryBackends.StopAllAsync(); // e.g. a seed being generated
     }
 }

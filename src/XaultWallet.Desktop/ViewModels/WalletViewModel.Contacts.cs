@@ -89,9 +89,7 @@ public sealed partial class WalletViewModel
 
         Toast(_editingContact is null ? $"{ContactName.Trim()} added to contacts." : "Contact saved.");
         ContactEditorOpen = false;
-        _editingContact = null;
-        OnPropertyChanged(nameof(SendRecipientName));
-        RebuildHistoryRows(); // destinations show contact names
+        _editingContact = null; // every open wallet has redrawn its names
     }
 
     [RelayCommand]
@@ -113,9 +111,7 @@ public sealed partial class WalletViewModel
             CancelContact();
         }
 
-        Toast($"{row.Name} removed from contacts.");
-        OnPropertyChanged(nameof(SendRecipientName));
-        RebuildHistoryRows();
+        Toast($"{row.Name} removed from contacts."); // every open wallet has redrawn its names
     }
 
     [RelayCommand]

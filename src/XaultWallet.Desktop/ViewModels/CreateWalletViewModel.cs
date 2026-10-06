@@ -286,8 +286,7 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         Busy = true;
         try
         {
-            await using var svc = AppServices.Instance.CreateWalletService();
-            (string mnemonic, ulong height) = await svc.GenerateNewSeedAsync(Network, DaemonAddress.Trim());
+            (string mnemonic, ulong height) = await GenerateSeedAsync();
             RealMnemonic = mnemonic;
             _generatedRestoreHeight = height;
             RealSeedGenerated = true;
@@ -312,8 +311,7 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         Busy = true;
         try
         {
-            await using var svc = AppServices.Instance.CreateWalletService();
-            (string mnemonic, ulong height) = await svc.GenerateNewSeedAsync(Network, DaemonAddress.Trim());
+            (string mnemonic, ulong height) = await GenerateSeedAsync();
             DuressMnemonic = mnemonic;
             _duressRestoreHeight = height; // the decoy's OWN tip — not the real wallet's height
             DuressSeedGenerated = true;
@@ -326,6 +324,18 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         {
             Busy = false;
         }
+    }
+
+    /// <summary>A new seed from monero-wallet-rpc, in a backend that the app's exit stops.</summary>
+    private Task<(string mnemonic, ulong height)> GenerateSeedAsync()
+    {
+        MoneroNetwork network = Network;
+        string daemon = DaemonAddress.Trim();
+        return AppServices.Instance.TemporaryBackends.RunAsync(async ct =>
+        {
+            await using var svc = AppServices.Instance.CreateWalletService();
+            return await svc.GenerateNewSeedAsync(network, daemon, ct);
+        });
     }
 
     private void PopulateSeedWords(string mnemonic)
@@ -814,8 +824,11 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
     {
         try
         {
-            await using var svc = AppServices.Instance.CreateWalletService();
-            string address = await svc.ValidateSeedOpensAsync(secrets);
+            string address = await AppServices.Instance.TemporaryBackends.RunAsync(async ct =>
+            {
+                await using var svc = AppServices.Instance.CreateWalletService();
+                return await svc.ValidateSeedOpensAsync(secrets, ct);
+            });
             return (true, address);
         }
         catch (FileNotFoundException)

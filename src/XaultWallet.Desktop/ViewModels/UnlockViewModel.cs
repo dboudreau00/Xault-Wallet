@@ -6,6 +6,11 @@ namespace XaultWallet.Desktop.ViewModels;
 
 public sealed partial class UnlockViewModel : ViewModelBase
 {
+    private readonly Task _closing;
+
+    /// <param name="closing">What remains of the last lock: the vault is opened again only after it.</param>
+    public UnlockViewModel(Task? closing = null) => _closing = closing ?? Task.CompletedTask;
+
     [ObservableProperty]
     private string _password = string.Empty;
 
@@ -42,6 +47,9 @@ public sealed partial class UnlockViewModel : ViewModelBase
         {
             char[] chars = Password.ToCharArray();
             Password = string.Empty; // clear the bound field ASAP
+
+            // The last lock may still be writing its final save: open the file once that is done.
+            await _closing;
 
             VaultSession? session = await Task.Run(() =>
             {

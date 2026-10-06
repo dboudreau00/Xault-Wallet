@@ -20,8 +20,9 @@ namespace XaultWallet.Core.Security;
 /// password — exactly the coercion scenario the feature exists for — could decrypt the decoy and
 /// read <c>"kind":1</c>, proving a hidden wallet.
 ///
-/// v1 and v2 slots still read (as a one-wallet profile) and are re-sealed as v3 the first time
-/// their password opens them.
+/// v1 and v2 slots still read (as a one-wallet profile). A v1 slot is re-sealed as v3 the first
+/// time its password opens it (to remove its marker); a v2 slot the first time 0.5 saves it, which
+/// 0.3 then refuses as "created by a newer version".
 /// </summary>
 internal static class SlotPayload
 {

@@ -220,6 +220,38 @@ public sealed class WalletFeatureTests
         await Assert.ThrowsAsync<ArgumentException>(() => svc.SetDaemonAsync("not a url"));
     }
 
+    /// <summary>
+    /// rescan_spent sends every key image of the wallet to the node, and monero-wallet-rpc does it for
+    /// any node (only monero-wallet-cli asks for a trusted one). The app allows it only with a node on
+    /// this computer: after switching to any other, it is refused before anything is sent.
+    /// </summary>
+    [Fact]
+    public async Task Spent_Outputs_Are_Rechecked_Only_With_A_Node_On_This_Computer()
+    {
+        if (Skip()) { return; }
+
+        if (!DaemonAddress.IsLoopback(IntegrationEnv.Daemon))
+        {
+            _out.WriteLine("SKIPPED: needs a node on this computer.");
+            return;
+        }
+
+        await using MoneroWalletService svc = IntegrationEnv.NewService();
+        WalletSecrets wallet = await NewSeedWalletAsync(svc);
+        await svc.OpenAsync(wallet);
+        Assert.True(svc.NodeIsLocal);
+        await svc.RescanSpentAsync();
+
+        // 192.0.2.1 (TEST-NET-1) is never this computer; set_daemon only records it.
+        await svc.SetDaemonAsync("http://192.0.2.1:18081");
+        Assert.False(svc.NodeIsLocal);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.RescanSpentAsync());
+
+        await svc.SetDaemonAsync(IntegrationEnv.Daemon!);
+        Assert.True(svc.NodeIsLocal);
+        await svc.RescanSpentAsync();
+    }
+
     private async Task EventuallyAsync(Func<Task<bool>> condition, string what)
     {
         var deadline = DateTime.UtcNow.AddMinutes(3);

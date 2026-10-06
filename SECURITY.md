@@ -18,10 +18,11 @@ stored password material.
 
 **What a password opens.** Each password opens a *profile*: one or more wallets (from a seed, from
 keys, or watch-only), an address book, and the subaddress labels, account names and transaction
-notes of each wallet. All of it is sealed together in that password's slot. Since 0.5 every slot is
-256 KiB of encrypted data however much it holds, so the file is the same size for one wallet or
-twenty, with or without contacts. When a profile no longer fits, the app refuses the change and
-says so; nothing is written.
+notes of each wallet. All of it is sealed together in that password's slot. In a vault created by
+0.5, or upgraded to its format, every slot is 256 KiB of encrypted data however much it holds, so
+the file is the same size for one wallet or twenty, with or without contacts. A vault from 0.2 or
+0.3 keeps its 4 KiB slots until you upgrade it ([Upgrading to 0.5](#upgrading-to-05-vault-format-2)).
+When a profile no longer fits, the app refuses the change and says so; nothing is written.
 
 **Duress / plausible deniability.** The file always contains two equal-sized slots. Without a
 correct password an adversary cannot tell whether the second slot is a decoy profile or random
@@ -106,7 +107,9 @@ swap, crash dumps, file-system journals). Specifically:
   volumes share this limitation. Since 0.5 more actions change a slot: adding or editing a wallet,
   contact, label or note, handing out a subaddress, changing a wallet's node, even switching wallets
   (the vault remembers the one you used last) re-seal that password's slot. Simply unlocking does
-  not, apart from converting an older vault once and wipe-on-duress.
+  not, apart from wipe-on-duress and three one-time cases: the first unlock of a 0.1 slot, the first
+  save 0.5 makes in a 0.2/0.3 slot, and the first time 0.5 opens a wallet restored from a seed (it
+  records the wallet's main address, so that adding the same wallet again by its keys is caught).
 - **A wipe flag examined before it fires.** If you enable wipe-on-duress, an examiner who decrypts the
   decoy *offline* — without the app ever opening it — can read `wipeOther: true` and infer a second
   wallet existed. The instruction has to be readable with the duress password; once the app opens the
@@ -179,19 +182,37 @@ did, the clean fix is to rebuild the vault:
 
 ## Upgrading to 0.5 (vault format 2)
 
-0.5 stores whole profiles, so its slots are bigger: a vault written by 0.2 or 0.3 (format 1, 4 KiB
-slots) becomes a format 2 file (256 KiB slots) the first time 0.5 opens it. As with 0.1, each slot
-can only be re-sealed by its own password, so:
+0.5 seals a whole profile in each password's part of the vault, which needs more room than 0.2 and
+0.3 gave it. A vault they wrote (format 1: 4 KiB per password) opens in 0.5 and **stays in format 1
+until you upgrade it** in Settings → *Vault format* (shown while one of its wallets is open). Nothing
+about the file changes on its own.
 
-- The slot your password opens is converted to a one-wallet profile and re-sealed.
-- The **other slot is carried over byte for byte**, at the start of its new, larger slot (the rest is
-  random). It stays readable by its own password, which converts it whenever it is next used, and it
-  looks exactly like random data to anyone else, as before. Opening it does the same work as any
-  other slot: every slot is tried both ways, every time.
+- **In the old format** each password's part holds about 4 KB: a wallet or two with some labels,
+  notes and contacts. A change that doesn't fit is refused, nothing is written, and the message
+  points to the upgrade. 0.5 saves a password's part in its own layout the first time it writes it
+  (the first time it opens each of its wallets, to record the wallet's main address, and on any
+  change). 0.3 can still open the file and any part 0.5 hasn't saved; it refuses a saved one as
+  "created by a newer version of XaultWallet", and changes nothing.
+- **Upgrading** turns the file into format 2 (256 KiB per password, as every vault 0.5 creates). The
+  part your password opens is re-sealed in it. The **other part is carried over byte for byte**, at
+  the start of its new, larger slot (the rest is random), and is re-sealed when its own password next
+  opens it; until then it opens as before, because every slot is tried both ways on every unlock.
 - **There is no way back.** 0.3 and earlier can't open a format 2 file: they report that the vault
   file has an unexpected size, and change nothing. If you might return to 0.3, export a backup
-  (Settings → Export backup) *before* opening the vault in 0.5.
-- Vaults created by 0.1 are converted the same way, and everything in
+  (Settings → Export backup) first, and keep it until you're sure.
+- **A second password.** Until it has been used in 0.5, its part shows that — to whoever can open
+  that part, which is to say whoever holds that password: in the old format its contents are still
+  in 0.3's layout, and after an upgrade it is a carried part. That is exactly the duress scenario: an
+  examiner with the duress password and the vault file could see that the decoy hasn't been used
+  since the vault was, and conclude that another password has been. So:
+  - **Without wipe-on-duress:** unlock with the duress password in 0.5 before anything else, and wait
+    until its wallet is ready (its address shows). If you want the bigger format, upgrade from there.
+    Then lock and use your main password as usual: its part is re-sealed when it opens.
+  - **With wipe-on-duress:** don't: any use of the duress password wipes the main wallets. Upgrade
+    from your main password if you need the room, knowing an examiner who decrypts the decoy can tell
+    — as they can already read its wipe flag (see above). For a vault without either sign, rebuild it
+    in 0.5 from both seeds (the steps under [Upgrading from 0.1](#upgrading-from-01)).
+- Vaults created by 0.1 open the same way, and everything in
   [Upgrading from 0.1](#upgrading-from-01) still applies to them.
 
 ## The monero-wallet-rpc installer

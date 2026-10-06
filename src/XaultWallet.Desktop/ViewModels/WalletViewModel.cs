@@ -28,6 +28,19 @@ public sealed partial class AccountChoice : ObservableObject
     [NotifyPropertyChangedFor(nameof(Display))]
     private string _balanceText = string.Empty;
 
+    private ulong? _balance;
+
+    /// <summary>The account's balance as last fetched (atomic units, as wallet-rpc reports it), shown or masked.</summary>
+    internal void SetBalance(ulong atomic, bool hide)
+    {
+        _balance = atomic;
+        Mask(hide);
+    }
+
+    /// <summary>Show or mask the balance (shoulder-surfing mode), without waiting for a refresh.</summary>
+    internal void Mask(bool hide) =>
+        BalanceText = _balance is not { } balance ? string.Empty : hide ? "●●●●●" : XmrAmount.Format(balance) + " XMR";
+
     public string Name => Label.Length > 0 ? Label : Index == 0 ? "Primary account" : $"Account #{Index}";
 
     public string Display => BalanceText.Length > 0 ? $"{Name} · {BalanceText}" : Name;
@@ -171,7 +184,14 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     [NotifyPropertyChangedFor(nameof(LockedDisplay))]
     private bool _hideBalances = AppServices.Instance.Settings.HideBalances;
 
-    partial void OnHideBalancesChanged(bool value) => RebuildHistoryRows(); // history amounts mask too
+    partial void OnHideBalancesChanged(bool value)
+    {
+        RebuildHistoryRows(); // history amounts mask too
+        foreach (AccountChoice account in Accounts)
+        {
+            account.Mask(value); // and the account picker's balances
+        }
+    }
 
     private const string Masked = "●●●●●";
 
@@ -205,20 +225,10 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
 
     public string LockedDisplay => HideBalances ? $"Maturing {Masked}" : $"Maturing {XmrAmount.Format(LockedBalance)} XMR";
 
+    /// <summary>Hide or show amounts — in every open wallet, not only this one: switching to another
+    /// must not put its balance on screen.</summary>
     [RelayCommand]
-    private void ToggleBalances()
-    {
-        HideBalances = !HideBalances;
-        try
-        {
-            AppServices.Instance.Settings.HideBalances = HideBalances;
-            AppServices.Instance.SaveSettings();
-        }
-        catch
-        {
-            // Persisting the preference is best-effort; the toggle itself already applied.
-        }
-    }
+    private void ToggleBalances() => _profile.SetHideBalances(!HideBalances);
 
     /// <summary>Which Monero network this wallet is on — shown as a badge so a real-funds
     /// mainnet wallet is never mistaken for a test one (or vice versa). A local regtest node uses
@@ -284,7 +294,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
                 OnPropertyChanged(nameof(HasSeveralAccounts));
             }
 
-            choice.BalanceText = HideBalances ? Masked : XmrAmount.Format(a.Balance) + " XMR";
+            choice.SetBalance(a.Balance, HideBalances);
         }
     }
 
@@ -305,6 +315,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             IsLocalTestChain = _wallet.IsLocalTestChain;
             _profile.NoteLocalTestChain(WalletId, IsLocalTestChain);
             PrimaryAddress = await _wallet.GetPrimaryAddressAsync(_cts.Token);
+            _profile.NoteAddress(WalletId, PrimaryAddress);
             ReceiveAddress = PrimaryAddress;
             IsReady = true;
             Status = "Syncing in the background…";

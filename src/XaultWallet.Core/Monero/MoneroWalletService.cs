@@ -67,9 +67,10 @@ public sealed class MoneroWalletService : IAsyncDisposable
         {
             tip = await MoneroDiagnostics.ProbeDaemonAsync(daemonAddress, _options.ProxyAddress, ct).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            // Unreachable/odd daemon: fall back to 0 — a full scan later is slow but never loses funds.
+            // Unreachable/odd daemon — one that doesn't answer in time included (HttpClient reports its
+            // timeout as a cancellation): fall back to 0. A full scan later is slow but never loses funds.
         }
 
         await using var proc = new MoneroProcessManager(_walletRpcBinary, _options);

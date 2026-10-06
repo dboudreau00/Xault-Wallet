@@ -119,6 +119,13 @@ public sealed partial class WalletViewModel
     /// picker's selection, which a picker drops when the contact list moves the item.</summary>
     private ContactRow? _payee;
 
+    /// <summary>Contact addresses replaced since the payment being built was snapshotted: a payment
+    /// to one of them is set aside when it is ready, as it is once the confirmation shows.</summary>
+    private readonly HashSet<string> _replacedAddresses = new(StringComparer.Ordinal);
+
+    private const string ReplacedWhileBuilding =
+        "A contact's address changed while this payment was being built, so nothing was sent. Review it again.";
+
     /// <summary>The contact the typed address belongs to, if any.</summary>
     public string SendRecipientName => _profile.ContactNameFor(SendAddress) is { } name ? "Contact: " + name : string.Empty;
 
@@ -160,10 +167,14 @@ public sealed partial class WalletViewModel
             r.OnContactChanged(row, removed);
         }
 
-        if (ShowSendConfirm && !removed && oldAddress != row.Address && ConfirmLines.Any(l => l.Address == oldAddress))
+        if (!removed && oldAddress != row.Address)
         {
-            CancelSend();
-            SendResult = $"{row.Name}'s address changed, so nothing was sent. Review the payment again.";
+            _replacedAddresses.Add(oldAddress); // a payment still being built to it is set aside when ready
+            if (ShowSendConfirm && ConfirmLines.Any(l => l.Address == oldAddress))
+            {
+                CancelSend();
+                SendResult = $"{row.Name}'s address changed, so nothing was sent. Review the payment again.";
+            }
         }
 
         OnContactNamesChanged();
@@ -435,7 +446,8 @@ public sealed partial class WalletViewModel
         decimal total = destinations.Sum(d => d.xmr);
         if (total > UnlockedBalance)
         {
-            SendResult = $"That's more than your spendable balance ({XmrAmount.Format(UnlockedBalance)} XMR). " +
+            string balance = HideBalances ? string.Empty : $" ({XmrAmount.Format(UnlockedBalance)} XMR)"; // hidden means hidden
+            SendResult = $"That's more than your spendable balance{balance}. " +
                          "Some balance may still be maturing, and the network fee comes on top.";
             return;
         }
@@ -449,7 +461,15 @@ public sealed partial class WalletViewModel
             uint priority = (uint)Math.Clamp(SendPriority, 0, 3);
             string prio = priority switch { 1 => "Low", 2 => "Medium", 3 => "High", _ => "Default" };
 
-            _preparedTx = await _wallet.PrepareSendAsync(destinations, AccountIndex, priority, _cts.Token);
+            _replacedAddresses.Clear();
+            TransferResult prepared = await _wallet.PrepareSendAsync(destinations, AccountIndex, priority, _cts.Token);
+            if (destinations.Any(d => _replacedAddresses.Contains(d.address)))
+            {
+                SendResult = ReplacedWhileBuilding; // built for an address its contact no longer has
+                return;
+            }
+
+            _preparedTx = prepared;
             _preparedAmount = total;
             ConfirmLines.Clear();
             foreach ((string address, decimal xmr) in destinations)
@@ -535,7 +555,14 @@ public sealed partial class WalletViewModel
             uint priority = (uint)Math.Clamp(SendPriority, 0, 3);
             string destination = SendAddress.Trim();
 
+            _replacedAddresses.Clear();
             SweepAllResult sweep = await _wallet.PrepareSweepAllAsync(destination, AccountIndex, priority, _cts.Token);
+            if (_replacedAddresses.Contains(destination))
+            {
+                SendResult = ReplacedWhileBuilding;
+                return;
+            }
+
             _preparedSweep = sweep;
             ConfirmSendAddress = destination;
             ConfirmRecipientName = _profile.ContactNameFor(destination) ?? string.Empty;

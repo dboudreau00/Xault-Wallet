@@ -315,7 +315,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             IsLocalTestChain = _wallet.IsLocalTestChain;
             _profile.NoteLocalTestChain(WalletId, IsLocalTestChain);
             PrimaryAddress = await _wallet.GetPrimaryAddressAsync(_cts.Token);
-            _profile.NoteAddress(WalletId, PrimaryAddress);
+            _ = _profile.NoteAddressAsync(WalletId, PrimaryAddress);
             ReceiveAddress = PrimaryAddress;
             IsReady = true;
             Status = "Syncing in the background…";

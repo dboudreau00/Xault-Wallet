@@ -1,10 +1,12 @@
 name: Windows end-to-end
 
 # The real XaultWallet.exe on a Windows machine, driven from outside through UI Automation (the
-# interface screen readers use), with the official Windows monero-wallet-rpc.exe next to it and a
-# private regtest chain: create a vault, verify the seed backup, duress password and decoy, unlock
-# both wallets, receive, send, history, settings. Then a clean shutdown is checked: no
-# monero-wallet-rpc left running, no wallet session folder in %TEMP%, nothing written next to the exe.
+# interface screen readers use), against a private regtest chain. It starts WITHOUT monero-wallet-rpc:
+# the run begins by clicking the app's own "Download & install", which fetches the official Windows
+# CLI from getmonero.org, checks binaryFate's signature and the checksum, and installs it. Then: create
+# a vault, verify the seed backup, duress password and decoy, unlock both wallets, receive, send,
+# history, settings. Then a clean shutdown is checked: no monero-wallet-rpc left running, no wallet
+# session folder in %TEMP%, nothing written next to the exe, the install where it belongs.
 #
 # The release workflow calls this with the exact win-x64 zip it is about to attach to the draft.
 # Screenshots are uploaded as the "e2e-screens-windows" artifact. To also get them on the
@@ -71,7 +73,7 @@ jobs:
           [ ${#zips[@]} -eq 1 ] || { echo "::error::expected one win-x64 zip, found: ${zips[*]}"; exit 1; }
           mkdir app && 7z x -oapp "${zips[0]}" >/dev/null && ls -la app
 
-      - name: Official Monero CLI for Windows, checked against binaryFate's signed hashes.txt
+      - name: monerod for the private test chain (official CLI, checked against binaryFate's signed hashes.txt)
         shell: bash
         run: |
           set -euo pipefail
@@ -91,11 +93,10 @@ jobs:
           curl -fsSL --retry 3 -o "$file" "https://downloads.getmonero.org/cli/$file"
           echo "$sha  $file" | sha256sum -c -
           7z x -omonero "$file" >/dev/null
-          rpcs=(monero/*/monero-wallet-rpc.exe) && rpc=${rpcs[0]}
-          [ -f "$rpc" ] || { echo "::error::monero-wallet-rpc.exe not in $file"; exit 1; }
-          # Where the README tells users to put it: next to XaultWallet.exe.
-          cp "$rpc" app/
-          echo "MONEROD=$(cygpath -w "$(dirname "$rpc")/monerod.exe")" >> "$GITHUB_ENV"
+          daemons=(monero/*/monerod.exe) && daemon=${daemons[0]}
+          [ -f "$daemon" ] || { echo "::error::monerod.exe not in $file"; exit 1; }
+          # monero-wallet-rpc is deliberately NOT put next to XaultWallet.exe: the app installs its own.
+          echo "MONEROD=$(cygpath -w "$daemon")" >> "$GITHUB_ENV"
 
       - name: Screen at 1920x1080 (hosted runners start at 1024x768; the test maximizes otherwise)
         continue-on-error: true

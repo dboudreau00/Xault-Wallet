@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using XaultWallet.Core.Diagnostics;
@@ -7,18 +8,130 @@ using XaultWallet.Core.Monero;
 
 namespace XaultWallet.Desktop.ViewModels;
 
+/// <summary>An account of the open wallet, for the account picker.</summary>
+public sealed partial class AccountChoice : ObservableObject
+{
+    public AccountChoice(uint index, string label)
+    {
+        Index = index;
+        _label = label;
+    }
+
+    public uint Index { get; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Name))]
+    [NotifyPropertyChangedFor(nameof(Display))]
+    private string _label;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Display))]
+    private string _balanceText = string.Empty;
+
+    private ulong? _balance;
+
+    /// <summary>The account's balance as last fetched (atomic units, as wallet-rpc reports it), shown or masked.</summary>
+    internal void SetBalance(ulong atomic, bool hide)
+    {
+        _balance = atomic;
+        Mask(hide);
+    }
+
+    /// <summary>Show or mask the balance (shoulder-surfing mode), without waiting for a refresh.</summary>
+    internal void Mask(bool hide) =>
+        BalanceText = _balance is not { } balance ? string.Empty : hide ? "●●●●●" : XmrAmount.Format(balance) + " XMR";
+
+    public string Name => Label.Length > 0 ? Label : Index == 0 ? "Primary account" : $"Account #{Index}";
+
+    public string Display => BalanceText.Length > 0 ? $"{Name} · {BalanceText}" : Name;
+
+    public override string ToString() => Name;
+}
+
+/// <summary>
+/// One open wallet: its own monero-wallet-rpc backend, balance, sync state and the five tabs
+/// (receive, send, history, contacts, tools), plus its management sheet. The parts live in
+/// WalletViewModel.*.cs. It belongs to a <see cref="ProfileViewModel"/>, which owns the vault
+/// session (saving), the contacts and the inactivity lock.
+/// </summary>
 public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
 {
+    private readonly ProfileViewModel _profile;
     private readonly WalletSecrets _secrets;
     private MoneroWalletService _wallet;
     private readonly CancellationTokenSource _cts = new();
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private Task? _autoRefreshLoop;
     private bool _disposed;
+    private bool _foreground;
+    private DateTime _nextRefreshUtc = DateTime.UtcNow;
 
-    [ObservableProperty] private string _status = "Starting wallet\u2026";
+    public WalletViewModel(ProfileViewModel profile, WalletSecrets secrets)
+        : this(profile, secrets, startBackend: true)
+    {
+    }
+
+    private WalletViewModel(ProfileViewModel profile, WalletSecrets secrets, bool startBackend)
+    {
+        _profile = profile ?? throw new ArgumentNullException(nameof(profile));
+        _secrets = secrets ?? throw new ArgumentNullException(nameof(secrets));
+        _wallet = AppServices.Instance.CreateWalletService();
+        Accounts.Add(new AccountChoice(0, AccountLabel(0)));
+        _selectedAccount = Accounts[0];
+        _nodeAddress = secrets.DaemonAddress;
+        _renameText = secrets.Name;
+        if (startBackend)
+        {
+            _ = InitializeAsync();
+        }
+    }
+
+    /// <summary>A wallet screen with no backend behind it, inside the given preview profile — for
+    /// UI snapshots and tests only.</summary>
+    internal static WalletViewModel ForPreview(ProfileViewModel profile, WalletSecrets secrets) => new(profile, secrets, startBackend: false);
+
+    /// <summary>A wallet screen with no backend, alone in a preview profile — for UI snapshots and tests.</summary>
+    internal static WalletViewModel ForPreview(WalletSecrets secrets) =>
+        ProfileViewModel.ForPreview(WalletProfile.OfOne(secrets)).Start();
+
+    /// <summary>The vault profile this wallet belongs to (switcher, contacts, lock countdown).</summary>
+    public ProfileViewModel Profile => _profile;
+
+    public string WalletId => _secrets.Id;
+
+    public string WalletName => _secrets.Name;
+
+    /// <summary>A watch-only wallet sees incoming payments but can't spend.</summary>
+    public bool IsViewOnly => _secrets.Kind == WalletKind.ViewOnly;
+
+    public bool CanSpend => _secrets.CanSpend;
+
+    internal void OnRenamed()
+    {
+        OnPropertyChanged(nameof(WalletName));
+        RenameText = _secrets.Name;
+    }
+
+    /// <summary>On screen: refresh now, then at the normal pace.</summary>
+    internal void OnForeground()
+    {
+        _foreground = true;
+        _nextRefreshUtc = DateTime.UtcNow;
+    }
+
+    /// <summary>Another wallet is on screen: keep syncing, but slowly.</summary>
+    internal void OnBackground()
+    {
+        _foreground = false;
+        ShowManage = false;
+    }
+
+    // ------------------------------------------------------------------ status, balance, sync
+
+    [ObservableProperty] private string _status = "Starting wallet…";
     [ObservableProperty] private bool _isReady;
     [ObservableProperty] private bool _startupFailed;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LockedBalance))]
     [NotifyPropertyChangedFor(nameof(HasLocked))]
@@ -28,6 +141,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     [NotifyPropertyChangedFor(nameof(UnlockedDisplay))]
     [NotifyPropertyChangedFor(nameof(LockedDisplay))]
     private decimal _balance;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LockedBalance))]
     [NotifyPropertyChangedFor(nameof(HasLocked))]
@@ -38,15 +152,10 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
 
     /// <summary>Balance still maturing (total minus spendable). Never negative.</summary>
     public decimal LockedBalance => Math.Max(0m, Balance - UnlockedBalance);
+
     public bool HasLocked => LockedBalance > 0m;
+
     [ObservableProperty] private ulong _height;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ReceiveUri))]
-    private string _primaryAddress = string.Empty;
-
-    /// <summary>What the Receive QR encodes: the standard Monero URI for the shown address.</summary>
-    public string ReceiveUri => string.IsNullOrEmpty(PrimaryAddress) ? string.Empty : "monero:" + PrimaryAddress;
 
     partial void OnHeightChanged(ulong oldValue, ulong newValue)
     {
@@ -64,107 +173,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private double _syncProgress;          // 0..100
     [ObservableProperty] private ulong _daemonHeight;
     [ObservableProperty] private bool _isSynced;
-    [ObservableProperty] private string _syncText = "Connecting to node\u2026";
-
-    // Send tab
-    [ObservableProperty] private string _sendAddress = string.Empty;
-
-    /// <summary>The amount exactly as typed. Parsed by <see cref="XmrAmount"/> (culture-independent)
-    /// — never bound as a number, because culture-aware conversion turned "0,25" into 25 XMR.</summary>
-    [ObservableProperty] private string _sendAmountText = string.Empty;
-
-    /// <summary>Live read-back of how the typed amount is understood, e.g. "= 0.25 XMR".</summary>
-    [ObservableProperty] private string _sendAmountPreview = string.Empty;
-    [ObservableProperty] private bool _sendAmountPreviewIsError;
-
-    partial void OnSendAmountTextChanged(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            SendAmountPreview = string.Empty;
-            SendAmountPreviewIsError = false;
-            return;
-        }
-
-        if (XmrAmount.TryParse(value, out decimal xmr, out string? error))
-        {
-            SendAmountPreview = XmrAmount.LooksThousandsGrouped(value)
-                ? $"= {XmrAmount.Format(xmr)} XMR — the separator is read as a decimal point"
-                : $"= {XmrAmount.Format(xmr)} XMR";
-            SendAmountPreviewIsError = false;
-        }
-        else
-        {
-            SendAmountPreview = error ?? "Invalid amount.";
-            SendAmountPreviewIsError = true;
-        }
-    }
-    [ObservableProperty] private int _sendPriority = 1;
-
-    /// <summary>One line on the outcome of the last send attempt ("Sent 12.5 XMR", or why not).</summary>
-    [ObservableProperty] private string _sendResult = string.Empty;
-
-    /// <summary>Second line for a completed send: the fee and when the money moves.</summary>
-    [ObservableProperty] private string _sendResultDetail = string.Empty;
-
-    /// <summary>How <see cref="SendResult"/> is presented: success, "check before retrying", or not sent.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SendSucceeded))]
-    [NotifyPropertyChangedFor(nameof(SendNeedsCheck))]
-    [NotifyPropertyChangedFor(nameof(SendFailed))]
-    private SendOutcome _sendOutcome;
-
-    public bool SendSucceeded => SendOutcome == SendOutcome.Sent;
-
-    public bool SendNeedsCheck => SendOutcome == SendOutcome.NeedsCheck;
-
-    public bool SendFailed => SendOutcome == SendOutcome.Failed;
-
-    // Any message is a "not sent" until a send path says otherwise; clearing it clears the outcome.
-    partial void OnSendResultChanged(string value)
-    {
-        if (value.Length == 0)
-        {
-            SendOutcome = SendOutcome.None;
-            SendResultDetail = string.Empty;
-        }
-        else if (SendOutcome == SendOutcome.None)
-        {
-            SendOutcome = SendOutcome.Failed;
-        }
-    }
-
-    [ObservableProperty] private bool _sending;
-
-    // Send confirmation overlay (irreversible action — always confirm)
-    [ObservableProperty] private bool _showSendConfirm;
-    [ObservableProperty] private string _sendSummary = string.Empty;
-    [ObservableProperty] private string _confirmAmountText = string.Empty;
-    [ObservableProperty] private string _sendFeeText = string.Empty;
-    [ObservableProperty] private string _sendTotalText = string.Empty;
-
-    /// <summary>Snapshot of the destination the prepared tx actually pays. The overlay binds to
-    /// THIS, not the live SendAddress field — so nothing typed under the overlay can make the
-    /// display disagree with what Confirm broadcasts.</summary>
-    [ObservableProperty] private string _confirmSendAddress = string.Empty;
-
-    // Transaction built by ReviewSend (do_not_relay) and broadcast only on explicit confirm.
-    // Holds the exact fee; discarding it (Cancel) means nothing ever touches the network.
-    private TransferResult? _preparedTx;
-    private decimal _preparedAmount;
-
-    // Prepared sweep-all (Send max): same do_not_relay contract, but may span several
-    // transactions. Mutually exclusive with _preparedTx — exactly one is non-null while the
-    // confirm overlay is up.
-    private SweepAllResult? _preparedSweep;
-
-    /// <summary>Set when the prepared fee is anomalously high relative to the amount —
-    /// a habituated user shouldn't be able to click through a fee spike unwarned.</summary>
-    [ObservableProperty] private string _sendFeeWarning = string.Empty;
-
-    // Auto-lock countdown: visible warning strip shortly before the inactivity lock fires.
-    [ObservableProperty] private bool _lockImminent;
-    [ObservableProperty] private string _lockCountdownText = string.Empty;
+    [ObservableProperty] private string _syncText = "Connecting to node…";
 
     /// <summary>Masks balances on screen (shoulder-surfing). Persisted in settings.</summary>
     [ObservableProperty]
@@ -175,13 +184,21 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     [NotifyPropertyChangedFor(nameof(LockedDisplay))]
     private bool _hideBalances = AppServices.Instance.Settings.HideBalances;
 
-    partial void OnHideBalancesChanged(bool value) => RebuildHistoryRows(); // history amounts mask too
+    partial void OnHideBalancesChanged(bool value)
+    {
+        RebuildHistoryRows(); // history amounts mask too
+        foreach (AccountChoice account in Accounts)
+        {
+            account.Mask(value); // and the account picker's balances
+        }
+    }
 
     private const string Masked = "●●●●●";
+
     public string BalanceDisplay => HideBalances ? Masked : XmrAmount.Format(Balance);
 
     /// <summary>Balance split for display: whole part bright, fraction dimmed ("12" + ".4830…").</summary>
-    public string BalanceWhole => HideBalances ? Masked : decimal.Truncate(Balance).ToString(System.Globalization.CultureInfo.InvariantCulture);
+    public string BalanceWhole => HideBalances ? Masked : decimal.Truncate(Balance).ToString(CultureInfo.InvariantCulture);
 
     public string BalanceFraction
     {
@@ -197,29 +214,28 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             return dot < 0 ? string.Empty : full[dot..];
         }
     }
-    public string UnlockedDisplay => HideBalances ? $"Spendable {Masked}" : $"Spendable {XmrAmount.Format(UnlockedBalance)} XMR";
+
+    /// <summary>A watch-only wallet can't tell which of its outputs were spent (that takes the spend
+    /// key), so what it shows is what it received: say so instead of calling it a balance.</summary>
+    public string BalanceLabel => IsViewOnly ? "RECEIVED · SPENDS NOT VISIBLE" : "BALANCE";
+
+    private string SpendableWord => IsViewOnly ? "Unlocked" : "Spendable";
+
+    public string UnlockedDisplay => HideBalances ? $"{SpendableWord} {Masked}" : $"{SpendableWord} {XmrAmount.Format(UnlockedBalance)} XMR";
+
     public string LockedDisplay => HideBalances ? $"Maturing {Masked}" : $"Maturing {XmrAmount.Format(LockedBalance)} XMR";
 
+    /// <summary>Hide or show amounts — in every open wallet, not only this one: switching to another
+    /// must not put its balance on screen.</summary>
     [RelayCommand]
-    private void ToggleBalances()
-    {
-        HideBalances = !HideBalances;
-        try
-        {
-            AppServices.Instance.Settings.HideBalances = HideBalances;
-            AppServices.Instance.SaveSettings();
-        }
-        catch
-        {
-            // Persisting the preference is best-effort; the toggle itself already applied.
-        }
-    }
+    private void ToggleBalances() => _profile.SetHideBalances(!HideBalances);
 
     /// <summary>Which Monero network this wallet is on — shown as a badge so a real-funds
     /// mainnet wallet is never mistaken for a test one (or vice versa). A local regtest node uses
     /// mainnet-format addresses but holds no real funds, so it gets its own label.</summary>
     public string NetworkLabel => IsLocalTestChain ? "Regtest · local test chain" : _secrets.Network.ToString();
-    public bool IsMainnetWallet => _secrets.Network == Core.Models.MoneroNetwork.Mainnet && !IsLocalTestChain;
+
+    public bool IsMainnetWallet => _secrets.Network == MoneroNetwork.Mainnet && !IsLocalTestChain;
 
     /// <summary>The node is the user's own private test chain (see MoneroDiagnostics.IsLocalTestChainAsync).</summary>
     [ObservableProperty]
@@ -227,90 +243,66 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     [NotifyPropertyChangedFor(nameof(IsMainnetWallet))]
     private bool _isLocalTestChain;
 
-    /// <summary>Feedback line for the Receive tab (new-subaddress errors) — kept OFF the Status
-    /// line, which the sync tracker overwrites every few seconds. Copy feedback is the view's toast.</summary>
-    [ObservableProperty] private string _receiveNotice = string.Empty;
+    /// <summary>Which tab is showing: 0 Receive, 1 Send, 2 History, 3 Contacts, 4 Tools.</summary>
+    [ObservableProperty] private int _selectedTab;
 
-    // Payment proof (the tx key from the most recent send — safe to share for explorer verification)
-    [ObservableProperty] private bool _hasLastTx;
-    [ObservableProperty] private string _lastTxId = string.Empty;
-    [ObservableProperty] private string _lastTxKey = string.Empty;
+    // ------------------------------------------------------------------ accounts
 
-    // Verify-a-payment panel
-    [ObservableProperty] private string _verifyTxId = string.Empty;
-    [ObservableProperty] private string _verifyTxKey = string.Empty;
-    [ObservableProperty] private string _verifyAddress = string.Empty;
-    [ObservableProperty] private string _verifyResult = string.Empty;
-    [ObservableProperty] private bool _verifyOk;
-
-    /// <summary>Display rows for the History list (rebuilt from <see cref="_entries"/>).</summary>
-    public ObservableCollection<HistoryRow> History { get; } = new();
-
-    /// <summary>The raw transfers as last fetched — the source of truth for rows and CSV export.</summary>
-    private IReadOnlyList<TransferEntry> _entries = Array.Empty<TransferEntry>();
-
-    /// <summary>Replace the transfer list (also used by UI previews).</summary>
-    internal void SetHistory(IReadOnlyList<TransferEntry> entries)
-    {
-        _entries = entries;
-        RebuildHistoryRows();
-    }
-
-    private void RebuildHistoryRows()
-    {
-        History.Clear();
-        foreach (TransferEntry t in _entries)
-        {
-            History.Add(new HistoryRow(t, Height, HideBalances));
-        }
-
-        HasHistory = History.Count > 0;
-    }
-
-    /// <summary>Drives the History tab's empty-state hint.</summary>
-    [ObservableProperty] private bool _hasHistory;
-
-    /// <summary>Shown once, after a vault from 0.1 is opened and re-sealed in the current format.</summary>
-    internal const string LegacyUpgradeNotice =
-        "This vault was created by XaultWallet 0.1 and has been upgraded. Only the part this password " +
-        "opens was converted; any other password converts when it is next used. See \u201CUpgrading " +
-        "from 0.1\u201D in SECURITY.md (included in the download) before you use another password with this vault.";
+    public ObservableCollection<AccountChoice> Accounts { get; } = new();
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasUpgradeNotice))]
-    private string _upgradeNotice = string.Empty;
+    [NotifyPropertyChangedFor(nameof(AccountIndex))]
+    private AccountChoice? _selectedAccount;
 
-    public bool HasUpgradeNotice => UpgradeNotice.Length > 0;
+    /// <summary>The account balance, receive, send and history work with.</summary>
+    public uint AccountIndex => SelectedAccount?.Index ?? 0;
 
-    [RelayCommand]
-    private void DismissUpgradeNotice() => UpgradeNotice = string.Empty;
+    public bool HasSeveralAccounts => Accounts.Count > 1;
 
-    public event Action? Locked;
-
-    /// <summary>Raised when the user asks to open Settings from the wallet screen (e.g. the
-    /// startup-failure banner). The shell (MainWindowViewModel) handles the actual navigation.</summary>
-    public event Action? SettingsRequested;
-
-    [RelayCommand]
-    private void OpenSettings() => SettingsRequested?.Invoke();
-
-    public WalletViewModel(WalletSecrets secrets)
-        : this(secrets, startBackend: true)
+    partial void OnSelectedAccountChanged(AccountChoice? value)
     {
+        if (value is null)
+        {
+            return;
+        }
+
+        // Everything shown is per account: start over from the new one.
+        _entries = Array.Empty<TransferEntry>();
+        History.Clear();
+        HasHistory = false;
+        Addresses.Clear();
+        ReceiveAddress = string.Empty;
+        ReceiveNotice = string.Empty;
+        _nextRefreshUtc = DateTime.UtcNow;
+        _ = SoftRefreshAsync();
     }
 
-    private WalletViewModel(WalletSecrets secrets, bool startBackend)
+    private string AccountLabel(uint index) => _secrets.AccountLabels.GetValueOrDefault(index) ?? string.Empty;
+
+    /// <summary>Bring the account list in line with the wallet (accounts appear as payments to them are
+    /// found) and show each one's balance.</summary>
+    private async Task RefreshAccountsAsync(CancellationToken ct)
     {
-        _secrets = secrets ?? throw new ArgumentNullException(nameof(secrets));
-        _wallet = AppServices.Instance.CreateWalletService();
-        if (startBackend)
+        GetAccountsResult accounts = await _wallet.GetAccountsAsync(ct);
+        foreach (AccountInfo a in accounts.Accounts.OrderBy(a => a.AccountIndex))
         {
-            _ = InitializeAsync();
+            AccountChoice? choice = Accounts.FirstOrDefault(c => c.Index == a.AccountIndex);
+            if (choice is null)
+            {
+                choice = new AccountChoice(a.AccountIndex, AccountLabel(a.AccountIndex));
+                Accounts.Add(choice);
+                OnPropertyChanged(nameof(HasSeveralAccounts));
+            }
+
+            choice.SetBalance(a.Balance, HideBalances);
         }
     }
 
-    /// <summary>A wallet screen with no backend behind it — for UI snapshots and tests only.</summary>
-    internal static WalletViewModel ForPreview(WalletSecrets secrets) => new(secrets, startBackend: false);
+    // ------------------------------------------------------------------ lifecycle
+
+    /// <summary>Raised when the user asks for Settings from this screen (e.g. the startup-failure banner).</summary>
+    [RelayCommand]
+    private void OpenSettings() => _profile.RequestSettings();
 
     private async Task InitializeAsync()
     {
@@ -318,12 +310,15 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         IsReady = false;
         try
         {
-            Status = "Restoring wallet from seed\u2026";
+            Status = _secrets.Kind == WalletKind.Seed ? "Restoring wallet from seed…" : "Restoring wallet from its keys…";
             await _wallet.OpenAsync(_secrets, _cts.Token);
             IsLocalTestChain = _wallet.IsLocalTestChain;
+            _profile.NoteLocalTestChain(WalletId, IsLocalTestChain);
             PrimaryAddress = await _wallet.GetPrimaryAddressAsync(_cts.Token);
+            _ = _profile.NoteAddressAsync(WalletId, PrimaryAddress);
+            ReceiveAddress = PrimaryAddress;
             IsReady = true;
-            Status = "Syncing in the background\u2026";
+            Status = "Syncing in the background…";
 
             await SoftRefreshAsync();
             // Start the polling loop WITHOUT Task.Run so its awaits resume on the UI thread —
@@ -336,7 +331,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Log.Error("Wallet startup failed", ex);
+            Log.ErrorOnce("wallet-startup", "Wallet startup failed", ex); // once per run: never a per-wallet count
             StartupFailed = true;
             Status = "Couldn't start the wallet. " + Friendly(ex);
         }
@@ -358,60 +353,24 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         await InitializeAsync();
     }
 
-    private DateTime _lastActivityUtc = DateTime.UtcNow;
-
-    /// <summary>Called from the window on any user input to defer auto-lock.</summary>
-    public void NotifyActivity() => _lastActivityUtc = DateTime.UtcNow;
-
     private async Task AutoRefreshLoopAsync(CancellationToken ct)
     {
         try
         {
-            DateTime nextRefreshUtc = DateTime.UtcNow;
             while (!ct.IsCancellationRequested)
             {
-                if (DateTime.UtcNow >= nextRefreshUtc)
+                if (DateTime.UtcNow >= _nextRefreshUtc)
                 {
                     await SoftRefreshAsync();
 
-                    // Snappy updates while the node is catching up; relaxed once synced.
-                    int delayMs = IsSynced
-                        ? Math.Clamp(AppServices.Instance.AutoRefreshSeconds, 5, 600) * 1000
+                    // Snappy while the node catches up; relaxed once synced; slow in the background.
+                    int delayMs = !_foreground ? 60_000
+                        : IsSynced ? Math.Clamp(AppServices.Instance.AutoRefreshSeconds, 5, 600) * 1000
                         : 3000;
-                    nextRefreshUtc = DateTime.UtcNow.AddMilliseconds(delayMs);
+                    _nextRefreshUtc = DateTime.UtcNow.AddMilliseconds(delayMs);
                 }
 
-                // Auto-lock after inactivity (0 = disabled), with a visible countdown for the
-                // last 30 seconds so the wallet never just vanishes mid-read.
-                int lockMinutes = AppServices.Instance.AutoLockMinutes;
-                if (lockMinutes > 0)
-                {
-                    TimeSpan remaining = TimeSpan.FromMinutes(lockMinutes) - (DateTime.UtcNow - _lastActivityUtc);
-                    if (remaining <= TimeSpan.Zero)
-                    {
-                        Log.Info("Auto-locking after inactivity.");
-                        LockImminent = false;
-                        // Fire-and-forget, then RETURN so this loop task can complete.
-                        // Awaiting LockAsync here would deadlock: it disposes the VM, which
-                        // awaits this very task — a task can never await itself finishing.
-                        _ = LockAsync();
-                        return;
-                    }
-
-                    LockImminent = remaining <= TimeSpan.FromSeconds(30);
-                    if (LockImminent)
-                    {
-                        LockCountdownText = $"Locking in {Math.Max(1, (int)remaining.TotalSeconds)} s due to inactivity";
-                    }
-                }
-                else
-                {
-                    LockImminent = false;
-                }
-
-                // Short tick so the countdown stays live; the RPC refresh above still runs on
-                // its own (much slower) cadence.
-                await Task.Delay(LockImminent ? 1000 : 3000, ct);
+                await Task.Delay(1000, ct);
             }
         }
         catch (OperationCanceledException)
@@ -420,19 +379,11 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Log.Warn("Auto-refresh loop ended: " + ex.GetType().Name);
+            Log.WarnOnce("refresh-loop", "Auto-refresh loop ended: " + ex.GetType().Name);
         }
     }
 
-    /// <summary>The "Stay unlocked" button on the countdown strip — any activity defers the lock.</summary>
-    [RelayCommand]
-    private void StayUnlocked()
-    {
-        NotifyActivity();
-        LockImminent = false;
-    }
-
-    /// <summary>Non-blocking refresh: reads current balance/height/history. Errors are soft. </summary>
+    /// <summary>Non-blocking refresh: reads current balance/height/history. Errors are soft.</summary>
     private async Task SoftRefreshAsync()
     {
         if (!IsReady || _disposed)
@@ -456,7 +407,14 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
 
         try
         {
-            (Balance, UnlockedBalance) = await _wallet.GetBalanceAsync(_cts.Token);
+            uint account = AccountIndex;
+            (decimal balance, decimal unlocked) = await _wallet.GetBalanceAsync(account, _cts.Token);
+            if (account != AccountIndex)
+            {
+                return; // the account changed meanwhile; the next refresh shows the right one
+            }
+
+            (Balance, UnlockedBalance) = (balance, unlocked);
             Height = await _wallet.GetHeightAsync(_cts.Token);
 
             // Node sync tracker: compare the wallet's scanned height against the daemon's tip.
@@ -468,17 +426,29 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             {
                 DaemonHeight = 0; // daemon momentarily unreachable; keep last balances
             }
+
             UpdateSyncStatus();
+
+            try
+            {
+                await RefreshAccountsAsync(_cts.Token);
+                await RefreshAddressesAsync(_cts.Token);
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                Log.InfoOnce("address-refresh", "Address list not refreshed: " + ex.GetType().Name);
+            }
 
             // History often isn't available until the wallet finishes scanning; a transient
             // get_transfers failure here should NOT flip the sync status. Keep last known list.
             try
             {
-                IReadOnlyList<TransferEntry> entries = await _wallet.GetHistoryAsync(_cts.Token);
+                IReadOnlyList<TransferEntry> entries = await _wallet.GetHistoryAsync(account, _cts.Token);
 
                 // Rebuild only when something changed: rebuilding on every refresh reset the scroll
                 // position (and any selection) every 20 seconds.
-                if (!SameHistory(_entries, entries))
+                if (account == AccountIndex && !SameHistory(_entries, entries))
                 {
                     SetHistory(entries);
                 }
@@ -486,11 +456,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                if (!_historyNotReadyLogged)
-                {
-                    _historyNotReadyLogged = true; // once per session, not every few seconds
-                    Log.Info("Transaction history not ready yet: " + ex.Message);
-                }
+                Log.InfoOnce("history-not-ready", "Transaction history not ready yet: " + ex.Message);
             }
         }
         catch (OperationCanceledException) { }
@@ -501,7 +467,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             // The startup-failure banner offers Retry, which rebuilds the whole service.
             if (_wallet.BackendExited)
             {
-                Log.Error("Wallet backend process exited unexpectedly.");
+                Log.ErrorOnce("backend-exited", "Wallet backend process exited unexpectedly.");
                 StartupFailed = true;
                 IsReady = false;
                 Status = "The wallet backend stopped unexpectedly. Use Retry to restart it.";
@@ -518,27 +484,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
-    private bool _historyNotReadyLogged;
-
-    private static bool SameHistory(IReadOnlyList<TransferEntry> shown, IReadOnlyList<TransferEntry> fresh)
-    {
-        if (shown.Count != fresh.Count)
-        {
-            return false;
-        }
-
-        for (int i = 0; i < fresh.Count; i++)
-        {
-            TransferEntry a = shown[i], b = fresh[i];
-            if (a.TxId != b.TxId || a.Type != b.Type || a.Height != b.Height || a.Amount != b.Amount || a.Timestamp != b.Timestamp)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
+    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
     private void UpdateSyncStatus()
     {
@@ -549,7 +495,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         {
             IsSynced = false;
             SyncProgress = 0;
-            SyncText = "Connecting to node\u2026";
+            SyncText = "Connecting to node…";
             Status = SyncText;
             return;
         }
@@ -558,7 +504,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         {
             IsSynced = true;
             SyncProgress = 100;
-            SyncText = $"Synced \u00b7 block {node.ToString("N0", Inv)}";
+            SyncText = $"Synced · block {node.ToString("N0", Inv)}";
         }
         else
         {
@@ -569,7 +515,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             double done = wallet > start ? wallet - start : 0;
             SyncProgress = Math.Clamp(100.0 * done / Math.Max(1, node - start), 0, 99.9);
             ulong behind = node - wallet;
-            SyncText = $"Syncing \u00b7 {SyncProgress.ToString("0.0", Inv)}%  \u00b7  {wallet.ToString("N0", Inv)} / {node.ToString("N0", Inv)}  ({behind.ToString("N0", Inv)} behind)";
+            SyncText = $"Syncing · {SyncProgress.ToString("0.0", Inv)}%  ·  {wallet.ToString("N0", Inv)} / {node.ToString("N0", Inv)}  ({behind.ToString("N0", Inv)} behind)";
         }
 
         Status = SyncText;
@@ -586,7 +532,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         // Force a synchronous refresh, but never let a slow/hung refresh wedge the UI.
         try
         {
-            Status = "Refreshing\u2026";
+            Status = "Refreshing…";
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
             timeout.CancelAfter(TimeSpan.FromMinutes(2));
             await _wallet.RefreshAsync(timeout.Token);
@@ -604,417 +550,23 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         await SoftRefreshAsync();
     }
 
-    /// <summary>Step 1 of sending: validate the form, BUILD the transaction without broadcasting
-    /// (do_not_relay), and show the exact fee in the confirmation overlay. Monero transactions are
-    /// irreversible, so the user confirms with the real cost in front of them; problems like
-    /// "not enough money for amount + fee" surface here, before anything is committed.</summary>
+    /// <summary>Locks the whole vault (every wallet), whichever one is showing.</summary>
     [RelayCommand]
-    private async Task ReviewSendAsync()
-    {
-        // Re-entrancy guard: the form stays keyboard-reachable under the confirm overlay, and a
-        // second prepare racing a pending confirm can desync display from broadcast. One prepared
-        // tx at a time, driven only by the overlay's buttons.
-        if (Sending || ShowSendConfirm)
-        {
-            return;
-        }
+    private Task LockAsync() => _profile.LockAsync();
 
-        SendResult = string.Empty;
+    // ------------------------------------------------------------------ feedback to the view
 
-        if (!IsReady)
-        {
-            SendResult = "Wallet isn't ready yet.";
-            return;
-        }
+    /// <summary>The view copies (with the clipboard auto-clear) and confirms with a toast.</summary>
+    public event Action<string, string>? CopyRequested;
 
-        // Sanity-check the address (charset/length/network prefix). monero-wallet-rpc remains
-        // the final authority; this catches wrong-network and truncated-paste mistakes early.
-        if (MoneroAddress.Problem(SendAddress, _secrets.Network) is { } problem)
-        {
-            SendResult = problem;
-            return;
-        }
+    /// <summary>A short message at the bottom of the window.</summary>
+    public event Action<string, bool>? ToastRequested;
 
-        if (!XmrAmount.TryParse(SendAmountText, out decimal amount, out string? amountError))
-        {
-            SendResult = amountError ?? "Enter a valid amount.";
-            return;
-        }
+    private void Copy(string? text, string what) => CopyRequested?.Invoke(text ?? string.Empty, what);
 
-        if (amount > UnlockedBalance)
-        {
-            SendResult = $"Amount exceeds your spendable balance ({XmrAmount.Format(UnlockedBalance)} XMR). " +
-                         "Some balance may still be maturing, and the network fee comes on top.";
-            return;
-        }
+    private void Toast(string text, bool ok = true) => ToastRequested?.Invoke(text, ok);
 
-        Sending = true;
-        try
-        {
-            // Snapshot EVERYTHING the tx is built from BEFORE the await. The overlay displays only
-            // these snapshots — nothing typed into the form while the prepare is in flight (the
-            // fields stay editable) can make the display disagree with what the tx actually pays.
-            uint priority = (uint)Math.Clamp(SendPriority, 0, 3);
-            string destination = SendAddress.Trim();
-            string prio = priority switch { 1 => "Low", 2 => "Medium", 3 => "High", _ => "Default" };
-
-            _preparedTx = await _wallet.PrepareSendAsync(destination, amount, priority, _cts.Token);
-            ConfirmSendAddress = destination;
-            _preparedAmount = amount;
-
-            decimal fee = MoneroRpcClient.AtomicToXmr(_preparedTx.Fee);
-            SendSummary = $"{prio} priority · built and signed, not yet broadcast";
-            ConfirmAmountText = $"{XmrAmount.Format(amount)} XMR";
-            SendFeeText = $"{XmrAmount.Format(fee)} XMR";
-            SendTotalText = $"{XmrAmount.Format(amount + fee)} XMR";
-            SendFeeWarning = FeeWarning(fee, amount);
-            ShowSendConfirm = true;
-        }
-        catch (OperationCanceledException)
-        {
-            // wallet locked/closed mid-prepare; nothing to report
-        }
-        catch (Exception ex)
-        {
-            _preparedTx = null;
-            SendResult = "Couldn't prepare the transaction: " + Friendly(ex);
-        }
-        finally
-        {
-            Sending = false;
-        }
-    }
-
-    /// <summary>Send Max: build transactions sweeping the ENTIRE spendable balance (do_not_relay)
-    /// through the same review→confirm→relay flow as a normal send. Removes the guess-the-fee
-    /// dance when emptying a wallet — the overlay shows the exact swept amount and total fee.</summary>
-    [RelayCommand]
-    private async Task ReviewSendMaxAsync()
-    {
-        if (Sending || ShowSendConfirm)
-        {
-            return;
-        }
-
-        SendResult = string.Empty;
-
-        if (!IsReady)
-        {
-            SendResult = "Wallet isn't ready yet.";
-            return;
-        }
-
-        if (MoneroAddress.Problem(SendAddress, _secrets.Network) is { } problem)
-        {
-            SendResult = problem;
-            return;
-        }
-
-        if (UnlockedBalance <= 0m)
-        {
-            SendResult = "Nothing is spendable right now.";
-            return;
-        }
-
-        Sending = true;
-        try
-        {
-            uint priority = (uint)Math.Clamp(SendPriority, 0, 3);
-            string destination = SendAddress.Trim();
-
-            SweepAllResult sweep = await _wallet.PrepareSweepAllAsync(destination, priority, _cts.Token);
-            _preparedSweep = sweep;
-            ConfirmSendAddress = destination;
-
-            decimal amount = MoneroRpcClient.AtomicToXmr((ulong)sweep.AmountList.Sum(a => (decimal)a));
-            decimal fee = MoneroRpcClient.AtomicToXmr((ulong)sweep.FeeList.Sum(f => (decimal)f));
-            _preparedAmount = amount;
-
-            string txNote = sweep.TxMetadataList.Count > 1 ? $" across {sweep.TxMetadataList.Count} transactions" : "";
-            SendSummary = $"Sweep of ALL spendable funds{txNote} · not yet broadcast";
-            ConfirmAmountText = $"{XmrAmount.Format(amount)} XMR";
-            SendFeeText = $"{XmrAmount.Format(fee)} XMR";
-            SendTotalText = $"{XmrAmount.Format(amount + fee)} XMR";
-            SendFeeWarning = FeeWarning(fee, amount);
-            ShowSendConfirm = true;
-        }
-        catch (OperationCanceledException)
-        {
-            // wallet locked/closed mid-prepare; nothing to report
-        }
-        catch (Exception ex)
-        {
-            _preparedSweep = null;
-            SendResult = "Couldn't prepare the sweep: " + Friendly(ex);
-        }
-        finally
-        {
-            Sending = false;
-        }
-    }
-
-    /// <summary>A fee wildly out of proportion to the amount usually means a misbehaving node's
-    /// fee estimate (or a unit mishap) — say so instead of letting habit click through it.</summary>
-    private static string FeeWarning(decimal fee, decimal amount) =>
-        amount > 0m && fee > 0.001m && fee > amount * 0.01m
-            ? $"This fee is unusually high ({(fee / amount).ToString("P1", System.Globalization.CultureInfo.InvariantCulture)} of the amount). If you didn't choose a high priority on purpose, cancel and check your node."
-            : string.Empty;
-
-    /// <summary>Abort: throw away the prepared (never-broadcast) transaction(s).</summary>
-    [RelayCommand]
-    private void CancelSend()
-    {
-        ShowSendConfirm = false;
-        _preparedTx = null;
-        _preparedSweep = null;
-        ConfirmSendAddress = string.Empty;
-        SendFeeWarning = string.Empty;
-        _preparedAmount = 0m;
-    }
-
-    /// <summary>Step 2: the user explicitly confirmed. Broadcast the ALREADY-BUILT transaction(s) —
-    /// the fee shown in the overlay is baked into them and cannot change.</summary>
-    [RelayCommand]
-    private async Task ConfirmSendAsync()
-    {
-        ShowSendConfirm = false;
-        SendFeeWarning = string.Empty;
-        TransferResult? prepared = _preparedTx;
-        SweepAllResult? sweep = _preparedSweep;
-        _preparedTx = null;
-        _preparedSweep = null;
-
-        if (sweep is not null)
-        {
-            await ConfirmSweepAsync(sweep);
-            return;
-        }
-
-        if (prepared is null)
-        {
-            // Never send blind — but an explicitly-clicked confirm must never LOOK like a send.
-            SendResult = "Nothing was broadcast — the prepared transaction was no longer available. " +
-                         "Review the send again.";
-            return;
-        }
-
-        Sending = true;
-        try
-        {
-            string txHash = await _wallet.RelaySendAsync(prepared.TxMetadata, _cts.Token);
-            decimal fee = MoneroRpcClient.AtomicToXmr(prepared.Fee);
-            SendResult = $"Sent {XmrAmount.Format(_preparedAmount)} XMR";
-            SendResultDetail = $"Network fee {XmrAmount.Format(fee)} XMR. It confirms in about 2 minutes; " +
-                               "your change is spendable again after 10 confirmations (about 20 minutes).";
-            SendOutcome = SendOutcome.Sent;
-
-            // Surface the transaction key so the payment can be proven on an explorer.
-            LastTxId = string.IsNullOrWhiteSpace(txHash) ? prepared.TxHash : txHash;
-            LastTxKey = prepared.TxKey;
-            HasLastTx = !string.IsNullOrWhiteSpace(LastTxId);
-
-            SendAddress = string.Empty;
-            SendAmountText = string.Empty;
-            await SoftRefreshAsync();
-        }
-        catch (OperationCanceledException)
-        {
-            // The broadcast request may already have reached the network before cancellation.
-            SendResult = "Send interrupted — the transaction MAY still have been broadcast. " +
-                         $"Check History for txid {prepared.TxHash} before sending again.";
-            SendOutcome = SendOutcome.NeedsCheck;
-        }
-        catch (Exception ex)
-        {
-            // Honesty over reassurance: a failed-looking relay can still have reached the network,
-            // and retrying too early can double-pay with a second transaction. Give the txid so
-            // "check History" is actually actionable.
-            SendResult = "Broadcast failed: " + Friendly(ex) +
-                         $" The transaction may or may not have reached the network — check History for txid {prepared.TxHash} before sending again.";
-            SendOutcome = SendOutcome.NeedsCheck;
-        }
-        finally
-        {
-            ConfirmSendAddress = string.Empty;
-            _preparedAmount = 0m;
-            Sending = false;
-        }
-    }
-
-    /// <summary>Broadcast every transaction of a confirmed sweep, in order. On a mid-sweep
-    /// failure, reports EXACTLY which transactions went out — never pretends an ambiguous
-    /// state is a clean failure.</summary>
-    private async Task ConfirmSweepAsync(SweepAllResult sweep)
-    {
-        Sending = true;
-        int relayed = 0;
-        try
-        {
-            for (int i = 0; i < sweep.TxMetadataList.Count; i++)
-            {
-                string txHash = await _wallet.RelaySendAsync(sweep.TxMetadataList[i], _cts.Token);
-                if (string.IsNullOrWhiteSpace(txHash) && i < sweep.TxHashList.Count)
-                {
-                    txHash = sweep.TxHashList[i];
-                }
-
-                relayed++;
-                LastTxId = txHash;
-                LastTxKey = i < sweep.TxKeyList.Count ? sweep.TxKeyList[i] : string.Empty;
-            }
-
-            HasLastTx = !string.IsNullOrWhiteSpace(LastTxId);
-            decimal fee = MoneroRpcClient.AtomicToXmr((ulong)sweep.FeeList.Sum(f => (decimal)f));
-            string txNote = relayed > 1 ? $" in {relayed} transactions" : "";
-            SendResult = $"Swept {XmrAmount.Format(_preparedAmount)} XMR{txNote}";
-            SendResultDetail = $"Total network fee {XmrAmount.Format(fee)} XMR. It confirms in about 2 minutes.";
-            SendOutcome = SendOutcome.Sent;
-            SendAddress = string.Empty;
-            SendAmountText = string.Empty;
-            await SoftRefreshAsync();
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException || relayed > 0)
-        {
-            string done = relayed == 0
-                ? "No transaction is confirmed sent, but the first MAY still have reached the network."
-                : $"{relayed} of {sweep.TxMetadataList.Count} transactions were broadcast before the failure.";
-            SendResult = $"Sweep interrupted: {Friendly(ex)} {done} Check History before retrying — " +
-                         "re-running the sweep too early can conflict with the transactions already sent.";
-            SendOutcome = SendOutcome.NeedsCheck;
-        }
-        catch (OperationCanceledException)
-        {
-            // wallet locked/closed before anything went out
-        }
-        finally
-        {
-            ConfirmSendAddress = string.Empty;
-            _preparedAmount = 0m;
-            Sending = false;
-        }
-    }
-
-    /// <summary>History as CSV (spreadsheet-friendly). The view handles the file picker.</summary>
-    public string BuildHistoryCsv()
-    {
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine("date,type,amount_xmr,fee_xmr,height,txid");
-        foreach (TransferEntry t in _entries)
-        {
-            // txid/type/date contain no commas or quotes (hex, fixed words, fixed format).
-            sb.Append(t.Date).Append(',')
-              .Append(t.Type).Append(',')
-              .Append(MoneroRpcClient.AtomicToXmr(t.Amount).ToString("0.############", System.Globalization.CultureInfo.InvariantCulture)).Append(',')
-              .Append(MoneroRpcClient.AtomicToXmr(t.Fee).ToString("0.############", System.Globalization.CultureInfo.InvariantCulture)).Append(',')
-              .Append(t.Height).Append(',')
-              .Append(t.TxId).AppendLine();
-        }
-
-        return sb.ToString();
-    }
-
-    /// <summary>Copy the last send's txid + tx key into the verify panel as a convenience.</summary>
-    [RelayCommand]
-    private void PrefillVerifyFromLast()
-    {
-        VerifyTxId = LastTxId;
-        VerifyTxKey = LastTxKey;
-        VerifyResult = string.Empty;
-    }
-
-    /// <summary>Fetch the tx key for one of THIS wallet's past outgoing transactions, so older
-    /// payments can be proven too (only works for transactions this wallet sent).</summary>
-    [RelayCommand]
-    private async Task FetchTxKeyAsync()
-    {
-        VerifyResult = string.Empty;
-        VerifyOk = false;
-
-        if (!IsReady || string.IsNullOrWhiteSpace(VerifyTxId))
-        {
-            VerifyResult = "Enter the transaction ID of a payment this wallet sent.";
-            return;
-        }
-
-        try
-        {
-            VerifyTxKey = await _wallet.GetTxKeyAsync(VerifyTxId, _cts.Token);
-        }
-        catch (Exception ex)
-        {
-            VerifyResult = "Couldn't fetch a key for that transaction (is it one this wallet sent?): " + Friendly(ex);
-        }
-    }
-
-    [RelayCommand]
-    private async Task VerifyPaymentAsync()
-    {
-        VerifyResult = string.Empty;
-        VerifyOk = false;
-
-        if (!IsReady)
-        {
-            VerifyResult = "Wallet isn't ready yet.";
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(VerifyTxId) || string.IsNullOrWhiteSpace(VerifyTxKey) || string.IsNullOrWhiteSpace(VerifyAddress))
-        {
-            VerifyResult = "Enter the transaction ID, transaction key, and destination address.";
-            return;
-        }
-
-        try
-        {
-            (ulong received, ulong confirmations, bool inPool) =
-                await _wallet.CheckTxKeyAsync(VerifyTxId, VerifyTxKey, VerifyAddress, _cts.Token);
-
-            if (received == 0)
-            {
-                VerifyOk = false;
-                VerifyResult = "No payment to that address was found in this transaction.";
-            }
-            else
-            {
-                VerifyOk = true;
-                string status = inPool ? "in mempool (0 confirmations)" : $"{confirmations:N0} confirmation(s)";
-                VerifyResult = $"Verified: that address received {XmrAmount.Format(received)} XMR — {status}.";
-            }
-        }
-        catch (Exception ex)
-        {
-            VerifyOk = false;
-            VerifyResult = "Couldn't verify: " + Friendly(ex);
-        }
-    }
-
-    [RelayCommand]
-    private async Task NewAddressAsync()
-    {
-        if (!IsReady)
-        {
-            return;
-        }
-
-        try
-        {
-            ReceiveNotice = string.Empty;
-            PrimaryAddress = await _wallet.NewSubaddressAsync("", _cts.Token);
-        }
-        catch (Exception ex)
-        {
-            // NOT Status: the sync tracker overwrites Status every few seconds, so the
-            // failure would vanish before the user saw it.
-            ReceiveNotice = "Couldn't create a new address: " + Friendly(ex);
-        }
-    }
-
-    [RelayCommand]
-    private async Task LockAsync()
-    {
-        await DisposeAsync();
-        Locked?.Invoke();
-    }
+    // ------------------------------------------------------------------ errors
 
     private static string Friendly(Exception ex) => ex switch
     {
@@ -1063,6 +615,11 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             return "The network rejected the fee as too low. Try a higher priority.";
         }
 
+        if (Has(m, "watch-only") || Has(m, "watch only"))
+        {
+            return "This is a watch-only wallet: it can't spend or sign.";
+        }
+
         return m;
     }
 
@@ -1093,9 +650,10 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         {
             // A wedged monero-wallet-rpc during teardown must not make Lock appear to do
             // nothing (or fault app shutdown) — the process kill is already best-effort.
-            Log.Warn("Wallet service dispose failed: " + ex.GetType().Name);
+            Log.WarnOnce("wallet-dispose", "Wallet service dispose failed: " + ex.GetType().Name);
         }
 
+        WipeRevealedSecrets();
         _refreshGate.Dispose();
         _cts.Dispose();
     }

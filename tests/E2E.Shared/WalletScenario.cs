@@ -7,8 +7,11 @@ namespace XaultWallet.E2E;
 /// <summary>
 /// The whole product, end to end, through the UI only: create a vault (verified seed backup, duress
 /// password with a decoy), unlock each wallet, receive mined coins, send to the decoy, confirm in
-/// History, and see the decoy receive it. Mining on the private regtest chain is the one thing done
-/// outside the UI; it stands in for "someone pays this wallet".
+/// History, and see the decoy receive it. Then the 0.5 features: add a second wallet to the open
+/// vault, switch between wallets, save a contact, pay the contact and the second wallet in ONE
+/// transaction, and check that the duress password still opens nothing but the decoy. Mining on the
+/// private regtest chain is the one thing done outside the UI; it stands in for "someone pays this
+/// wallet".
 /// </summary>
 public sealed partial class WalletScenario
 {
@@ -17,26 +20,42 @@ public sealed partial class WalletScenario
     public const string DuressPassword = "Orchid-Lantern-Basalt-2786";
     private const decimal SendAmount = 12.5m;
 
+    // The vault's first wallet keeps the default name; the one added later is named here.
+    private const string FirstWalletName = "My wallet";
+    private const string SecondWalletName = "Second";
+    private const string ContactName = "Decoy";
+    private const decimal ContactAmount = 1.5m;
+    private const decimal SecondAmount = 2.25m;
+
     private readonly IAppDriver _app;
     private readonly TestChain _chain;
     private readonly Action<string> _log;
     private readonly double _timeScale;
+    private readonly bool _installWalletRpc;
     private readonly Dictionary<int, string> _seed = new();
     private int _shot;
 
-    public WalletScenario(IAppDriver app, TestChain chain, Action<string> log, double timeScale = 1.0)
+    /// <param name="installWalletRpc">The app starts without monero-wallet-rpc: the scenario begins
+    /// by installing it with the startup screen's "Download &amp; install" (signed list, checksum).</param>
+    public WalletScenario(IAppDriver app, TestChain chain, Action<string> log, double timeScale = 1.0, bool installWalletRpc = false)
     {
         _app = app;
         _chain = chain;
         _log = log;
         _timeScale = timeScale;
+        _installWalletRpc = installWalletRpc;
     }
+
+    /// <summary>What the install reported, when the scenario installed monero-wallet-rpc.</summary>
+    public string InstallResult { get; private set; } = string.Empty;
 
     public string DecoyAddress { get; private set; } = string.Empty;
 
     public string MainAddress { get; private set; } = string.Empty;
 
     public string SentTxId { get; private set; } = string.Empty;
+
+    public string SecondAddress { get; private set; } = string.Empty;
 
     public async Task RunAsync()
     {
@@ -62,6 +81,15 @@ public sealed partial class WalletScenario
         await StepAsync("Lock", LockAsync);
         await StepAsync("The main wallet reopens with its funds and history", MainAgainAsync);
         await StepAsync("Settings opens and closes", SettingsAsync);
+        await StepAsync("Add a second wallet to the open vault (new seed, backup checked)", AddSecondWalletAsync);
+        await StepAsync("Switch back to the first wallet", () => SwitchToAsync(FirstWalletName, MainAddress));
+        await StepAsync("Save the decoy wallet as a contact", AddContactAsync);
+        await StepAsync($"Pay the contact {ContactAmount} XMR and the second wallet {SecondAmount} XMR in one transaction", PayTwoAsync);
+        await StepAsync("The second wallet received its share", SecondReceivedAsync);
+        await StepAsync("Lock", LockAsync);
+        await StepAsync("The vault reopens on the wallet shown last, with both wallets in it", ReopenBothAsync);
+        await StepAsync("Lock", LockAsync);
+        await StepAsync("The duress password still opens only the decoy, which got paid again", DecoyStillAloneAsync);
         await StepAsync("Lock", LockAsync);
     }
 
@@ -69,6 +97,23 @@ public sealed partial class WalletScenario
 
     private async Task StartupAsync()
     {
+        if (_installWalletRpc)
+        {
+            // No monero-wallet-rpc anywhere: startup must stop and offer to set it up, and the button
+            // must fetch it from getmonero.org, verify binaryFate's signature and the checksum, and
+            // install it. Then startup carries on by itself.
+            await _app.WaitForAsync("Startup.BackendSetup", Seconds(60), enabled: false);
+            await ShotAsync("backend-setup");
+            await _app.ClickAsync("WalletRpc.Install");
+            InstallResult = await EventuallyAsync(
+                async () => await _app.IsVisibleAsync("WalletRpc.Result") ? await _app.ReadTextAsync("WalletRpc.Result") : string.Empty,
+                text => text.Length > 0,
+                Seconds(900),
+                "the install result");
+            Check(InstallResult.StartsWith("Installed monero-wallet-rpc", StringComparison.Ordinal), "the install failed: " + InstallResult);
+            await ShotAsync("backend-installed");
+        }
+
         // The splash checks the binary and the default node, then routes to vault creation. When the
         // default node isn't up it offers "Continue anyway": take it instead of waiting out retries.
         await EventuallyAsync(async () =>
@@ -281,6 +326,168 @@ public sealed partial class WalletScenario
         await ShotAsync("settings");
         await _app.ClickAsync("Settings.Close");
         await _app.WaitForAsync("Wallet.Lock", Seconds(20));
+    }
+
+    private async Task AddSecondWalletAsync()
+    {
+        await _app.ClickAsync("Wallet.Tab.Receive"); // how this wallet looks when we come back (see SwitchToAsync)
+        await _app.ClickAsync("Wallet.Add");
+        await _app.WaitForAsync("AddWallet.Submit", Seconds(30));
+        // A new wallet starts from the network and node of the wallet on screen. The screen's sections
+        // rise in one after another, so the node field can still be hidden when Add already shows.
+        await _app.WaitForAsync("AddWallet.Daemon", Seconds(15));
+        string node = await _app.ReadTextAsync("AddWallet.Daemon");
+        Check(node == _chain.DaemonUrl, $"the add-wallet screen proposes node \"{node}\"");
+        await _app.TypeAsync("AddWallet.Name", SecondWalletName);
+        await ShotAsync("add-wallet");
+
+        await _app.ClickAsync("AddWallet.Generate");
+        IReadOnlyList<string> texts = await EventuallyAsync(
+            () => _app.ReadTextsAsync("AddWallet.SeedWords"),
+            t => ParseSeed(t).Count == 25,
+            Seconds(150),
+            "the second wallet's 25 seed words",
+            failWhenVisible: "AddWallet.Error");
+        Dictionary<int, string> seed = ParseSeed(texts).ToDictionary(w => w.Item1, w => w.Item2);
+        Check(seed.OrderBy(p => p.Key).Select(p => p.Value).SequenceEqual(_seed.OrderBy(p => p.Key).Select(p => p.Value)) == false,
+            "the new wallet got the first wallet's seed");
+
+        await _app.ClickAsync("AddWallet.OpenVerify");
+        await _app.WaitForAsync("AddWallet.Verify.Input1", Seconds(15));
+        for (int i = 1; i <= 3; i++)
+        {
+            string prompt = await _app.ReadTextAsync($"AddWallet.Verify.Prompt{i}");
+            Match m = WordNumber().Match(prompt);
+            Check(m.Success, $"unexpected verification prompt \"{prompt}\"");
+            await _app.TypeAsync($"AddWallet.Verify.Input{i}", seed[int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)]);
+        }
+
+        await _app.ClickAsync("AddWallet.Verify.Submit");
+        await _app.WaitForAsync("AddWallet.SeedVerified", Seconds(15), enabled: false);
+        await ShotAsync("add-wallet-seed");
+
+        // Added, saved in the vault, and shown: a new wallet with its own address.
+        await _app.ClickAsync("AddWallet.Submit");
+        SecondAddress = await EventuallyAsync(
+            async () => await _app.IsVisibleAsync("Receive.Address") ? await _app.ReadTextAsync("Receive.Address") : string.Empty,
+            a => a.Length >= 95,
+            Seconds(240),
+            "the second wallet's address",
+            failWhenVisible: "AddWallet.Error",
+            alsoFailWhenVisible: "Wallet.StartupFailed");
+        Check(SecondAddress != MainAddress && SecondAddress != DecoyAddress, "the added wallet opened an existing wallet");
+        await EventuallyAsync(() => _app.ReadTextAsync("Wallet.SyncText"), s => s.StartsWith("Synced", StringComparison.Ordinal),
+            Seconds(240), "the second wallet's sync", nudge: RefreshAsync);
+        await ShotAsync("second-wallet");
+    }
+
+    /// <summary>Bring another wallet of the open vault on screen with the switcher. The wallet being
+    /// left goes back to its Receive tab first, so every wallet comes back showing its address.</summary>
+    private async Task SwitchToAsync(string name, string address)
+    {
+        await _app.ClickAsync("Wallet.Tab.Receive");
+        await _app.SelectAsync("Wallet.Switcher", name, navigates: true);
+        await EventuallyAsync(
+            async () => await _app.IsVisibleAsync("Receive.Address") ? await _app.ReadTextAsync("Receive.Address") : string.Empty,
+            a => a == address,
+            Seconds(120),
+            $"\"{name}\" on screen",
+            alsoFailWhenVisible: "Wallet.StartupFailed");
+        await ShotAsync("switched-" + name.Replace(' ', '-').ToLowerInvariant());
+    }
+
+    private async Task AddContactAsync()
+    {
+        await _app.ClickAsync("Wallet.Tab.Contacts");
+        await _app.WaitForAsync("Contacts.Empty", Seconds(20), enabled: false);
+        await _app.ClickAsync("Contacts.New");
+        await _app.TypeAsync("Contacts.Name", ContactName);
+        await _app.TypeAsync("Contacts.Address", DecoyAddress);
+        await _app.TypeAsync("Contacts.Note", "the duress wallet");
+        await _app.ClickAsync("Contacts.Save");
+        await EventuallyAsync(() => _app.ReadTextsAsync("Contacts.List"), t => t.Contains(ContactName), Seconds(30),
+            "the saved contact", failWhenVisible: "Contacts.Notice");
+        await ShotAsync("contacts");
+    }
+
+    private async Task PayTwoAsync()
+    {
+        // "Pay" on the contact fills the send form with its address, and names it.
+        await _app.ClickAsync("Contacts.Pay");
+        await EventuallyAsync(() => _app.ReadTextAsync("Send.Address"), a => a == DecoyAddress, Seconds(20), "the contact's address in the send form");
+        string who = await _app.ReadTextAsync("Send.RecipientName");
+        Check(who == "Contact: " + ContactName, $"the send form names the recipient \"{who}\"");
+        await _app.TypeAsync("Send.Amount", ContactAmount.ToString(CultureInfo.InvariantCulture));
+        await _app.ClickAsync("Send.AddRecipient");
+        await _app.TypeAsync("Send.RecipientAddress", SecondAddress);
+        await _app.TypeAsync("Send.RecipientAmount", SecondAmount.ToString(CultureInfo.InvariantCulture));
+        await ShotAsync("send-two");
+
+        await _app.ClickAsync("Send.Review");
+        await WaitOrFailAsync("SendConfirm.Send", "Send.Result", Seconds(180));
+        IReadOnlyList<string> lines = await _app.ReadTextsAsync("SendConfirm.Recipients");
+        Check(lines.Contains(ContactName) && lines.Contains(DecoyAddress) && lines.Contains("1.5 XMR")
+              && lines.Contains(SecondWalletName + " (your wallet)") && lines.Contains(SecondAddress) && lines.Contains("2.25 XMR"),
+            "the confirmation lists " + string.Join(" | ", lines));
+        Check(await _app.ReadTextAsync("SendConfirm.Amount") == "3.75 XMR", "the confirmation shows a different amount");
+        decimal fee = Xmr(await _app.ReadTextAsync("SendConfirm.Fee"));
+        Check(fee > 0m && fee < 0.1m, $"implausible fee {fee}");
+        Check(Xmr(await _app.ReadTextAsync("SendConfirm.Total")) == ContactAmount + SecondAmount + fee, "the total is not the amounts + fee");
+        await ShotAsync("send-two-confirm");
+
+        await _app.ClickAsync("SendConfirm.Send");
+        string result = await EventuallyAsync(() => _app.ReadTextAsync("Send.Result"), s => s.Length > 0, Seconds(120), "the send result");
+        Check(result == "Sent 3.75 XMR to 2 recipients", $"send result: {result}");
+        await ShotAsync("sent-two");
+
+        await _chain.MineAsync(MainAddress, 12);
+        await _app.ClickAsync("Wallet.Tab.History");
+        await EventuallyAsync(
+            () => _app.ReadTextsAsync("History.List"),
+            t => t.Any(x => x.Contains("3.75 XMR", StringComparison.Ordinal)) && !t.Contains("pending"),
+            Seconds(240),
+            "the two-recipient payment in History",
+            nudge: RefreshAsync);
+        await ShotAsync("history-two");
+    }
+
+    private async Task SecondReceivedAsync()
+    {
+        await SwitchToAsync(SecondWalletName, SecondAddress);
+        await EventuallyAsync(async () => Xmr(await _app.ReadTextAsync("Wallet.Balance")), b => b == SecondAmount,
+            Seconds(240), "the second wallet's balance", nudge: RefreshAsync);
+        await _app.ClickAsync("Wallet.Tab.History");
+        await EventuallyAsync(() => _app.ReadTextsAsync("History.List"),
+            t => t.Contains("Received") && t.Any(x => x.Contains("+2.25 XMR", StringComparison.Ordinal)),
+            Seconds(120), "the payment in the second wallet's history", nudge: RefreshAsync);
+        await ShotAsync("second-received");
+        await _app.ClickAsync("Wallet.Tab.Receive");
+    }
+
+    private async Task ReopenBothAsync()
+    {
+        string first = await UnlockAsync(MainPassword, "reopened");
+        Check(first == SecondAddress, "the vault didn't reopen on the wallet shown last");
+        await SwitchToAsync(FirstWalletName, MainAddress);
+        await EventuallyAsync(() => _app.ReadTextAsync("Wallet.SyncText"), s => s.StartsWith("Synced", StringComparison.Ordinal),
+            Seconds(240), "the first wallet's sync after reopening", nudge: RefreshAsync);
+        await _app.ClickAsync("Wallet.Tab.Contacts");
+        await EventuallyAsync(() => _app.ReadTextsAsync("Contacts.List"), t => t.Contains(ContactName), Seconds(30), "the contact after reopening");
+        await _app.ClickAsync("Wallet.Tab.Receive");
+    }
+
+    private async Task DecoyStillAloneAsync()
+    {
+        string decoy = await UnlockAsync(DuressPassword, "decoy-after-0.5");
+        Check(decoy == DecoyAddress, "the duress password opened a different wallet");
+        await EventuallyAsync(async () => Xmr(await _app.ReadTextAsync("Wallet.Balance")), b => b == SendAmount + ContactAmount,
+            Seconds(240), "the decoy's balance after the second payment", nudge: RefreshAsync);
+
+        // The other profile's contacts and wallets are sealed under the other password.
+        await _app.ClickAsync("Wallet.Tab.Contacts");
+        await _app.WaitForAsync("Contacts.Empty", Seconds(20), enabled: false);
+        await ShotAsync("decoy-contacts");
+        await _app.ClickAsync("Wallet.Tab.Receive");
     }
 
     // ------------------------------------------------------------------ helpers

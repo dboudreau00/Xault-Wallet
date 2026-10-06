@@ -17,7 +17,7 @@ namespace XaultWallet.UiSnapshots;
 /// demo data and writes one PNG per screen. Any binding error makes the run fail, so this doubles
 /// as a smoke test that every view loads against its view-model.
 /// </summary>
-internal static class Program
+internal static partial class Program
 {
     private static readonly List<string> BindingErrors = new();
 
@@ -45,18 +45,40 @@ internal static class Program
         var shots = new (string name, Func<ViewModelBase> screen, Action<Window>? arrange)[]
         {
             ("startup", Startup, null),
+            ("startup-setup", StartupNeedsBackend, null),
+            ("startup-installing", StartupInstalling, null),
             ("create-vault", CreateVault, null),
             ("create-vault-seed", CreateVaultWithSeed, w => ScrollTo(w, 330)),
             ("create-vault-duress", CreateVaultWithSeed, w => ScrollToEnd(w)),
             ("unlock", () => new UnlockViewModel(), null),
             ("wallet-receive", Wallet, w => SelectTab(w, 0)),
+            ("wallet-receive-request", WalletRequest, w => SelectTab(w, 0)),
+            ("wallet-receive-addresses", WalletRequest, w => { SelectTab(w, 0); ScrollToEnd(w); }),
             ("wallet-send", WalletSend, w => SelectTab(w, 1)),
+            ("wallet-send-multi", WalletSendMulti, w => SelectTab(w, 1)),
             ("wallet-send-confirm", WalletSendConfirm, w => SelectTab(w, 1)),
+            ("wallet-send-confirm-multi", WalletSendConfirmMulti, w => SelectTab(w, 1)),
             ("wallet-sent", WalletSent, w => SelectTab(w, 1)),
             ("wallet-send-error", WalletSendError, w => SelectTab(w, 1)),
             ("wallet-history", Wallet, w => SelectTab(w, 2)),
+            ("wallet-history-details", WalletHistoryDetails, w => SelectTab(w, 2)),
+            ("wallet-contacts", Wallet, w => SelectTab(w, 3)),
+            ("wallet-contacts-edit", WalletContactEditor, w => SelectTab(w, 3)),
+            ("wallet-tools", WalletTools, w => SelectTab(w, 4)),
+            ("wallet-tools-proofs", WalletTools, w => { SelectTab(w, 4); Settle(); ScrollToEnd(w); }),
+            ("wallet-manage", WalletManage, w => SelectTab(w, 0)),
+            ("wallet-manage-backup", WalletManageSecrets, w => { SelectTab(w, 0); Settle(); ScrollToEnd(w); }),
+            ("wallet-accounts", WalletAccounts, w => SelectTab(w, 0)),
+            ("wallet-watch-only", WalletWatchOnly, w => SelectTab(w, 1)),
             ("wallet-upgraded", WalletUpgraded, w => SelectTab(w, 0)),
-            ("settings", () => new SettingsViewModel(walletOpen: false), null),
+            ("add-wallet", AddWalletNew, null),
+            ("add-wallet-seed", AddWalletNewWithSeed, w => ScrollTo(w, 240)),
+            ("add-wallet-keys", AddWalletKeys, null),
+            ("add-wallet-confirm", AddWalletConfirm, null),
+            ("settings", () => new SettingsViewModel(), null),
+            ("settings-vault-format", SettingsVaultFormat, w => ScrollTo(w, 520)),
+            ("settings-rpc-installed", () => SettingsAfterInstall(ok: true), null),
+            ("settings-rpc-install-failed", () => SettingsAfterInstall(ok: false), null),
         };
 
         foreach ((string name, Func<ViewModelBase> screen, Action<Window>? arrange) in shots)
@@ -80,7 +102,7 @@ internal static class Program
             CheckAccessibleNames(name, window);
             CheckPasswordsStayPrivate(name, window);
             CheckEntrancesSettled(name, window);
-            if (name == "wallet-receive" && window.DataContext is MainWindowViewModel { Current: WalletViewModel wallet })
+            if (name is "wallet-receive" or "wallet-receive-request" && window.DataContext is MainWindowViewModel { Current: WalletViewModel wallet })
             {
                 VerifyQr(path, wallet.ReceiveUri);
                 CheckBalanceIsAnnounced(window, wallet.BalanceDisplay);
@@ -91,6 +113,18 @@ internal static class Program
 
         CheckHistoryRowSettles();
         CheckMiningRewardRow();
+        CheckSwitcherItemsAreNamed();
+        CheckSwitcherKeysOpenTheList();
+        CheckContactEditsReachSendForms();
+        CheckHideAmountsEverywhere();
+        CheckNoteDraftSurvivesRebuild();
+        CheckManageOpensWithSecretsHidden();
+        CheckAccountAddressTitles();
+        CheckSameWalletIsRecognised();
+        CheckAddWalletWhileTheNodeIsSlow();
+        CheckSameSeedOnAnotherNetwork();
+        CheckOverspendKeepsTheBalanceHidden();
+        CheckTemporaryBackendsEnd();
         CheckMotion();
         if (!OperatingSystem.IsWindows())
         {
@@ -149,6 +183,37 @@ internal static class Program
     }
 
     /// <summary>
+    /// The wallet switcher's items must be announced by the wallet's name: that is what a screen
+    /// reader says, and what the Windows end-to-end test selects by (an item's content is a data
+    /// object, so without a name it is announced as nothing).
+    /// </summary>
+    private static void CheckSwitcherItemsAreNamed()
+    {
+        WalletViewModel vm = Wallet();
+        var window = new MainWindow { DataContext = new MainWindowViewModel(vm), Width = 1080, Height = 760 };
+        window.Show();
+        Settle();
+        ComboBox switcher = window.GetVisualDescendants().OfType<ComboBox>()
+            .First(c => Avalonia.Automation.AutomationProperties.GetAutomationId(c) == "Wallet.Switcher");
+        switcher.IsDropDownOpen = true;
+        Settle();
+        string[] expected = vm.Profile.Wallets.Select(w => w.Name).ToArray();
+        string[] announced = switcher.GetRealizedContainers()
+            .Select(c => Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(c).GetName())
+            .ToArray();
+        switcher.IsDropDownOpen = false;
+        window.Close();
+        if (announced.SequenceEqual(expected))
+        {
+            Console.WriteLine($"Accessibility ok: the wallet switcher announces {string.Join(", ", announced)}.");
+        }
+        else
+        {
+            Failures.Add($"Wallet switcher items are announced as [{string.Join(", ", announced)}], expected [{string.Join(", ", expected)}]");
+        }
+    }
+
+    /// <summary>
     /// A row that reaches its 10th confirmation must stop saying "9/10". The redraw is skipped for
     /// settled rows (to keep the scroll position), so the boundary itself is what has to be checked.
     /// </summary>
@@ -200,7 +265,7 @@ internal static class Program
         // Screen change: the new screen must not flash in at full opacity, and must end at rest.
         // Measured before the first frame is rendered: the layout pass that swaps the screens has
         // run, the render tick has not.
-        var settings = new SettingsViewModel(walletOpen: false);
+        var settings = new SettingsViewModel();
         shell.Current = settings;
         window.UpdateLayout();
         var presenters = window.GetVisualDescendants().OfType<TransitioningContentControl>().First()
@@ -476,6 +541,34 @@ internal static class Program
         Checking = true,
     };
 
+    private static StartupViewModel StartupNeedsBackend() => new(preview: true)
+    {
+        Status = "XaultWallet needs monero-wallet-rpc",
+        Checking = false,
+        CanContinue = true,
+        NeedsBackend = true,
+    };
+
+    private static ViewModelBase StartupInstalling()
+    {
+        StartupViewModel vm = StartupNeedsBackend();
+        vm.Setup.Installing = true;
+        vm.Setup.ProgressKnown = true;
+        vm.Setup.Progress = 45;
+        vm.Setup.StageText = "Downloading the official Monero CLI… 41.2 of 91.6 MB";
+        return vm;
+    }
+
+    private static ViewModelBase SettingsAfterInstall(bool ok)
+    {
+        var vm = new SettingsViewModel();
+        vm.Setup.Succeeded = ok;
+        vm.Setup.ResultText = ok
+            ? "Installed monero-wallet-rpc 0.18.5.1. binaryFate's signature and the download's checksum were verified, and it ran on this system."
+            : "The download doesn't match the checksum Monero signed, so it was thrown away and nothing was installed. Try again later, or download and verify monero-wallet-rpc yourself.";
+        return vm;
+    }
+
     private static ViewModelBase CreateVault() => new CreateWalletViewModel
     {
         MainPassword = "granite-otter-lantern-41",
@@ -500,19 +593,47 @@ internal static class Program
         return vm;
     }
 
-    private static WalletViewModel Wallet()
+    /// <summary>A vault profile with three wallets (the first on screen) and two contacts.</summary>
+    private static WalletProfile DemoProfile()
     {
-        var vm = WalletViewModel.ForPreview(new WalletSecrets
+        var everyday = new WalletSecrets
         {
+            Name = "Everyday",
             Network = MoneroNetwork.Stagenet,
             RestoreHeight = 1_580_000,
             DaemonAddress = "http://127.0.0.1:38081",
-        });
+            Labels = { ["0/1"] = "Alice (freelance)", ["0/2"] = "Shop sales" },
+            AccountLabels = { [1] = "Business" },
+            TxNotes = { [FakeTxId(2)] = "Rent, July", [FakeTxId(3)] = "Invoice 2024-117" },
+        };
+        var savings = new WalletSecrets { Name = "Savings", Network = MoneroNetwork.Stagenet, Kind = WalletKind.Keys, Address = FakeAddress('5', 21) };
+        var donations = new WalletSecrets { Name = "Donations (watch)", Network = MoneroNetwork.Stagenet, Kind = WalletKind.ViewOnly, Address = FakeAddress('5', 22) };
+        return new WalletProfile
+        {
+            Wallets = { everyday, savings, donations },
+            Contacts =
+            {
+                new Contact { Name = "Bob's Books", Address = FakeAddress('5', 31), Note = "Order payments" },
+                new Contact { Name = "Carol", Address = FakeAddress('7', 32) },
+            },
+            ActiveWalletId = everyday.Id,
+        };
+    }
 
+    private static WalletViewModel Wallet() => Fill(ProfileViewModel.ForPreview(DemoProfile()).Start());
+
+    /// <summary>Demo state for a wallet screen (no backend behind it).</summary>
+    private static WalletViewModel Fill(WalletViewModel vm)
+    {
         vm.IsReady = true;
         vm.Balance = 12.483017420331m;
         vm.UnlockedBalance = 11.983017420331m;
         vm.PrimaryAddress = FakeAddress('5', 7);
+        vm.ReceiveAddress = vm.PrimaryAddress;
+        vm.Addresses.Add(new AddressRow(0, 0, vm.PrimaryAddress, "", used: true) { IsShown = true });
+        vm.Addresses.Add(new AddressRow(0, 1, FakeAddress('7', 8), "Alice (freelance)", used: true));
+        vm.Addresses.Add(new AddressRow(0, 2, FakeAddress('7', 9), "Shop sales", used: false));
+        vm.Addresses.Add(new AddressRow(0, 3, FakeAddress('7', 10), "", used: false));
         vm.Height = 1_712_404;
         vm.DaemonHeight = 1_712_404;
         vm.IsSynced = true;
@@ -523,19 +644,176 @@ internal static class Program
         var history = new[]
         {
             new TransferEntry { TxId = FakeTxId(1), Type = "pool", Amount = 500_000_000_000, Fee = 0, Height = 0, Timestamp = (ulong)(now - 300) },
-            new TransferEntry { TxId = FakeTxId(2), Type = "out", Amount = 1_250_000_000_000, Fee = 30_660_000, Height = 1_712_380, Timestamp = (ulong)(now - 4_000) },
+            new TransferEntry
+            {
+                TxId = FakeTxId(2), Type = "out", Amount = 1_250_000_000_000, Fee = 30_660_000, Height = 1_712_380, Timestamp = (ulong)(now - 4_000),
+                Destinations = [new TransferDestination { Address = FakeAddress('5', 31), Amount = 1_250_000_000_000 }],
+            },
             new TransferEntry { TxId = FakeTxId(5), Type = "block", Amount = 612_000_000_000, Fee = 0, Height = 1_712_371, Timestamp = (ulong)(now - 4_100) },
-            new TransferEntry { TxId = FakeTxId(3), Type = "in", Amount = 8_000_000_000_000, Fee = 0, Height = 1_711_902, Timestamp = (ulong)(now - 90_000) },
+            new TransferEntry
+            {
+                TxId = FakeTxId(3), Type = "in", Amount = 8_000_000_000_000, Fee = 0, Height = 1_711_902, Timestamp = (ulong)(now - 90_000),
+                SubaddrIndex = new SubaddressIndex { Major = 0, Minor = 1 },
+            },
             new TransferEntry { TxId = FakeTxId(4), Type = "in", Amount = 5_233_017_420_331, Fee = 0, Height = 1_709_115, Timestamp = (ulong)(now - 400_000) },
         };
         vm.SetHistory(history);
         return vm;
     }
 
+    /// <summary>Settings from a wallet of a vault made by 0.3: the format card, upgrade asked for.</summary>
+    private static ViewModelBase SettingsVaultFormat()
+    {
+        var vm = new SettingsViewModel(ProfileViewModel.ForPreview(DemoProfile(), oldFormat: true));
+        vm.AskFormatUpgradeCommand.Execute(null);
+        return vm;
+    }
+
     private static ViewModelBase WalletUpgraded()
     {
         WalletViewModel vm = Wallet();
-        vm.UpgradeNotice = WalletViewModel.LegacyUpgradeNotice;
+        vm.Profile.UpgradeNotice = ProfileViewModel.LegacyUpgradeNotice;
+        return vm;
+    }
+
+    private static ViewModelBase WalletRequest()
+    {
+        WalletViewModel vm = Wallet();
+        vm.RequestAmountText = "0.35";
+        vm.RequestDescription = "Invoice 2024-118";
+        return vm;
+    }
+
+    private static ViewModelBase WalletSendMulti()
+    {
+        WalletViewModel vm = Wallet();
+        vm.SendAddress = "monero:" + FakeAddress('5', 31) + "?tx_amount=0.2&recipient_name=Bob%27s%20Books&tx_description=Order%201043";
+        var second = new RecipientRow(2, vm.Profile) { AmountText = "0.05" };
+        second.Contact = vm.Profile.Contacts[1];
+        vm.ExtraRecipients.Add(second);
+        return vm;
+    }
+
+    private static ViewModelBase WalletSendConfirmMulti()
+    {
+        WalletViewModel vm = Wallet();
+        vm.ConfirmLines.Add(new ConfirmLine("Bob's Books", FakeAddress('5', 31), "0.2 XMR"));
+        vm.ConfirmLines.Add(new ConfirmLine("Carol", FakeAddress('7', 32), "0.05 XMR"));
+        vm.ConfirmHasSeveral = true;
+        vm.SendSummary = "Default priority · 2 recipients · built and signed, not yet broadcast";
+        vm.ConfirmAmountText = "0.25 XMR";
+        vm.SendFeeText = "0.00004312 XMR";
+        vm.SendTotalText = "0.25004312 XMR";
+        vm.ShowSendConfirm = true;
+        return vm;
+    }
+
+    private static ViewModelBase WalletHistoryDetails()
+    {
+        WalletViewModel vm = Wallet();
+        HistoryRow row = vm.History[1];
+        vm.ToggleRowCommand.Execute(row);
+        return vm;
+    }
+
+    private static ViewModelBase WalletContactEditor()
+    {
+        WalletViewModel vm = Wallet();
+        vm.NewContactCommand.Execute(null);
+        vm.ContactName = "Dave";
+        vm.ContactAddress = FakeAddress('5', 33);
+        vm.ContactNote = "Splits the electricity bill";
+        return vm;
+    }
+
+    private static ViewModelBase WalletTools()
+    {
+        WalletViewModel vm = Wallet();
+        vm.VerifyTxId = FakeTxId(2);
+        vm.VerifyTxKey = FakeTxId(12);
+        vm.VerifyAddress = FakeAddress('5', 31);
+        vm.VerifyOk = true;
+        vm.VerifyResult = "Verified: that address received 1.25 XMR — 24 confirmation(s).";
+        vm.SignMessage = "I control this wallet. 2026-10-06";
+        vm.Signature = "SigV2" + FakeTxId(13)[..60];
+        vm.SignNotice = "Signed with your main address. Share the message, the address and this signature.";
+        vm.ReserveAmountText = "10";
+        vm.ReserveMessage = "For the landlord, October";
+        vm.ReserveProof = "ReserveProofV2" + FakeTxId(14) + FakeTxId(15) + FakeTxId(16);
+        vm.ReserveNotice = "Proves at least 10 XMR. Share it with your main address and the message.";
+        return vm;
+    }
+
+    private static ViewModelBase WalletManage()
+    {
+        WalletViewModel vm = Wallet();
+        vm.OpenManageCommand.Execute(null);
+        return vm;
+    }
+
+    private static ViewModelBase WalletManageSecrets()
+    {
+        WalletViewModel vm = Wallet();
+        vm.OpenManageCommand.Execute(null);
+        vm.RevealedMnemonic = "sober tawny pebbles lunar ought cavernous vixen rally fuming eclipse oars hydrogen vowels " +
+                              "nabbing oyster pyramid duke vulture lukewarm tunnel efficient luggage gearbox glass tunnel";
+        vm.RevealedViewKey = FakeTxId(17);
+        vm.RevealedSpendKey = FakeTxId(18);
+        vm.SecretsShown = true;
+        vm.RemoveConfirmName = "Everyday";
+        vm.RemovePassword = "granite-otter-lantern-41";
+        return vm;
+    }
+
+    private static ViewModelBase WalletAccounts()
+    {
+        WalletViewModel vm = Wallet();
+        vm.Accounts[0].BalanceText = "12.483017420331 XMR";
+        vm.Accounts.Add(new AccountChoice(1, "Business") { BalanceText = "3.2 XMR" });
+        return vm;
+    }
+
+    private static ViewModelBase WalletWatchOnly()
+    {
+        WalletProfile profile = DemoProfile();
+        profile.ActiveWalletId = profile.Wallets[2].Id;
+        return Fill(ProfileViewModel.ForPreview(profile).Start());
+    }
+
+    private static AddWalletViewModel AddWalletNew() => new(ProfileViewModel.ForPreview(DemoProfile()));
+
+    private static ViewModelBase AddWalletNewWithSeed()
+    {
+        AddWalletViewModel vm = AddWalletNew();
+        string[] words = ("sober tawny pebbles lunar ought cavernous vixen rally fuming eclipse oars " +
+                          "hydrogen vowels nabbing oyster pyramid duke vulture lukewarm tunnel " +
+                          "efficient luggage gearbox glass tunnel").Split(' ');
+        for (int i = 0; i < words.Length; i++)
+        {
+            vm.SeedWords.Add(new SeedWord(i + 1, words[i]));
+        }
+
+        vm.SeedGenerated = true;
+        return vm;
+    }
+
+    private static ViewModelBase AddWalletKeys()
+    {
+        AddWalletViewModel vm = AddWalletNew();
+        vm.Mode = 3;
+        vm.Name = "Shop (watch)";
+        vm.ImportAddress = FakeAddress('5', 41);
+        vm.ImportViewKey = FakeTxId(19);
+        return vm;
+    }
+
+    private static ViewModelBase AddWalletConfirm()
+    {
+        AddWalletViewModel vm = AddWalletNew();
+        vm.Mode = 1;
+        vm.ImportMnemonic = "sober tawny pebbles lunar ought cavernous vixen rally fuming eclipse oars hydrogen vowels";
+        vm.ConfirmAddress = FakeAddress('5', 42);
+        vm.ShowConfirm = true;
         return vm;
     }
 

@@ -1,0 +1,334 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
+             xmlns:app="clr-namespace:XaultWallet.Desktop"
+             xmlns:conv="clr-namespace:XaultWallet.Desktop"
+             xmlns:c="clr-namespace:XaultWallet.Desktop.Controls"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1080" d:DesignHeight="714"
+             x:Class="XaultWallet.Desktop.Views.AddWalletView"
+             x:DataType="vm:AddWalletViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="Border.seedWord">
+            <Setter Property="Background" Value="{StaticResource InsetBg}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderSubtle}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="9"/>
+            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="Margin" Value="4"/>
+        </Style>
+
+        <!-- The four ways to add a wallet, as selectable cards -->
+        <Style Selector="RadioButton.modeCard">
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border x:Name="Card" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1" CornerRadius="12" Padding="14,12">
+                        <ContentPresenter Content="{TemplateBinding Content}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Setter Property="Background" Value="{StaticResource InsetBg}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderSubtle}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="VerticalAlignment" Value="Stretch"/>
+            <Setter Property="Margin" Value="5"/>
+        </Style>
+        <Style Selector="RadioButton.modeCard:pointerover">
+            <Setter Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
+        </Style>
+        <Style Selector="RadioButton.modeCard:checked">
+            <Setter Property="Background" Value="{StaticResource AccentSoft}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Grid>
+        <ScrollViewer>
+            <StackPanel MaxWidth="780" Margin="28,22,28,36" Spacing="16" HorizontalAlignment="Center">
+
+                <Grid ColumnDefinitions="Auto,14,*" app:Entrance.Rise="0">
+                    <Button Classes="ghost icon" VerticalAlignment="Center" AutomationProperties.AutomationId="AddWallet.Back" AutomationProperties.Name="Back"
+                            ToolTip.Tip="Back to the wallet" Command="{Binding CancelCommand}">
+                        <c:Icon Data="{StaticResource IconArrowUp}" RenderTransform="rotate(-90deg)"/>
+                    </Button>
+                    <StackPanel Grid.Column="2" Spacing="4">
+                        <TextBlock Text="Add a wallet" Classes="h1"/>
+                        <TextBlock Classes="muted" TextWrapping="Wrap"
+                                   Text="It's sealed in this vault next to your other wallets, under the password you unlocked with. Seeds are generated and checked by monero-wallet-rpc, never by this app."/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- ============ What kind ============ -->
+                <UniformGrid Columns="4" Margin="-5,0" app:Entrance.Rise="60" IsEnabled="{Binding !Busy}">
+                    <RadioButton Classes="modeCard" GroupName="AddMode" AutomationProperties.AutomationId="AddWallet.Mode.New" AutomationProperties.Name="New wallet"
+                                 IsChecked="{Binding Mode, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0}">
+                        <StackPanel Spacing="6">
+                            <c:Icon Data="{StaticResource IconPlus}" Foreground="{StaticResource AccentBrush}"/>
+                            <TextBlock Text="New wallet" FontWeight="SemiBold"/>
+                            <TextBlock Classes="caption" TextWrapping="Wrap" Text="A fresh seed, written down and checked"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton Classes="modeCard" GroupName="AddMode" AutomationProperties.AutomationId="AddWallet.Mode.Seed" AutomationProperties.Name="Restore from seed"
+                                 IsChecked="{Binding Mode, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=1}">
+                        <StackPanel Spacing="6">
+                            <c:Icon Data="{StaticResource IconKey}" Foreground="{StaticResource AccentBrush}"/>
+                            <TextBlock Text="Restore from seed" FontWeight="SemiBold"/>
+                            <TextBlock Classes="caption" TextWrapping="Wrap" Text="Your 25 words, from this or any Monero wallet"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton Classes="modeCard" GroupName="AddMode" AutomationProperties.AutomationId="AddWallet.Mode.Keys" AutomationProperties.Name="Restore from keys"
+                                 IsChecked="{Binding Mode, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=2}">
+                        <StackPanel Spacing="6">
+                            <c:Icon Data="{StaticResource IconShield}" Foreground="{StaticResource AccentBrush}"/>
+                            <TextBlock Text="Restore from keys" FontWeight="SemiBold"/>
+                            <TextBlock Classes="caption" TextWrapping="Wrap" Text="Address, view key and spend key"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton Classes="modeCard" GroupName="AddMode" AutomationProperties.AutomationId="AddWallet.Mode.Watch" AutomationProperties.Name="Watch-only wallet"
+                                 IsChecked="{Binding Mode, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=3}">
+                        <StackPanel Spacing="6">
+                            <c:Icon Data="{StaticResource IconEye}" Foreground="{StaticResource AccentBrush}"/>
+                            <TextBlock Text="Watch-only" FontWeight="SemiBold"/>
+                            <TextBlock Classes="caption" TextWrapping="Wrap" Text="Address and view key: sees payments, can't spend"/>
+                        </StackPanel>
+                    </RadioButton>
+                </UniformGrid>
+
+                <Border AutomationProperties.AutomationId="AddWallet.MainnetWarning" Classes="callout danger" IsVisible="{Binding IsMainnet}">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <c:Icon Data="{StaticResource IconWarning}" Foreground="{StaticResource DangerBrush}" Margin="0,1,12,0" VerticalAlignment="Top"/>
+                        <TextBlock Grid.Column="1" Foreground="#F0C3C3" TextWrapping="Wrap"
+                                   Text="Mainnet: real funds. Unaudited beta software, and Monero transactions are irreversible. Keep an independent backup of every seed."/>
+                    </Grid>
+                </Border>
+
+                <!-- ============ Name, network, node ============ -->
+                <Border Classes="section" app:Entrance.Rise="120">
+                    <StackPanel Spacing="12">
+                        <Grid ColumnDefinitions="*,12,Auto">
+                            <StackPanel Grid.Column="0" Spacing="7">
+                                <TextBlock Text="NAME" Classes="eyebrow"/>
+                                <TextBox MaxLength="40" AutomationProperties.AutomationId="AddWallet.Name" AutomationProperties.Name="Wallet name" Text="{Binding Name}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Spacing="7">
+                                <TextBlock Text="NETWORK" Classes="eyebrow"/>
+                                <ComboBox AutomationProperties.AutomationId="AddWallet.Network" AutomationProperties.Name="Network" SelectedIndex="{Binding NetworkIndex}" Width="150">
+                                    <ComboBoxItem>Mainnet</ComboBoxItem>
+                                    <ComboBoxItem>Stagenet</ComboBoxItem>
+                                    <ComboBoxItem>Testnet</ComboBoxItem>
+                                </ComboBox>
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel Spacing="7">
+                            <TextBlock Text="NODE" Classes="eyebrow"/>
+                            <Grid ColumnDefinitions="*,10,Auto">
+                                <TextBox Grid.Column="0" Classes="mono" FontSize="13" AutomationProperties.AutomationId="AddWallet.Daemon" AutomationProperties.Name="Node address"
+                                         Text="{Binding DaemonAddress}" Watermark="http://host:port"/>
+                                <ComboBox Grid.Column="2" x:CompileBindings="False" Width="230" AutomationProperties.Name="Public nodes"
+                                          ItemsSource="{Binding PresetNodes}" SelectedItem="{Binding SelectedPreset}" PlaceholderText="Or a public node…">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Display}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+                            <TextBlock Classes="caption" TextWrapping="Wrap" AutomationProperties.AutomationId="AddWallet.TestChainNotice" IsVisible="{Binding IsLocalTestChain}"
+                                       Foreground="{StaticResource InfoBrush}"
+                                       Text="This node is a local test chain (regtest): its coins have no value. Keep the network on Mainnet, regtest uses mainnet-format addresses."/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- ============ New: generate, write down, check ============ -->
+                <Border Classes="section" IsVisible="{Binding IsNew}">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="Recovery seed" Classes="h2"/>
+                        <Button HorizontalAlignment="Left" AutomationProperties.AutomationId="AddWallet.Generate" AutomationProperties.Name="Generate seed"
+                                Command="{Binding GenerateCommand}" IsEnabled="{Binding !Busy}" IsVisible="{Binding !SeedGenerated}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <c:Icon Data="{StaticResource IconKey}" Width="16" Height="16"/>
+                                <TextBlock Text="Generate the seed"/>
+                            </StackPanel>
+                        </Button>
+                        <StackPanel Spacing="12" IsVisible="{Binding SeedGenerated}">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Text="WRITE THESE 25 WORDS DOWN, IN ORDER" Classes="eyebrow" VerticalAlignment="Center"/>
+                                <Border Grid.Column="1" Classes="pill success" AutomationProperties.AutomationId="AddWallet.SeedVerified" IsVisible="{Binding SeedVerified}">
+                                    <StackPanel Orientation="Horizontal" Spacing="5">
+                                        <c:Icon Data="{StaticResource IconCheck}" Width="12" Height="12" StrokeThickness="2.4"
+                                                Foreground="{StaticResource SuccessBrush}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Backup checked"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                            <ItemsControl AutomationProperties.AutomationId="AddWallet.SeedWords" AutomationProperties.Name="Recovery seed words" ItemsSource="{Binding SeedWords}" Margin="-4,0">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Columns="5"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:SeedWord">
+                                        <Border Classes="seedWord">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Text="{Binding Number}" Classes="mono" FontSize="11" Foreground="{StaticResource TextTertiary}"
+                                                           MinWidth="16" TextAlignment="Right" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding Word}" Classes="mono" FontSize="13" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Border Classes="callout warning">
+                                <TextBlock Foreground="#EBD9AE" TextWrapping="Wrap"
+                                           Text="These words ARE this wallet. Anyone who sees them can take its funds; lose them (and this vault) and the funds are gone. Paper or steel, offline, never a screenshot."/>
+                            </Border>
+                            <Button HorizontalAlignment="Left" Classes="accent" AutomationProperties.AutomationId="AddWallet.OpenVerify" AutomationProperties.Name="Check my backup"
+                                    Command="{Binding OpenVerifyCommand}" IsVisible="{Binding !SeedVerified}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <c:Icon Data="{StaticResource IconCheck}" Width="16" Height="16"/>
+                                    <TextBlock Text="I've written them down — check" Foreground="{StaticResource AccentText}"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- ============ Restore from seed ============ -->
+                <Border Classes="section" IsVisible="{Binding IsSeedImport}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Seed" Classes="h2"/>
+                        <TextBox Classes="mono" FontSize="13" Watermark="The 25-word seed, separated by spaces" AutomationProperties.AutomationId="AddWallet.Seed"
+                                 AutomationProperties.Name="Seed to restore" Text="{Binding ImportMnemonic}" AcceptsReturn="True" Height="76" TextWrapping="Wrap"/>
+                        <TextBox Classes="mono" FontSize="13" Watermark="Seed offset passphrase (only if you used one)" AutomationProperties.AutomationId="AddWallet.SeedOffset"
+                                 AutomationProperties.Name="Seed offset passphrase" Text="{Binding ImportSeedOffset}"/>
+                        <TextBlock Classes="caption" TextWrapping="Wrap" Foreground="{StaticResource WarningBrush}"
+                                   Text="Leave the offset blank unless this seed was created WITH one. It is case- and space-sensitive; a wrong or missing offset silently opens a different, empty wallet."/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ============ Restore from keys / watch-only ============ -->
+                <Border Classes="section" IsVisible="{Binding UsesKeys}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Address and keys" Classes="h2"/>
+                        <TextBox Classes="mono" FontSize="12.5" Watermark="The wallet's main address" AutomationProperties.AutomationId="AddWallet.Address"
+                                 AutomationProperties.Name="Main address" Text="{Binding ImportAddress}" TextWrapping="Wrap"/>
+                        <c:SecretTextBox Classes="mono" FontSize="12.5" PasswordChar="●" Watermark="Private view key (64 hex characters)" AutomationProperties.AutomationId="AddWallet.ViewKey"
+                                         AutomationProperties.Name="Private view key" Text="{Binding ImportViewKey}"/>
+                        <c:SecretTextBox Classes="mono" FontSize="12.5" PasswordChar="●" Watermark="Private spend key (64 hex characters)" AutomationProperties.AutomationId="AddWallet.SpendKey"
+                                         AutomationProperties.Name="Private spend key" Text="{Binding ImportSpendKey}" IsVisible="{Binding IsKeyImport}"/>
+                        <Border Classes="callout warning" IsVisible="{Binding IsWatchOnly}">
+                            <Grid ColumnDefinitions="Auto,*">
+                                <c:Icon Data="{StaticResource IconEye}" Foreground="{StaticResource WarningBrush}" Margin="0,1,12,0" VerticalAlignment="Top"/>
+                                <TextBlock Grid.Column="1" Foreground="#EBD9AE" TextWrapping="Wrap"
+                                           Text="A watch-only wallet sees every payment coming in, but not what was spent (that takes the spend key), so its balance can read higher than what the wallet really holds. It can't send."/>
+                            </Grid>
+                        </Border>
+                        <TextBlock Classes="caption" TextWrapping="Wrap"
+                                   Text="monero-wallet-rpc checks the keys against the address before anything is saved: a key that doesn't belong to it is refused."/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ============ Imports: where to start scanning ============ -->
+                <Border Classes="section" IsVisible="{Binding IsImport}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="SCAN FROM" Classes="eyebrow"/>
+                        <ComboBox AutomationProperties.AutomationId="AddWallet.RestoreMode" AutomationProperties.Name="Scan from" SelectedIndex="{Binding RestoreMode}" HorizontalAlignment="Stretch">
+                            <ComboBoxItem>Full history — finds everything (safest, slowest)</ComboBoxItem>
+                            <ComboBoxItem>A specific block height</ComboBoxItem>
+                        </ComboBox>
+                        <TextBox Classes="mono" Watermark="Block height, e.g. 3150000" AutomationProperties.AutomationId="AddWallet.RestoreHeight" AutomationProperties.Name="Restore height"
+                                 Text="{Binding RestoreHeightText}" IsVisible="{Binding IsSpecificHeight}" HorizontalAlignment="Left" Width="280"/>
+                        <TextBlock Classes="caption" TextWrapping="Wrap"
+                                   Text="Pick a height before the wallet's first payment: anything earlier is never found. Before saving, you'll see the address this opens, to compare with your records."/>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="callout danger" IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <c:Icon Data="{StaticResource IconWarning}" Foreground="{StaticResource DangerBrush}" Margin="0,1,12,0" VerticalAlignment="Top"/>
+                        <TextBlock Grid.Column="1" AutomationProperties.AutomationId="AddWallet.Error" Text="{Binding Error}" Foreground="#F3C2C2" TextWrapping="Wrap"/>
+                    </Grid>
+                </Border>
+
+                <Grid ColumnDefinitions="Auto,10,*">
+                    <Button Content="Cancel" MinHeight="48" Padding="22,0" VerticalContentAlignment="Center" AutomationProperties.AutomationId="AddWallet.Cancel" Command="{Binding CancelCommand}"/>
+                    <Button Grid.Column="2" Classes="accent" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" MinHeight="48"
+                            AutomationProperties.AutomationId="AddWallet.Submit" AutomationProperties.Name="Add wallet" Command="{Binding AddCommand}" IsEnabled="{Binding !Busy}">
+                        <StackPanel Orientation="Horizontal" Spacing="9">
+                            <c:Icon Data="{StaticResource IconWallet}" Width="17" Height="17"/>
+                            <TextBlock Text="Add wallet" FontSize="15" Foreground="{StaticResource AccentText}"/>
+                        </StackPanel>
+                    </Button>
+                </Grid>
+                <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" Height="3"/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ===== Backup check ===== -->
+        <Border x:Name="VerifyScrim" IsVisible="{Binding ShowVerifyOverlay}" Background="{StaticResource Scrim}">
+            <Border x:Name="VerifySheet" Classes="card" Width="460" Padding="28,26" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <StackPanel Spacing="16">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Check your backup" Classes="h2"/>
+                        <TextBlock Classes="muted" TextWrapping="Wrap" Text="Type the words at these positions from what you wrote down — not from the screen."/>
+                    </StackPanel>
+                    <StackPanel Spacing="5">
+                        <TextBlock AutomationProperties.AutomationId="AddWallet.Verify.Prompt1" Text="{Binding VerifyPrompt1}" Classes="eyebrow"/>
+                        <TextBox Classes="mono" AutomationProperties.AutomationId="AddWallet.Verify.Input1" AutomationProperties.Name="First word" Text="{Binding VerifyInput1}"/>
+                    </StackPanel>
+                    <StackPanel Spacing="5">
+                        <TextBlock AutomationProperties.AutomationId="AddWallet.Verify.Prompt2" Text="{Binding VerifyPrompt2}" Classes="eyebrow"/>
+                        <TextBox Classes="mono" AutomationProperties.AutomationId="AddWallet.Verify.Input2" AutomationProperties.Name="Second word" Text="{Binding VerifyInput2}"/>
+                    </StackPanel>
+                    <StackPanel Spacing="5">
+                        <TextBlock AutomationProperties.AutomationId="AddWallet.Verify.Prompt3" Text="{Binding VerifyPrompt3}" Classes="eyebrow"/>
+                        <TextBox Classes="mono" AutomationProperties.AutomationId="AddWallet.Verify.Input3" AutomationProperties.Name="Third word" Text="{Binding VerifyInput3}"/>
+                    </StackPanel>
+                    <TextBlock AutomationProperties.AutomationId="AddWallet.Verify.Message" Text="{Binding VerifyMessage}" Foreground="{StaticResource DangerBrush}"
+                               FontSize="12.5" TextWrapping="Wrap" IsVisible="{Binding VerifyMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    <Grid ColumnDefinitions="*,10,*">
+                        <Button Content="Cancel" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" AutomationProperties.AutomationId="AddWallet.Verify.Cancel"
+                                Command="{Binding CloseVerifyCommand}"/>
+                        <Button Grid.Column="2" Classes="accent" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                AutomationProperties.AutomationId="AddWallet.Verify.Submit" AutomationProperties.Name="Check" Command="{Binding VerifySeedCommand}">
+                            <TextBlock Text="Check" Foreground="{StaticResource AccentText}"/>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Border>
+
+        <!-- ===== Imports: is this the right wallet? (hard stop before saving) ===== -->
+        <Border x:Name="ConfirmScrim" IsVisible="{Binding ShowConfirm}" Background="{StaticResource Scrim}">
+            <Border x:Name="ConfirmSheet" Classes="card" Width="560" Padding="28,26" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <StackPanel Spacing="16">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Is this your wallet?" Classes="h2"/>
+                        <TextBlock Classes="muted" TextWrapping="Wrap"
+                                   Text="What you entered opens the wallet with this main address. Compare it with your records: a wrong seed or offset opens a valid but DIFFERENT, empty wallet, and only you can tell."/>
+                    </StackPanel>
+                    <Border Classes="inset" Padding="14,12">
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="MAIN ADDRESS" Classes="eyebrow"/>
+                            <SelectableTextBlock AutomationProperties.AutomationId="AddWallet.ConfirmAddress" Text="{Binding ConfirmAddress}" Classes="mono" FontSize="12.5" LineHeight="19" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                    <Grid ColumnDefinitions="*,10,*">
+                        <Button Content="No — go back" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" AutomationProperties.AutomationId="AddWallet.ConfirmNo"
+                                Command="{Binding CancelConfirmCommand}"/>
+                        <Button Grid.Column="2" Classes="accent" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                AutomationProperties.AutomationId="AddWallet.ConfirmYes" AutomationProperties.Name="Yes, add it" Command="{Binding ConfirmAddCommand}">
+                            <TextBlock Text="Yes — add it" Foreground="{StaticResource AccentText}"/>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Border>
+    </Grid>
+</UserControl>

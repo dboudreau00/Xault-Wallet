@@ -6,6 +6,11 @@ namespace XaultWallet.Desktop.ViewModels;
 
 public sealed partial class UnlockViewModel : ViewModelBase
 {
+    private readonly Task _closing;
+
+    /// <param name="closing">What remains of the last lock: the vault is opened again only after it.</param>
+    public UnlockViewModel(Task? closing = null) => _closing = closing ?? Task.CompletedTask;
+
     [ObservableProperty]
     private string _password = string.Empty;
 
@@ -22,8 +27,9 @@ public sealed partial class UnlockViewModel : ViewModelBase
     [RelayCommand]
     private void ToggleReveal() => RevealPassword = !RevealPassword;
 
-    /// <summary>Raised on a correct password. Carries no real/decoy signal — the vault has none.</summary>
-    public event Action<UnlockResult>? Unlocked;
+    /// <summary>Raised on a correct password with the opened profile. Carries no real/decoy signal —
+    /// the vault has none.</summary>
+    public event Action<VaultSession>? Unlocked;
 
     [RelayCommand]
     private async Task UnlockAsync()
@@ -42,24 +48,27 @@ public sealed partial class UnlockViewModel : ViewModelBase
             char[] chars = Password.ToCharArray();
             Password = string.Empty; // clear the bound field ASAP
 
-            UnlockResult? result = await Task.Run(() =>
+            // The last lock may still be writing its final save: open the file once that is done.
+            await _closing;
+
+            VaultSession? session = await Task.Run(() =>
             {
                 // Take ownership of the password chars FIRST (FromPassword zeroes them): if
                 // Load throws (missing/corrupt vault), the full password must not be left
                 // un-zeroed on the heap.
                 using var pw = SecureBuffer.FromPassword(chars);
                 var mgr = VaultManager.Load(AppServices.Instance.VaultPath);
-                return mgr.Unlock(pw);
+                return mgr.OpenSession(pw);
             });
 
-            if (result is null)
+            if (session is null)
             {
                 // Deliberately generic. Never hint that a duress password exists.
                 Error = "Incorrect password.";
                 return;
             }
 
-            Unlocked?.Invoke(result);
+            Unlocked?.Invoke(session);
         }
         catch (Exception ex)
         {

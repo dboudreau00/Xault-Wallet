@@ -4,6 +4,7 @@
              xmlns:app="clr-namespace:XaultWallet.Desktop"
              xmlns:conv="clr-namespace:XaultWallet.Desktop"
              xmlns:c="clr-namespace:XaultWallet.Desktop.Controls"
+             xmlns:v="clr-namespace:XaultWallet.Desktop.Views"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="1080" d:DesignHeight="714"
@@ -73,8 +74,9 @@
                         <TextBlock AutomationProperties.AutomationId="Settings.BinaryTestResult" Text="{Binding BinaryTestResult}" Classes="result"
                                    IsVisible="{Binding BinaryTestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                    Foreground="{Binding BinaryTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
-                        <TextBlock Classes="caption" TextWrapping="Wrap"
-                                   Text="Download it from getmonero.org and verify the signed hashes before use — this binary handles your keys."/>
+                        <Separator Margin="0,2"/>
+                        <TextBlock Text="DON'T HAVE IT YET?" Classes="eyebrow"/>
+                        <v:WalletRpcSetupPanel DataContext="{Binding Setup}"/>
                     </StackPanel>
                 </Border>
 
@@ -158,39 +160,13 @@
                         <StackPanel Orientation="Horizontal" Spacing="12">
                             <Border Classes="sectionIcon"><c:Icon Data="{StaticResource IconShield}"/></Border>
                             <StackPanel Spacing="1" VerticalAlignment="Center">
-                                <TextBlock Text="This wallet" Classes="h2"/>
-                                <TextBlock Classes="caption" Text="Each change applies to the wallet your password opens. Your seed never changes."/>
+                                <TextBlock Text="Vault password" Classes="h2"/>
+                                <TextBlock Classes="caption" Text="Changes the password of the wallets it opens. Your seeds never change."/>
                             </StackPanel>
                         </StackPanel>
 
-                        <TextBlock Text="CHANGE NODE" Classes="eyebrow" Margin="0,4,0,0"/>
-                        <Grid ColumnDefinitions="*,8,Auto">
-                            <TextBox Grid.Column="0" Classes="mono" FontSize="12.5" AutomationProperties.AutomationId="Settings.RepointAddress" AutomationProperties.Name="New node address" Watermark="http://host:port — same network as the wallet"
-                                     Text="{Binding RepointNodeAddress}"/>
-                            <Button Grid.Column="2" Content="Test" AutomationProperties.AutomationId="Settings.TestRepoint" AutomationProperties.Name="Test new node" Command="{Binding TestRepointNodeCommand}" IsEnabled="{Binding !Busy}"/>
-                        </Grid>
-                        <ComboBox x:CompileBindings="False" HorizontalAlignment="Stretch"
-                                  AutomationProperties.AutomationId="Settings.RepointPresets" AutomationProperties.Name="Public nodes for this wallet"
-                                  ItemsSource="{Binding PresetNodes}" SelectedItem="{Binding SelectedRepointPreset}"
-                                  PlaceholderText="Or pick a public node…">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding Display}"/>
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
-                        <TextBlock AutomationProperties.AutomationId="Settings.RepointTestResult" Text="{Binding RepointTestResult}" Classes="result"
-                                   IsVisible="{Binding RepointTestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                   Foreground="{Binding RepointTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
-                        <Grid ColumnDefinitions="*,8,Auto">
-                            <c:SecretTextBox Grid.Column="0" Watermark="Wallet password (confirms the change)" PasswordChar="●" AutomationProperties.AutomationId="Settings.RepointPassword" AutomationProperties.Name="Wallet password" Text="{Binding RepointPassword}"/>
-                            <Button Grid.Column="2" Content="Update node" AutomationProperties.AutomationId="Settings.RepointNode" Command="{Binding RepointNodeCommand}" IsEnabled="{Binding !Busy}"/>
-                        </Grid>
-                        <TextBlock AutomationProperties.AutomationId="Settings.RepointResult" Text="{Binding RepointResult}" Classes="result"
-                                   IsVisible="{Binding RepointResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                   Foreground="{Binding RepointOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
-
-                        <Separator Margin="0,6"/>
+                        <TextBlock Classes="caption" TextWrapping="Wrap"
+                                   Text="A wallet's node, name and keys are in the wallet itself: Manage wallet, next to its name."/>
 
                         <TextBlock Text="CHANGE PASSWORD" Classes="eyebrow"/>
                         <c:SecretTextBox Watermark="Current password" PasswordChar="●" AutomationProperties.AutomationId="Settings.CurrentPassword" AutomationProperties.Name="Current password" Text="{Binding CurrentPassword}"/>
@@ -206,6 +182,38 @@
                         <TextBlock AutomationProperties.AutomationId="Settings.ChangePasswordResult" Text="{Binding ChangePasswordResult}" Classes="result"
                                    IsVisible="{Binding ChangePasswordResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                    Foreground="{Binding ChangePasswordOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ============ Vault format (a vault from 0.1–0.3; same words for either password) ============ -->
+                <Border Classes="section" app:Entrance.Rise="210" IsVisible="{Binding ShowFormatCard}" AutomationProperties.AutomationId="Settings.FormatCard">
+                    <StackPanel Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Border Classes="sectionIcon"><c:Icon Data="{StaticResource IconRefresh}"/></Border>
+                            <StackPanel Spacing="1" VerticalAlignment="Center">
+                                <TextBlock Text="Vault format" Classes="h2"/>
+                                <TextBlock Classes="caption" Text="This vault was made by XaultWallet 0.3 or earlier."/>
+                            </StackPanel>
+                        </StackPanel>
+                        <TextBlock Classes="muted" TextWrapping="Wrap"
+                                   Text="It keeps that format until you upgrade it: about 4 KB for the wallets, contacts and notes of each password. Upgrading makes room for many more (256 KB per password); 0.3 can't open the vault afterwards. It can't be undone: export a backup first if you might go back to 0.3."/>
+                        <Border Classes="callout warning">
+                            <TextBlock Foreground="#EBD9AE" TextWrapping="Wrap"
+                                       Text="Upgrading converts only the part of the vault that the password you unlocked with opens. If this vault has a second password, its part stays in the old format until that password is used in 0.5 — and until then, anyone holding it and the vault file can tell that another password was used. So upgrade from the second password first. If that password is set to wipe the other wallets when used, don't use it: rebuild the vault instead (SECURITY.md, “Upgrading to 0.5”)."/>
+                        </Border>
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding VaultIsOldFormat}">
+                            <Button Content="Upgrade vault…" AutomationProperties.AutomationId="Settings.AskUpgradeFormat" Command="{Binding AskFormatUpgradeCommand}"
+                                    IsVisible="{Binding !ConfirmFormatUpgrade}"/>
+                            <Button Classes="accent" AutomationProperties.AutomationId="Settings.UpgradeFormat" AutomationProperties.Name="Upgrade now"
+                                    Command="{Binding UpgradeFormatCommand}" IsVisible="{Binding ConfirmFormatUpgrade}" IsEnabled="{Binding !Busy}">
+                                <TextBlock Text="Upgrade now" Foreground="{StaticResource AccentText}"/>
+                            </Button>
+                            <Button Content="Cancel" AutomationProperties.AutomationId="Settings.CancelUpgradeFormat" Command="{Binding CancelFormatUpgradeCommand}"
+                                    IsVisible="{Binding ConfirmFormatUpgrade}"/>
+                        </StackPanel>
+                        <TextBlock AutomationProperties.AutomationId="Settings.FormatUpgradeResult" Text="{Binding FormatUpgradeResult}" Classes="result" TextWrapping="Wrap"
+                                   IsVisible="{Binding FormatUpgradeResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                   Foreground="{Binding FormatUpgradeOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
                     </StackPanel>
                 </Border>
 

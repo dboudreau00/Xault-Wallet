@@ -5,9 +5,10 @@ exercise a wallet end to end without risking anything. **Do not test with mainne
 
 ## 1. Get the Monero tools
 
-Download an official Monero CLI release from getmonero.org and note the path to
-`monero-wallet-rpc` (or `monero-wallet-rpc.exe` on Windows). You do not need to build
-anything — XaultWallet drives this binary directly.
+Download an official Monero CLI release from getmonero.org, verify it, and note the path to
+`monero-wallet-rpc` (or `monero-wallet-rpc.exe` on Windows) — or let the app's **Download &
+install** fetch and verify it for you. You do not need to build anything — XaultWallet drives this
+binary directly. (For a local stagenet node you need `monerod` from the same archive.)
 
 ## 2. Run a stagenet daemon
 
@@ -49,6 +50,17 @@ Launch the app, click **Settings**, and:
 - **Duress (if set):** unlock with the duress password and confirm you get the decoy wallet.
   If you enabled "wipe real on duress", verify (with a *throwaway* vault) that the real slot
   is destroyed — this is irreversible, so test it only on a disposable vault.
+- **Several wallets:** add a second wallet (**+** next to the wallet's name), switch between them,
+  lock and unlock (the vault reopens on the wallet you used last), and check the duress password's
+  profile shows none of them.
+- **Contacts and payment requests:** save a contact and *Pay* it; request an amount on Receive and pay
+  it by pasting the copied `monero:` link into another wallet's Send; pay two recipients at once.
+- **Tools:** prove a payment from History (*Prove this payment*), sign and check a message, make and
+  check a reserve proof.
+- **A vault from 0.3** (a copy — keep the original): it opens in 0.5 unchanged, and Settings shows
+  *Vault format*. Following [Coming from 0.3](README.md#9-coming-from-03), unlock with the duress
+  password first, upgrade from there, then unlock with the main password; both open their wallets,
+  and the file is now 256 KiB per password. 0.3 should refuse the upgraded copy.
 
 ## Automated integration tests (regtest)
 
@@ -82,9 +94,13 @@ skip notice, so a green run with nothing configured means "skipped", not "passed
 One scenario (`tests/E2E.Shared/WalletScenario.cs`) uses the app the way a person does: create a
 vault, write down and verify the seed, set a duress password with a decoy, unlock both wallets,
 receive (mined) coins, copy the address, send 12.5 XMR to the decoy with the confirmation checked line
-by line, see it in History, see the decoy receive it, open Settings. Mining is the only thing done
-outside the UI. It needs the regtest node above and `monero-wallet-rpc`, and leaves a screenshot of
-every step. Two drivers run it:
+by line, see it in History, see the decoy receive it, open Settings. Then the 0.5 features: add a
+second wallet (new seed, backup checked), switch back, save the decoy as a contact, pay the contact and
+the second wallet in one transaction, see the second wallet receive its share, lock, check the vault
+reopens on the wallet used last with the contact still there, and check the duress password still opens
+only the decoy (paid twice, with no contacts). Mining is the only thing done outside the UI. It needs
+the regtest node above and `monero-wallet-rpc`, and leaves a screenshot of every step. Two drivers run
+it:
 
 **Linux, in process** (CI runs this on every push). Real pointer and keyboard input; a fresh profile in
 a temporary home, never yours:
@@ -100,7 +116,8 @@ release zip). It refuses to run if `%APPDATA%\XaultWallet` already exists, so it
 vault; run it on a fresh VM:
 
 ```powershell
-# monero-wallet-rpc.exe next to XaultWallet.exe, monerod --regtest running as above
+# monerod --regtest running as above. With no monero-wallet-rpc.exe next to XaultWallet.exe, the
+# scenario starts by installing it with the app's own "Download & install" (from getmonero.org).
 $env:XW_E2E_DAEMON = "http://127.0.0.1:18081"
 dotnet run -c Release --project tests/XaultWallet.E2E.Windows -- C:\path\to\XaultWallet.exe e2e-screens
 ```

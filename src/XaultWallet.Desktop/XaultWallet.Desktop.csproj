@@ -10,7 +10,7 @@
     <ApplicationIcon>Assets\xault.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
 
-    <Version>0.3.0-beta</Version>
+    <Version>0.5.0-beta</Version>
     <AssemblyName>XaultWallet</AssemblyName>
     <Product>XaultWallet</Product>
     <RuntimeIdentifiers>win-x64;linux-x64;osx-x64;osx-arm64</RuntimeIdentifiers>

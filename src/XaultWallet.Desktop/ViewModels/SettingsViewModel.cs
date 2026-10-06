@@ -56,36 +56,58 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// vault file with only the exported backup in hand.</summary>
     public bool CanRestoreVault { get; }
 
-    // Change THIS wallet's node (repoint an existing vault's daemon address)
-    [ObservableProperty] private string _repointNodeAddress = string.Empty;
-    [ObservableProperty] private string _repointPassword = string.Empty;
-    [ObservableProperty] private string _repointResult = string.Empty;
-    [ObservableProperty] private bool _repointOk;
-    [ObservableProperty] private string _repointTestResult = string.Empty;
-    [ObservableProperty] private bool _repointTestOk;
+    /// <summary>The open profile, when Settings was opened from an unlocked wallet. Password changes
+    /// then go through its session (and only ever change its own password).</summary>
+    private readonly ProfileViewModel? _profile;
 
-    /// <summary>Selecting a preset fills the repoint address field below (network is unchanged).</summary>
-    [ObservableProperty] private RemoteNode? _selectedRepointPreset;
-
-    /// <summary>Only show the repoint card when there's actually a wallet to repoint.</summary>
+    /// <summary>The password card and the export button need a vault to act on.</summary>
     public bool VaultExists { get; } = VaultManager.Exists(AppServices.Instance.VaultPath);
 
-    partial void OnSelectedRepointPresetChanged(RemoteNode? value)
+    // ---- Vault format (a vault from 0.1–0.3, upgraded only on request) ----
+
+    /// <summary>Shown while a wallet is open in a vault that still has the old format (the upgrade
+    /// re-seals the open profile). Stays up after upgrading, to show the result.</summary>
+    public bool ShowFormatCard { get; }
+
+    /// <summary>The vault still has the old format: the upgrade button is offered.</summary>
+    public bool VaultIsOldFormat => _profile?.VaultIsOldFormat == true;
+
+    /// <summary>Second step: the warning is read, the button now upgrades.</summary>
+    [ObservableProperty] private bool _confirmFormatUpgrade;
+    [ObservableProperty] private string _formatUpgradeResult = string.Empty;
+    [ObservableProperty] private bool _formatUpgradeOk;
+
+    [RelayCommand]
+    private void AskFormatUpgrade()
     {
-        if (value is null)
+        FormatUpgradeResult = string.Empty;
+        ConfirmFormatUpgrade = true;
+    }
+
+    [RelayCommand]
+    private void CancelFormatUpgrade() => ConfirmFormatUpgrade = false;
+
+    [RelayCommand]
+    private async Task UpgradeFormatAsync()
+    {
+        if (_profile is null || Busy)
         {
             return;
         }
 
-        RepointNodeAddress = value.Url;
-        RepointResult = string.Empty;
-        RepointTestResult = string.Empty;
-    }
-
-    partial void OnRepointNodeAddressChanged(string value)
-    {
-        RepointResult = string.Empty;
-        RepointTestResult = string.Empty;
+        ConfirmFormatUpgrade = false;
+        Busy = true;
+        try
+        {
+            string? error = await _profile.UpgradeVaultFormatAsync();
+            FormatUpgradeOk = error is null;
+            FormatUpgradeResult = error ?? "Upgraded. The wallets, contacts and notes of this password now have room to grow.";
+            OnPropertyChanged(nameof(VaultIsOldFormat));
+        }
+        finally
+        {
+            Busy = false;
+        }
     }
 
     /// <summary>Selecting a preset fills the daemon address and network below.</summary>
@@ -111,16 +133,24 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public event Action? Closed;
 
-    public string DefaultBinaryHint { get; }
+    [ObservableProperty] private string _defaultBinaryHint = string.Empty;
 
-    /// <summary>"0.3.0-beta" — the informational version without build metadata.</summary>
+    /// <summary>"Download &amp; install" for monero-wallet-rpc.</summary>
+    public WalletRpcSetupViewModel Setup { get; } = new();
+
+    /// <summary>"0.5.0-beta" — the informational version without build metadata.</summary>
     public string AppVersion { get; } =
         (System.Reflection.CustomAttributeExtensions
             .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(SettingsViewModel).Assembly)
             ?.InformationalVersion ?? "").Split('+')[0];
 
-    public SettingsViewModel(bool walletOpen = false)
+    /// <summary>What remains of the last lock (its final save may still be writing the vault).</summary>
+    private readonly Task _closing;
+
+    public SettingsViewModel(ProfileViewModel? profile = null, Task? closing = null)
     {
+        _profile = profile;
+        _closing = closing ?? Task.CompletedTask;
         AppSettings s = AppServices.Instance.Settings;
         _walletRpcBinaryPath = s.WalletRpcBinaryPath;
         _defaultDaemonAddress = s.DefaultDaemonAddress;
@@ -128,17 +158,33 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _autoRefreshSeconds = s.AutoRefreshSeconds;
         _autoLockMinutes = s.AutoLockMinutes;
         _proxyAddress = s.ProxyAddress;
-        CanRestoreVault = !walletOpen;
-        string detected = AppServices.Instance.ResolvedDefaultWalletRpcBinary;
-        DefaultBinaryHint = detected.Length > 0
-            ? "Leave blank to auto-detect. Currently resolves to: " + detected
-            : "Leave blank to auto-detect (nothing found next to the app or on PATH yet), or enter the full path.";
+        CanRestoreVault = profile is null;
+        ShowFormatCard = profile?.VaultIsOldFormat == true;
+        RefreshBinaryHint();
+
+        // A verified install becomes the configured path (the setup view model saved it): show it
+        // here at once, with the same result a Test would give.
+        Setup.Installed += installed =>
+        {
+            WalletRpcBinaryPath = installed.Path;
+            RefreshBinaryHint();
+            BinaryTestOk = true;
+            BinaryTestResult = $"OK \u2014 {installed.VersionLine} ({installed.Path})";
+        };
 
         if (AppSettings.RecoveredFromCorruptFile)
         {
             SavedMessage = "Settings could not be read and were reset to defaults. " +
                            "The unreadable file was kept as settings.json.bad.";
         }
+    }
+
+    private void RefreshBinaryHint()
+    {
+        string detected = AppServices.Instance.ResolvedDefaultWalletRpcBinary;
+        DefaultBinaryHint = detected.Length > 0
+            ? "Leave blank to auto-detect. Currently resolves to: " + detected
+            : "Leave blank to auto-detect (nothing found next to the app, on PATH, or installed by XaultWallet yet), or enter the full path.";
     }
 
     partial void OnWalletRpcBinaryPathChanged(string value) => SavedMessage = string.Empty;
@@ -303,23 +349,31 @@ public sealed partial class SettingsViewModel : ViewModelBase
             char[] curChars = CurrentPassword.ToCharArray();
             char[] nextChars = NewPassword.ToCharArray();
             CurrentPassword = NewPassword = NewPasswordConfirm = string.Empty;
+            if (_profile is null)
+            {
+                // From the unlock screen: a lock's last save could otherwise land after this rewrite
+                // and put the old password back, after "Password changed." was shown.
+                await _closing;
+            }
 
             // Argon2id at these parameters takes seconds — keep it OFF the UI thread so the
             // window never looks hung (a user who kills a "frozen" app mid-rewrite is the
             // failure mode the atomic vault write exists to survive, not to invite).
-            bool changed = await Task.Run(() =>
-            {
-                // Take ownership of the password chars FIRST (FromPassword zeroes them): if
-                // Load throws, the passwords must not be left un-zeroed on the heap.
-                using var cur = SecureBuffer.FromPassword(curChars);
-                using var next = SecureBuffer.FromPassword(nextChars);
-                VaultManager mgr = VaultManager.Load(AppServices.Instance.VaultPath);
-
-                // Symmetric: re-seals whichever wallet the current password opens. The wording below
-                // is identical either way — an asymmetric rule or message would tell a coercer
-                // holding the duress password that another wallet exists.
-                return mgr.ChangePassword(cur, next);
-            });
+            // With a wallet open, the open session changes ITS OWN password only (the same rule
+            // whichever password opened it). From the unlock screen, whichever profile the current
+            // password opens. Either way the wording below is identical: an asymmetric rule or
+            // message would tell a coercer holding the duress password that another wallet exists.
+            bool changed = _profile is not null
+                ? await _profile.ChangePasswordAsync(curChars, nextChars)
+                : await Task.Run(() =>
+                {
+                    // Take ownership of the password chars FIRST (FromPassword zeroes them): if
+                    // Load throws, the passwords must not be left un-zeroed on the heap.
+                    using var cur = SecureBuffer.FromPassword(curChars);
+                    using var next = SecureBuffer.FromPassword(nextChars);
+                    VaultManager mgr = VaultManager.Load(AppServices.Instance.VaultPath);
+                    return mgr.ChangePassword(cur, next);
+                });
 
             if (changed)
             {
@@ -330,7 +384,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
             else
             {
                 ChangePasswordOk = false;
-                ChangePasswordResult = "That password didn't unlock this vault.";
+                ChangePasswordResult = _profile is not null
+                    ? "That isn't the password of the wallet that's open."
+                    : "That password didn't unlock this vault.";
             }
         }
         catch (ArgumentException ex)
@@ -344,101 +400,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
             ChangePasswordOk = false;
             ChangePasswordResult = "Couldn't change password: " + ex.Message;
             Log.Error("Change password failed", ex);
-        }
-        finally
-        {
-            Busy = false;
-        }
-    }
-
-    [RelayCommand]
-    private async Task TestRepointNodeAsync()
-    {
-        Busy = true;
-        RepointTestOk = false;
-        RepointTestResult = "Contacting node…";
-        try
-        {
-            ulong height = await MoneroDiagnostics.ProbeDaemonAsync(RepointNodeAddress, ProxyAddress);
-            RepointTestOk = true;
-            RepointTestResult = $"OK — node at height {height}.";
-        }
-        catch (Exception ex)
-        {
-            RepointTestOk = false;
-            RepointTestResult = ex.Message;
-        }
-        finally
-        {
-            Busy = false;
-        }
-    }
-
-    [RelayCommand]
-    private async Task RepointNodeAsync()
-    {
-        if (Busy)
-        {
-            return; // never interleave two vault-mutating operations (lost-update risk)
-        }
-
-        RepointResult = string.Empty;
-        RepointOk = false;
-
-        if (string.IsNullOrWhiteSpace(RepointNodeAddress))
-        {
-            RepointResult = "Enter the new node address.";
-            return;
-        }
-
-        if (string.IsNullOrEmpty(RepointPassword))
-        {
-            RepointResult = "Enter your wallet password to confirm the change.";
-            return;
-        }
-
-        Busy = true;
-        try
-        {
-            char[] pwChars = RepointPassword.ToCharArray();
-            RepointPassword = string.Empty;
-            string address = RepointNodeAddress.Trim();
-
-            // Argon2id derivation off the UI thread — same reasoning as ChangePassword.
-            bool changed = await Task.Run(() =>
-            {
-                // SecureBuffer first — same heap-hygiene reasoning as ChangePassword.
-                using var pw = SecureBuffer.FromPassword(pwChars);
-                VaultManager mgr = VaultManager.Load(AppServices.Instance.VaultPath);
-
-                // ChangeDaemonAddress repoints whichever profile the password opens (real or
-                // duress), so the wording here stays neutral and never hints at a second wallet.
-                return mgr.ChangeDaemonAddress(pw, address);
-            });
-
-            if (changed)
-            {
-                RepointOk = true;
-                RepointResult = "Node updated. Lock and unlock your wallet for the change to take effect.";
-                // Deliberately not logging the address — which node you use is not something the log needs.
-                Log.Info("Wallet daemon address repointed.");
-            }
-            else
-            {
-                RepointOk = false;
-                RepointResult = "That password didn't unlock a wallet in this vault.";
-            }
-        }
-        catch (ArgumentException ex)
-        {
-            RepointOk = false;
-            RepointResult = ex.Message;
-        }
-        catch (Exception ex)
-        {
-            RepointOk = false;
-            RepointResult = "Couldn't update the node: " + ex.Message;
-            Log.Error("Repoint node failed", ex);
         }
         finally
         {
@@ -471,6 +432,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 return; // cancelled
             }
 
+            await _closing; // a lock's last save belongs in the backup
             byte[] bytes = File.ReadAllBytes(AppServices.Instance.VaultPath);
             VaultFile.Deserialize(bytes); // sanity: never export a corrupt vault as a "backup"
             PrivateFiles.WriteAllBytes(dest, bytes); // 0600, like the vault itself
@@ -538,6 +500,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
             byte[] bytes = File.ReadAllBytes(source);
             VaultFile.Deserialize(bytes); // validate BEFORE touching the live vault
+            await _closing; // a lock's last save must not land on the restored file
 
             // Durable write of the replacement FIRST (flushed to disk), then a single atomic
             // swap — matching VaultManager.Persist's discipline. The live vault path holds

@@ -21,7 +21,20 @@ public sealed class AppServices
         VaultPath = Path.Combine(DataDirectory, "vault.xv");
         SettingsPath = Path.Combine(DataDirectory, "settings.json");
         Settings = AppSettings.Load(SettingsPath);
+        WalletRpcInstallRoot = Path.Combine(LocalDataRoot() ?? DataDirectory, "XaultWallet", "monero-cli");
     }
+
+    /// <summary>%LOCALAPPDATA% on Windows (not the roaming profile: a 30 MB program has no business
+    /// following the user between machines), ~/.local/share on Linux; null if it can't be determined.</summary>
+    private static string? LocalDataRoot()
+    {
+        string root = Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify);
+        return Path.IsPathFullyQualified(root) ? root : null;
+    }
+
+    /// <summary>Where "Download &amp; install" puts monero-wallet-rpc: one folder per version.</summary>
+    public string WalletRpcInstallRoot { get; }
 
     /// <summary>
     /// %APPDATA% on Windows, ~/Library/Application Support on macOS, $XDG_CONFIG_HOME or ~/.config on
@@ -53,7 +66,7 @@ public sealed class AppServices
     public AppSettings Settings { get; }
 
     /// <summary>What monero-wallet-rpc resolves to when the user hasn't set an explicit path
-    /// (empty when it is neither next to the app nor on PATH).</summary>
+    /// (empty when it is neither next to the app, on PATH, nor installed by the app).</summary>
     public string ResolvedDefaultWalletRpcBinary => ResolveDefaultWalletRpcBinary();
 
     /// <summary>The path actually used to launch monero-wallet-rpc (explicit override, else default).
@@ -75,19 +88,24 @@ public sealed class AppServices
 
     public MoneroWalletService CreateWalletService() => new(WalletRpcBinaryPath, Settings.ProxyAddress);
 
-    private static string ResolveDefaultWalletRpcBinary()
+    /// <summary>Backends started for a moment outside an open wallet (seed generation, import checks).</summary>
+    public TemporaryBackends TemporaryBackends { get; } = new();
+
+    private string ResolveDefaultWalletRpcBinary()
     {
         string exe = ExecutableLocator.WalletRpcFileName;
 
-        // Next to our own binary first, then PATH — always resolved to an absolute path, because the
-        // launcher (rightly) refuses bare names. Previously a bare name was returned here, so
-        // "leave blank to auto-detect" could never actually launch a PATH-installed binary.
+        // The user's own copy first — next to our binary, then on PATH — then one the in-app
+        // installer put in place. Always an absolute path, because the launcher (rightly) refuses
+        // bare names.
         string local = Path.Combine(AppContext.BaseDirectory, exe);
         if (File.Exists(local))
         {
             return local;
         }
 
-        return ExecutableLocator.FindOnPath(exe, Environment.GetEnvironmentVariable("PATH")) ?? string.Empty;
+        return ExecutableLocator.FindOnPath(exe, Environment.GetEnvironmentVariable("PATH"))
+               ?? XaultWallet.Core.Installer.WalletRpcInstaller.FindInstalled(WalletRpcInstallRoot)
+               ?? string.Empty;
     }
 }

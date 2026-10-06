@@ -9,17 +9,17 @@ namespace XaultWallet.Core.Security;
 ///   1. Encrypted at rest with AES-256-GCM, key derived with Argon2id.
 ///   2. Duress / plausible deniability: the file ALWAYS contains a fixed number
 ///      of equal-sized slots (<see cref="SlotCount"/> = 2). One slot holds the
-///      real wallet; the other holds either the decoy wallet OR, if the user
+///      real profile; the other holds either the decoy profile OR, if the user
 ///      never set a duress password, uniformly random filler that is
 ///      indistinguishable from a real encrypted slot. An adversary who seizes
-///      the file cannot prove whether a hidden second wallet exists.
+///      the file cannot prove whether a hidden second profile exists.
 ///   3. No slot ordering leak: which physical slot is "real" is randomised at
 ///      write time, so slot position reveals nothing.
 ///
 /// Layout (all integers little-endian):
 ///
 ///   magic     "XVLT"                 4 bytes
-///   version   0x01                   1 byte
+///   version   0x02                   1 byte
 ///   slotCount 0x02                   1 byte
 ///   reserved  0x0000                 2 bytes
 ///   argonMem  uint32 (KiB)           4 bytes   } KDF parameters are public;
@@ -31,30 +31,71 @@ namespace XaultWallet.Core.Security;
 ///
 /// The plaintext inside each slot is: [uint32 realLength][JSON bytes][random padding]
 /// padded up to <see cref="PaddedPlaintextBytes"/> so every slot is identical size.
+///
+/// VERSION 1 (0.1–0.3) has 4 KiB slots: room for a few wallets, not for many with an address book.
+/// A version-1 file STAYS version 1 — read and written in its own layout, still openable by 0.3 —
+/// until <see cref="UpgradeFormat"/> is called on purpose. Converting it silently would betray a
+/// decoy: a slot can only be re-encrypted by its own password, so after one password converted the
+/// file, the other slot would still be in the old layout, and whoever holds THAT password could
+/// tell another password had been used since. <see cref="UpgradeFormat"/> carries each old slot,
+/// unchanged, at the start of a version-2 slot (the rest random); a carried slot keeps opening with
+/// its own password, which re-seals it in the version-2 layout. In a version-2 file, unlocking
+/// tries BOTH layouts on EVERY slot (old slots are bound to version 1 in their associated data, new
+/// ones to 2), so neither the bytes nor the timing tell a carried slot from filler.
 /// </summary>
 public sealed class VaultFile
 {
     private static readonly byte[] Magic = "XVLT"u8.ToArray();
-    private const byte Version = 1;
+    private const byte Version = 2;
+    private const byte LegacyVersion = 1;
     public const int SlotCount = 2;
 
-    /// <summary>Fixed plaintext size per slot (4 KiB is ample for a seed + metadata).</summary>
-    public const int PaddedPlaintextBytes = 4096;
+    /// <summary>The format new vaults are written in.</summary>
+    public const int CurrentFormat = Version;
+
+    /// <summary>Fixed plaintext size per slot: room for many wallets, an address book and notes.</summary>
+    public const int PaddedPlaintextBytes = 256 * 1024;
+
+    /// <summary>The version-1 plaintext size (0.1–0.3).</summary>
+    internal const int LegacyPaddedPlaintextBytes = 4096;
 
     private const int HeaderBytes = 4 + 1 + 1 + 2 + 4 + 4 + 4;
     private const int EncBlobBytes = VaultCrypto.NonceSizeBytes + VaultCrypto.TagSizeBytes + PaddedPlaintextBytes;
     private const int SlotBytes = VaultCrypto.SaltSizeBytes + EncBlobBytes;
+    private const int LegacyEncBlobBytes = VaultCrypto.NonceSizeBytes + VaultCrypto.TagSizeBytes + LegacyPaddedPlaintextBytes;
+    private const int LegacySlotBytes = VaultCrypto.SaltSizeBytes + LegacyEncBlobBytes;
+
+    /// <summary>The largest payload a slot of a current-format file holds.</summary>
+    public const int MaxPayloadBytes = PaddedPlaintextBytes - 4;
+
+    /// <summary>The largest payload a slot of a version-1 file holds.</summary>
+    public const int LegacyMaxPayloadBytes = LegacyPaddedPlaintextBytes - 4;
+
+    /// <summary>Size of a current-format vault file.</summary>
+    public const int FileBytes = HeaderBytes + (SlotCount * SlotBytes);
 
     public VaultCrypto.Argon2Parameters Argon { get; }
 
-    /// <summary>Raw slots. slot[i] = salt || encBlob.</summary>
-    private readonly byte[][] _slots;
+    /// <summary>2 (current), or 1: a vault from 0.1–0.3 not yet upgraded (see the class summary).</summary>
+    public int FormatVersion => _version;
 
-    private VaultFile(VaultCrypto.Argon2Parameters argon, byte[][] slots)
+    /// <summary>The largest payload a slot of THIS file holds.</summary>
+    public int PayloadCapacity => _version == Version ? MaxPayloadBytes : LegacyMaxPayloadBytes;
+
+    /// <summary>Raw slots, each <see cref="SlotSize"/> long. slot[i] = salt || encBlob.</summary>
+    private readonly byte[][] _slots;
+    private byte _version;
+
+    private VaultFile(VaultCrypto.Argon2Parameters argon, byte[][] slots, byte version)
     {
         Argon = argon;
         _slots = slots;
+        _version = version;
     }
+
+    private int SlotSize => _version == Version ? SlotBytes : LegacySlotBytes;
+
+    private int PaddedSize => _version == Version ? PaddedPlaintextBytes : LegacyPaddedPlaintextBytes;
 
     /// <summary>Create a brand-new vault whose slots are all random filler.</summary>
     public static VaultFile CreateEmpty(VaultCrypto.Argon2Parameters argon)
@@ -65,7 +106,7 @@ public sealed class VaultFile
             slots[i] = VaultCrypto.RandomBytes(SlotBytes);
         }
 
-        return new VaultFile(argon, slots);
+        return new VaultFile(argon, slots, Version);
     }
 
     /// <summary>
@@ -83,9 +124,9 @@ public sealed class VaultFile
 
     /// <summary>
     /// Re-encrypt an opened slot with new contents, reusing the key derived while opening it (same
-    /// salt, fresh random nonce). No Argon2 work happens, so a policy re-seal performed during unlock
-    /// (wipe-on-duress, legacy-format migration) adds no measurable time to that unlock — a duress
-    /// unlock must not be slower than a normal one.
+    /// salt, fresh random nonce), in this file's layout. No Argon2 work happens, so a policy re-seal
+    /// performed during unlock (wipe-on-duress, removing 0.1's marker, re-sealing a carried slot)
+    /// adds no measurable time to that unlock — a duress unlock must not be slower than a normal one.
     /// </summary>
     public void ResealSlot(OpenedSlot opened, ReadOnlySpan<byte> plaintext)
     {
@@ -94,25 +135,35 @@ public sealed class VaultFile
         _slots[opened.SlotIndex] = Seal(opened.Key, opened.Salt, opened.SlotIndex, plaintext);
     }
 
-    private static void CheckPayloadSize(ReadOnlySpan<byte> plaintext)
+    /// <summary>Seal into a slot with a key and salt the caller already holds (an open session's, or
+    /// one just derived for a new password).</summary>
+    internal void SealSlot(int slotIndex, SecureBuffer key, byte[] salt, ReadOnlySpan<byte> plaintext)
     {
-        if (plaintext.Length > PaddedPlaintextBytes - 4)
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(salt);
+        CheckPayloadSize(plaintext);
+        _slots[slotIndex] = Seal(key, salt, slotIndex, plaintext);
+    }
+
+    private void CheckPayloadSize(ReadOnlySpan<byte> plaintext)
+    {
+        if (plaintext.Length > PayloadCapacity)
         {
             throw new ArgumentException("Payload too large for a slot.", nameof(plaintext));
         }
     }
 
-    private static byte[] Seal(SecureBuffer key, byte[] salt, int slotIndex, ReadOnlySpan<byte> plaintext)
+    private byte[] Seal(SecureBuffer key, byte[] salt, int slotIndex, ReadOnlySpan<byte> plaintext)
     {
         // Build padded plaintext: [len][data][random pad]
-        byte[] padded = VaultCrypto.RandomBytes(PaddedPlaintextBytes);
+        byte[] padded = VaultCrypto.RandomBytes(PaddedSize);
         try
         {
             BinaryPrimitives.WriteUInt32LittleEndian(padded, (uint)plaintext.Length);
             plaintext.CopyTo(padded.AsSpan(4));
-            byte[] enc = VaultCrypto.Encrypt(key, padded, AssociatedData(slotIndex));
+            byte[] enc = VaultCrypto.Encrypt(key, padded, AssociatedData(_version, slotIndex));
 
-            byte[] slot = new byte[SlotBytes];
+            byte[] slot = new byte[SlotSize];
             salt.CopyTo(slot, 0);
             enc.CopyTo(slot, VaultCrypto.SaltSizeBytes);
             return slot;
@@ -124,7 +175,29 @@ public sealed class VaultFile
     }
 
     /// <summary>Overwrite a slot with random filler (used for "wipe on duress" or to hide an unused slot).</summary>
-    public void FillRandom(int slotIndex) => _slots[slotIndex] = VaultCrypto.RandomBytes(SlotBytes);
+    public void FillRandom(int slotIndex) => _slots[slotIndex] = VaultCrypto.RandomBytes(SlotSize);
+
+    /// <summary>
+    /// Convert a version-1 file to the current format. Each slot is carried unchanged at the start
+    /// of a current-size slot (the rest random), so every password keeps opening its slot; the
+    /// caller re-seals the slot it holds the key for. Does nothing to a current-format file.
+    /// </summary>
+    public void UpgradeFormat()
+    {
+        if (_version == Version)
+        {
+            return;
+        }
+
+        for (int i = 0; i < SlotCount; i++)
+        {
+            byte[] slot = VaultCrypto.RandomBytes(SlotBytes);
+            _slots[i].CopyTo(slot, 0);
+            _slots[i] = slot;
+        }
+
+        _version = Version;
+    }
 
     /// <summary>
     /// Try every slot with <paramref name="password"/>. Returns the decrypted plaintext of the first
@@ -146,31 +219,44 @@ public sealed class VaultFile
         OpenedSlot? result = null;
         try
         {
-            // Every slot is always tried (two full Argon2 derivations), so timing can't tell which
-            // slot matched or whether the other one holds anything.
+            // Every slot is always tried — in a current-format file in both layouts (two full Argon2
+            // derivations, four decryption attempts) — so timing can't tell which slot matched, in
+            // which layout, or whether the other one holds anything. A version-1 file has one layout.
+            bool currentFormat = _version == Version;
             for (int i = 0; i < SlotCount; i++)
             {
                 byte[] salt = _slots[i].AsSpan(0, VaultCrypto.SaltSizeBytes).ToArray();
                 SecureBuffer key = VaultCrypto.DeriveKey(password, salt, Argon);
-                SecureBuffer? dec = null;
+                SecureBuffer? current = null;
+                SecureBuffer? legacy = null;
                 bool kept = false;
                 try
                 {
-                    dec = VaultCrypto.TryDecrypt(key, _slots[i].AsSpan(VaultCrypto.SaltSizeBytes), AssociatedData(i));
+                    if (currentFormat)
+                    {
+                        current = VaultCrypto.TryDecrypt(key, _slots[i].AsSpan(VaultCrypto.SaltSizeBytes, EncBlobBytes), AssociatedData(Version, i));
+                    }
+
+                    legacy = VaultCrypto.TryDecrypt(key, _slots[i].AsSpan(VaultCrypto.SaltSizeBytes, LegacyEncBlobBytes), AssociatedData(LegacyVersion, i));
+
+                    // A version-1 slot inside a current-format file is a carried one (re-sealed when
+                    // its password opens it); in a version-1 file it is simply the file's layout.
+                    (SecureBuffer? dec, bool isCarried) = current is not null ? (current, false) : (legacy, currentFormat);
                     if (dec is not null && result is null)
                     {
                         // Unpad: first 4 bytes are the real length.
                         uint len = BinaryPrimitives.ReadUInt32LittleEndian(dec.Span);
-                        if (len <= PaddedPlaintextBytes - 4)
+                        if (len <= dec.Length - 4)
                         {
-                            result = new OpenedSlot(i, new SecureBuffer(dec.Span.Slice(4, (int)len)), key, salt);
+                            result = new OpenedSlot(i, new SecureBuffer(dec.Span.Slice(4, (int)len)), key, salt, isCarried);
                             kept = true;
                         }
                     }
                 }
                 finally
                 {
-                    dec?.Dispose();
+                    current?.Dispose();
+                    legacy?.Dispose();
                     if (!kept)
                     {
                         key.Dispose();
@@ -189,14 +275,31 @@ public sealed class VaultFile
         return result;
     }
 
-    private static byte[] AssociatedData(int slotIndex) => new[] { (byte)'X', (byte)'V', Version, (byte)slotIndex };
+    private static byte[] AssociatedData(byte version, int slotIndex) => [(byte)'X', (byte)'V', version, (byte)slotIndex];
+
+    /// <summary>A copy of one slot's raw bytes (to carry it into another copy of the file).</summary>
+    internal byte[] GetSlotBytes(int slotIndex) => (byte[])_slots[slotIndex].Clone();
+
+    /// <summary>Replace one slot's raw bytes with bytes taken from another copy of this vault.</summary>
+    internal void SetSlotBytes(int slotIndex, byte[] slot)
+    {
+        if (slot.Length != SlotSize)
+        {
+            throw new ArgumentException("Not a slot of this vault format.", nameof(slot));
+        }
+
+        _slots[slotIndex] = (byte[])slot.Clone();
+    }
+
+    /// <summary>The salt a slot's key is derived with (its first bytes; the same in both layouts).</summary>
+    internal ReadOnlySpan<byte> SlotSalt(int slotIndex) => _slots[slotIndex].AsSpan(0, VaultCrypto.SaltSizeBytes);
 
     public byte[] Serialize()
     {
-        byte[] buf = new byte[HeaderBytes + SlotCount * SlotBytes];
+        byte[] buf = new byte[HeaderBytes + (SlotCount * SlotSize)];
         int o = 0;
         Magic.CopyTo(buf, o); o += 4;
-        buf[o++] = Version;
+        buf[o++] = _version;
         buf[o++] = SlotCount;
         buf[o++] = 0; buf[o++] = 0; // reserved
         BinaryPrimitives.WriteUInt32LittleEndian(buf.AsSpan(o), (uint)Argon.MemoryKib); o += 4;
@@ -205,27 +308,35 @@ public sealed class VaultFile
         for (int i = 0; i < SlotCount; i++)
         {
             _slots[i].CopyTo(buf, o);
-            o += SlotBytes;
+            o += SlotSize;
         }
 
         return buf;
     }
 
+    /// <summary>Read a vault file of the current version, or of version 1 (0.1–0.3), which keeps
+    /// its format (see the class summary).</summary>
     public static VaultFile Deserialize(byte[] buf)
     {
-        if (buf.Length != HeaderBytes + SlotCount * SlotBytes)
-        {
-            throw new InvalidDataException("Vault file has unexpected size.");
-        }
-
-        if (!buf.AsSpan(0, 4).SequenceEqual(Magic))
+        ArgumentNullException.ThrowIfNull(buf);
+        if (buf.Length < HeaderBytes || !buf.AsSpan(0, 4).SequenceEqual(Magic))
         {
             throw new InvalidDataException("Not an XaultWallet file (bad magic).");
         }
 
-        if (buf[4] != Version)
+        byte version = buf[4];
+        int slotBytesInFile = version switch
         {
-            throw new InvalidDataException($"Unsupported vault version {buf[4]}.");
+            Version => SlotBytes,
+            LegacyVersion => LegacySlotBytes,
+            _ => throw new InvalidDataException(version > Version
+                ? "This vault was created by a newer version of XaultWallet. Update the app to open it."
+                : $"Unsupported vault version {version}."),
+        };
+
+        if (buf.Length != HeaderBytes + (SlotCount * slotBytesInFile))
+        {
+            throw new InvalidDataException("Vault file has unexpected size.");
         }
 
         if (buf[5] != SlotCount)
@@ -253,11 +364,11 @@ public sealed class VaultFile
         var slots = new byte[SlotCount][];
         for (int i = 0; i < SlotCount; i++)
         {
-            slots[i] = buf.AsSpan(o, SlotBytes).ToArray();
-            o += SlotBytes;
+            slots[i] = buf.AsSpan(o, slotBytesInFile).ToArray();
+            o += slotBytesInFile;
         }
 
-        return new VaultFile(argon, slots);
+        return new VaultFile(argon, slots, version);
     }
 }
 
@@ -268,12 +379,13 @@ public sealed class VaultFile
 /// </summary>
 public sealed class OpenedSlot : IDisposable
 {
-    internal OpenedSlot(int slotIndex, SecureBuffer plaintext, SecureBuffer key, byte[] salt)
+    internal OpenedSlot(int slotIndex, SecureBuffer plaintext, SecureBuffer key, byte[] salt, bool isLegacyLayout = false)
     {
         SlotIndex = slotIndex;
         Plaintext = plaintext;
         Key = key;
         Salt = salt;
+        IsLegacyLayout = isLegacyLayout;
     }
 
     /// <summary>Physical slot position (0 or 1). Position carries no meaning: it is randomised at creation.</summary>
@@ -281,6 +393,10 @@ public sealed class OpenedSlot : IDisposable
 
     /// <summary>The unpadded slot payload.</summary>
     public SecureBuffer Plaintext { get; }
+
+    /// <summary>A version-1 slot carried inside a current-format file (see <see cref="VaultFile.UpgradeFormat"/>):
+    /// it should be re-sealed in the current layout now that its password opened it.</summary>
+    public bool IsLegacyLayout { get; }
 
     internal SecureBuffer Key { get; }
 

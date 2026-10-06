@@ -98,7 +98,7 @@ internal sealed class HeadlessDriver : IAppDriver
         }
     }
 
-    public async Task SelectAsync(string id, string item)
+    public async Task SelectAsync(string id, string item, bool navigates = false)
     {
         await WaitForAsync(id, DefaultWait);
         if (Find(id) is not ComboBox combo)
@@ -112,15 +112,36 @@ internal sealed class HeadlessDriver : IAppDriver
             throw new InvalidOperationException($"'{id}' has no item \"{item}\".");
         }
 
-        // Keyboard, as with Tab + arrow keys: a closed combo box moves its selection with Up/Down.
+        // Keyboard, as with Tab + arrow keys. A closed combo box moves its selection with Up/Down —
+        // except the wallet switcher, whose arrows open its list (choosing a wallet starts it): there
+        // the arrows move through the list and Enter chooses.
         combo.Focus();
         await SettleAsync();
-        for (int guard = 0; combo.SelectedIndex != index && guard < 20; guard++)
+        for (int guard = 0; guard < 20; guard++)
         {
-            PhysicalKey key = combo.SelectedIndex > index ? PhysicalKey.ArrowUp : PhysicalKey.ArrowDown;
+            if (navigates && TopLevel.GetTopLevel(combo) is null)
+            {
+                break; // the choice replaced the screen
+            }
+
+            if (!combo.IsDropDownOpen && combo.SelectedIndex == index)
+            {
+                break;
+            }
+
+            int focused = combo.GetRealizedContainers().FirstOrDefault(c => c.IsFocused) is { } entry ? combo.IndexFromContainer(entry) : -1;
+            PhysicalKey key = !combo.IsDropDownOpen
+                ? (combo.SelectedIndex > index ? PhysicalKey.ArrowUp : PhysicalKey.ArrowDown)
+                : focused == index ? PhysicalKey.Enter
+                : focused > index ? PhysicalKey.ArrowUp : PhysicalKey.ArrowDown;
             _window.KeyPressQwerty(key, RawInputModifiers.None);
             _window.KeyReleaseQwerty(key, RawInputModifiers.None);
             await SettleAsync();
+        }
+
+        if (navigates && TopLevel.GetTopLevel(combo) is null)
+        {
+            return; // gone with its screen: nothing to read back (the caller checks the new screen)
         }
 
         if (combo.SelectedIndex != index)

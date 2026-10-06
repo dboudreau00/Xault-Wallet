@@ -242,8 +242,11 @@ public sealed class WalletFeatureTests
         Assert.True(svc.NodeIsLocal);
         await svc.RescanSpentAsync();
 
-        // 192.0.2.1 (TEST-NET-1) is never this computer; set_daemon only records it.
-        await svc.SetDaemonAsync("http://192.0.2.1:18081");
+        // A node that isn't this computer. set_daemon only records it, but wallet-rpc's background
+        // refresh (on the same single thread that answers our calls) may try it before we switch
+        // back: a name that never resolves (RFC 6761) fails at once, where an address that drops
+        // packets (TEST-NET 192.0.2.1 on CI runners) held that thread until our call timed out.
+        await svc.SetDaemonAsync("http://node.invalid:18081");
         Assert.False(svc.NodeIsLocal);
         await Assert.ThrowsAsync<InvalidOperationException>(() => svc.RescanSpentAsync());
 

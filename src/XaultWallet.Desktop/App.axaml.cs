@@ -51,6 +51,7 @@ public partial class App : Application
                 e.Cancel = true;
                 try
                 {
+                    await SensitiveClipboard.ClearIfStillOursAsync();
                     await mainVm.ShutdownAsync();
                 }
                 catch (Exception ex)

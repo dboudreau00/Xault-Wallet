@@ -93,6 +93,8 @@ public partial class WalletView : UserControl
         base.OnDetachedFromVisualTree(e);
         Unsubscribe();
         _vm = null;
+        // Lock replaces this view: clear any wallet data we still own on the clipboard.
+        _ = SensitiveClipboard.ClearIfStillOursAsync();
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -247,7 +249,7 @@ public partial class WalletView : UserControl
                 return;
             }
 
-            await clipboard.SetTextAsync(text);
+            await SensitiveClipboard.SetAsync(clipboard, text);
             ShowToast($"{what} copied — the clipboard clears in {ClipboardClearDelay.TotalSeconds:0} s.");
 
             // Auto-clear: wallet data shouldn't linger for whatever the user pastes next week.
@@ -258,10 +260,9 @@ public partial class WalletView : UserControl
             // copied wallet data most needs to go away. The window (and its clipboard) outlive us.
             int seq = ++_copySequence;
             await Task.Delay(ClipboardClearDelay);
-            if (seq == _copySequence
-                && string.Equals(await clipboard.GetTextAsync(), text, StringComparison.Ordinal))
+            if (seq == _copySequence)
             {
-                await clipboard.ClearAsync();
+                await SensitiveClipboard.ClearIfStillOursAsync(text);
             }
         }
         catch

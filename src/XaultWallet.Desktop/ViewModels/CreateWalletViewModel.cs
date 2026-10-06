@@ -423,7 +423,7 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         }
 
         string content = BackupText(RealMnemonic, _generatedRestoreHeight, Network);
-        bool saved = await SaveBackupHandler(content, "xault-seed-backup.txt");
+        bool saved = await SaveBackupHandler(content, SeedBackupFile.SuggestedName(DateTime.Now));
         if (saved)
         {
             RealBackedUp = true;
@@ -439,9 +439,10 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
             return;
         }
 
-        // The decoy backup records the DECOY's own generation height, not the real wallet's.
+        // The decoy backup records the DECOY's own generation height, not the real wallet's. Its
+        // suggested file name follows the same scheme as the real one: a name must not say "decoy".
         string content = BackupText(DuressMnemonic, _duressRestoreHeight, Network);
-        await SaveBackupHandler(content, "xault-decoy-seed-backup.txt");
+        await SaveBackupHandler(content, SeedBackupFile.SuggestedName(DateTime.Now));
     }
 
     private static string BackupText(string mnemonic, ulong restoreHeight, MoneroNetwork network) =>

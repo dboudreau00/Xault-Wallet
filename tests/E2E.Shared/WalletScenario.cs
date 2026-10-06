@@ -333,7 +333,9 @@ public sealed partial class WalletScenario
         await _app.ClickAsync("Wallet.Tab.Receive"); // how this wallet looks when we come back (see SwitchToAsync)
         await _app.ClickAsync("Wallet.Add");
         await _app.WaitForAsync("AddWallet.Submit", Seconds(30));
-        // A new wallet starts from the network and node of the wallet on screen.
+        // A new wallet starts from the network and node of the wallet on screen. The screen's sections
+        // rise in one after another, so the node field can still be hidden when Add already shows.
+        await _app.WaitForAsync("AddWallet.Daemon", Seconds(15));
         string node = await _app.ReadTextAsync("AddWallet.Daemon");
         Check(node == _chain.DaemonUrl, $"the add-wallet screen proposes node \"{node}\"");
         await _app.TypeAsync("AddWallet.Name", SecondWalletName);

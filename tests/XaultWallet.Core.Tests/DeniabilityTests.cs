@@ -81,7 +81,7 @@ public class DeniabilityTests : IDisposable
             Assert.False(o.ContainsKey("kind"));
             Assert.False(o.ContainsKey("label"));
             Assert.False(o.ContainsKey("duressWipeReal"));
-            Assert.Equal(2, (int)o["v"]!);
+            Assert.Equal(3, (int)o["v"]!);
             Assert.False((bool)o["wipeOther"]!);
         }
     }
@@ -125,12 +125,13 @@ public class DeniabilityTests : IDisposable
     }
 
     [Fact]
-    public void Wipe_Fires_When_The_Duress_Password_Is_Used_To_Change_The_Node()
+    public void Wipe_Fires_When_The_Duress_Password_Opens_A_Session()
     {
         CreateVault(withDecoy: true, decoyWipes: true);
         using (var dp = Pw("duress-password-456"))
+        using (VaultSession? session = VaultManager.Load(_path).OpenSession(dp))
         {
-            Assert.True(VaultManager.Load(_path).ChangeDaemonAddress(dp, "http://node.example:38089"));
+            Assert.Equal("decoy seed words", session!.Profile.ActiveWallet!.Mnemonic);
         }
 
         using var mp = Pw("main-password-123");
@@ -243,7 +244,7 @@ public class DeniabilityTests : IDisposable
         }
 
         JsonObject real = Examine("main-password-123").json;
-        Assert.Equal(2, (int)real["v"]!);
+        Assert.Equal(3, (int)real["v"]!);
         Assert.False(real.ContainsKey("kind"));
         Assert.False(real.ContainsKey("label"));
 
@@ -268,7 +269,7 @@ public class DeniabilityTests : IDisposable
 
         using var pw = Pw(password);
         Assert.True(VaultManager.Load(_path).Unlock(pw)!.UpgradedFromLegacyFormat);
-        Assert.False(VaultManager.Load(_path).Unlock(pw)!.UpgradedFromLegacyFormat); // already v2
+        Assert.False(VaultManager.Load(_path).Unlock(pw)!.UpgradedFromLegacyFormat); // already current
     }
 
     [Fact]
@@ -324,7 +325,7 @@ public class DeniabilityTests : IDisposable
         var file = VaultFile.CreateEmpty(FastArgon);
         using (var pw = Pw("main-password-123"))
         {
-            file.WriteSlot(0, pw, Encoding.UTF8.GetBytes("{\"v\":3,\"mnemonic\":\"future\"}"));
+            file.WriteSlot(0, pw, Encoding.UTF8.GetBytes("{\"v\":4,\"mnemonic\":\"future\"}"));
         }
 
         File.WriteAllBytes(_path, file.Serialize());

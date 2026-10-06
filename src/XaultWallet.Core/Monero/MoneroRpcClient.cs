@@ -161,11 +161,61 @@ public sealed class MoneroRpcClient : IDisposable
     public Task<GetBalanceResult> GetBalanceAsync(uint accountIndex = 0, CancellationToken ct = default) =>
         CallAsync<GetBalanceResult>("get_balance", new { account_index = accountIndex }, ct);
 
+    /// <summary>Every address of an account the wallet has created (index 0 is the account's main
+    /// address), with labels and whether each has received anything.</summary>
     public Task<GetAddressResult> GetAddressAsync(uint accountIndex = 0, CancellationToken ct = default) =>
         CallAsync<GetAddressResult>("get_address", new { account_index = accountIndex }, ct);
 
     public Task<CreateAddressResult> CreateSubaddressAsync(uint accountIndex = 0, string label = "", CancellationToken ct = default) =>
         CallAsync<CreateAddressResult>("create_address", new { account_index = accountIndex, label }, ct);
+
+    /// <summary>Create <paramref name="count"/> subaddresses at once (restoring how many a wallet had
+    /// handed out before it was locked).</summary>
+    public Task<CreateAddressResult> CreateSubaddressesAsync(uint accountIndex, uint count, CancellationToken ct = default) =>
+        CallAsync<CreateAddressResult>("create_address", new { account_index = accountIndex, count, label = "" }, ct);
+
+    public Task LabelAddressAsync(uint accountIndex, uint addressIndex, string label, CancellationToken ct = default) =>
+        CallAsync<JsonElement>("label_address", new { index = new { major = accountIndex, minor = addressIndex }, label }, ct);
+
+    /// <summary>Accounts with their balances and labels.</summary>
+    public Task<GetAccountsResult> GetAccountsAsync(CancellationToken ct = default) =>
+        CallAsync<GetAccountsResult>("get_accounts", new { }, ct);
+
+    public Task<CreateAccountResult> CreateAccountAsync(string label = "", CancellationToken ct = default) =>
+        CallAsync<CreateAccountResult>("create_account", new { label }, ct);
+
+    public Task LabelAccountAsync(uint accountIndex, string label, CancellationToken ct = default) =>
+        CallAsync<JsonElement>("label_account", new { account_index = accountIndex, label }, ct);
+
+    /// <summary>Sign a message with the wallet's spend key (proves you control the address), or with
+    /// <paramref name="signatureType"/> "view", its view key.</summary>
+    public Task<SignResult> SignAsync(string data, uint accountIndex = 0, uint addressIndex = 0, string signatureType = "spend", CancellationToken ct = default) =>
+        CallAsync<SignResult>("sign", new { data, account_index = accountIndex, address_index = addressIndex, signature_type = signatureType }, ct);
+
+    public Task<VerifyResult> VerifyAsync(string data, string address, string signature, CancellationToken ct = default) =>
+        CallAsync<VerifyResult>("verify", new { data, address, signature }, ct);
+
+    /// <summary>Prove the wallet holds at least <paramref name="amount"/> (or, with null, everything in
+    /// <paramref name="accountIndex"/>... all accounts) without revealing more.</summary>
+    public Task<SignResult> GetReserveProofAsync(ulong? amount, uint accountIndex, string message, CancellationToken ct = default) =>
+        CallAsync<SignResult>("get_reserve_proof", amount is { } a
+            ? new { all = false, account_index = accountIndex, amount = a, message }
+            : (object)new { all = true, message }, ct);
+
+    public Task<CheckReserveProofResult> CheckReserveProofAsync(string address, string message, string signature, CancellationToken ct = default) =>
+        CallAsync<CheckReserveProofResult>("check_reserve_proof", new { address, message, signature }, ct);
+
+    /// <summary>One transaction of this wallet by id (all accounts).</summary>
+    public Task<GetTransferByTxidResult> GetTransferByTxidAsync(string txid, CancellationToken ct = default) =>
+        CallAsync<GetTransferByTxidResult>("get_transfer_by_txid", new { txid }, ct);
+
+    /// <summary>Re-check which outputs are spent (fixes a balance confused by a bad node).</summary>
+    public Task RescanSpentAsync(CancellationToken ct = default) =>
+        CallAsync<JsonElement>("rescan_spent", null, ct);
+
+    /// <summary>Point the open wallet at another node without closing it.</summary>
+    public Task SetDaemonAsync(string address, CancellationToken ct = default) =>
+        CallAsync<JsonElement>("set_daemon", new { address, trusted = false }, ct);
 
     public Task<GetHeightResult> GetHeightAsync(CancellationToken ct = default) =>
         CallAsync<GetHeightResult>("get_height", null, ct);
@@ -190,10 +240,15 @@ public sealed class MoneroRpcClient : IDisposable
     /// the signed tx metadata; nothing touches the network until <see cref="RelayTxAsync"/> is
     /// called with that metadata. Used to show the real fee in the send-confirm dialog.</summary>
     public Task<TransferResult> PrepareTransferAsync(string address, ulong atomicAmount, uint priority = 0, CancellationToken ct = default) =>
+        PrepareTransferAsync([(address, atomicAmount)], 0, priority, ct);
+
+    /// <summary>Like <see cref="PrepareTransferAsync(string, ulong, uint, CancellationToken)"/>, to
+    /// one or more destinations in ONE transaction, spending from <paramref name="accountIndex"/>.</summary>
+    public Task<TransferResult> PrepareTransferAsync(IReadOnlyList<(string address, ulong atomic)> destinations, uint accountIndex, uint priority, CancellationToken ct = default) =>
         CallAsync<TransferResult>("transfer", new
         {
-            destinations = new[] { new { amount = atomicAmount, address } },
-            account_index = 0u,
+            destinations = destinations.Select(d => new { amount = d.atomic, address = d.address }).ToArray(),
+            account_index = accountIndex,
             priority,
             get_tx_key = true,
             do_not_relay = true,
@@ -210,10 +265,13 @@ public sealed class MoneroRpcClient : IDisposable
     /// many outputs; each entry in the result lists gets its own relay. Same contract as
     /// <see cref="PrepareTransferAsync"/>: discarding the result cancels everything.</summary>
     public Task<SweepAllResult> PrepareSweepAllAsync(string address, uint priority = 0, CancellationToken ct = default) =>
+        PrepareSweepAllAsync(address, 0, priority, ct);
+
+    public Task<SweepAllResult> PrepareSweepAllAsync(string address, uint accountIndex, uint priority, CancellationToken ct = default) =>
         CallAsync<SweepAllResult>("sweep_all", new
         {
             address,
-            account_index = 0u,
+            account_index = accountIndex,
             priority,
             get_tx_keys = true,
             do_not_relay = true,
@@ -222,6 +280,10 @@ public sealed class MoneroRpcClient : IDisposable
 
     public Task<GetTransfersResult> GetTransfersAsync(bool @in = true, bool @out = true, bool pending = true, CancellationToken ct = default) =>
         CallAsync<GetTransfersResult>("get_transfers", new { @in, @out, pending, pool = pending }, ct);
+
+    /// <summary>History of one account (incoming, outgoing, pending and mempool).</summary>
+    public Task<GetTransfersResult> GetTransfersAsync(uint accountIndex, CancellationToken ct = default) =>
+        CallAsync<GetTransfersResult>("get_transfers", new { @in = true, @out = true, pending = true, pool = true, failed = false, account_index = accountIndex }, ct);
 
     // ---- Payment proof (transaction key) ----
 
@@ -258,12 +320,32 @@ public sealed class MoneroRpcClient : IDisposable
             autosave_current = true,
         }, ct);
 
+    /// <summary>Restore a wallet from its keys. With an empty <paramref name="spendKey"/> it is a
+    /// view-only (watch) wallet. Like restore_deterministic_wallet, it needs no daemon.</summary>
+    public Task<GenerateFromKeysResult> GenerateFromKeysAsync(
+        string filename, string password, string address, string viewKey, string spendKey, ulong restoreHeight, CancellationToken ct = default) =>
+        CallAsync<GenerateFromKeysResult>("generate_from_keys", new
+        {
+            filename,
+            password,
+            address,
+            viewkey = viewKey,
+            spendkey = spendKey ?? "",
+            restore_height = restoreHeight,
+            autosave_current = true,
+        }, ct);
+
     /// <summary>Retrieve a key from the currently open wallet. key_type is "mnemonic", "view_key" or "spend_key".</summary>
     public Task<QueryKeyResult> QueryKeyAsync(string keyType, CancellationToken ct = default) =>
         CallAsync<QueryKeyResult>("query_key", new { key_type = keyType }, ct);
 
     public Task CloseWalletAsync(CancellationToken ct = default) =>
         CallAsync<JsonElement>("close_wallet", null, ct);
+
+    /// <summary>Open a wallet file from --wallet-dir. Loading checks that the wallet's secret keys
+    /// belong to its address (wallet2::load_keys), which generating one from keys does not.</summary>
+    public Task OpenWalletAsync(string filename, string password, CancellationToken ct = default) =>
+        CallAsync<JsonElement>("open_wallet", new { filename, password }, ct);
 
     public static decimal AtomicToXmr(ulong atomic) => atomic / (decimal)AtomicUnitsPerXmr;
 
@@ -303,12 +385,79 @@ public sealed class GetBalanceResult
 public sealed class GetAddressResult
 {
     [JsonPropertyName("address")] public string Address { get; set; } = "";
+    [JsonPropertyName("addresses")] public List<AddressInfo> Addresses { get; set; } = new();
+}
+
+public sealed class AddressInfo
+{
+    [JsonPropertyName("address")] public string Address { get; set; } = "";
+    [JsonPropertyName("label")] public string Label { get; set; } = "";
+    [JsonPropertyName("address_index")] public uint AddressIndex { get; set; }
+
+    /// <summary>Has received a payment.</summary>
+    [JsonPropertyName("used")] public bool Used { get; set; }
 }
 
 public sealed class CreateAddressResult
 {
     [JsonPropertyName("address")] public string Address { get; set; } = "";
     [JsonPropertyName("address_index")] public uint AddressIndex { get; set; }
+    [JsonPropertyName("addresses")] public List<string> Addresses { get; set; } = new();
+    [JsonPropertyName("address_indices")] public List<uint> AddressIndices { get; set; } = new();
+}
+
+public sealed class GetAccountsResult
+{
+    [JsonPropertyName("total_balance")] public ulong TotalBalance { get; set; }
+    [JsonPropertyName("total_unlocked_balance")] public ulong TotalUnlockedBalance { get; set; }
+    [JsonPropertyName("subaddress_accounts")] public List<AccountInfo> Accounts { get; set; } = new();
+}
+
+public sealed class AccountInfo
+{
+    [JsonPropertyName("account_index")] public uint AccountIndex { get; set; }
+    [JsonPropertyName("base_address")] public string BaseAddress { get; set; } = "";
+    [JsonPropertyName("balance")] public ulong Balance { get; set; }
+    [JsonPropertyName("unlocked_balance")] public ulong UnlockedBalance { get; set; }
+    [JsonPropertyName("label")] public string Label { get; set; } = "";
+}
+
+public sealed class CreateAccountResult
+{
+    [JsonPropertyName("account_index")] public uint AccountIndex { get; set; }
+    [JsonPropertyName("address")] public string Address { get; set; } = "";
+}
+
+public sealed class SignResult
+{
+    [JsonPropertyName("signature")] public string Signature { get; set; } = "";
+}
+
+public sealed class VerifyResult
+{
+    [JsonPropertyName("good")] public bool Good { get; set; }
+
+    /// <summary>"spend" or "view": which of the address's keys the signature was made with.</summary>
+    [JsonPropertyName("signature_type")] public string SignatureType { get; set; } = "";
+}
+
+public sealed class CheckReserveProofResult
+{
+    [JsonPropertyName("good")] public bool Good { get; set; }
+    [JsonPropertyName("total")] public ulong Total { get; set; }
+    [JsonPropertyName("spent")] public ulong Spent { get; set; }
+}
+
+public sealed class GetTransferByTxidResult
+{
+    [JsonPropertyName("transfer")] public TransferEntry Transfer { get; set; } = new();
+    [JsonPropertyName("transfers")] public List<TransferEntry> Transfers { get; set; } = new();
+}
+
+public sealed class GenerateFromKeysResult
+{
+    [JsonPropertyName("address")] public string Address { get; set; } = "";
+    [JsonPropertyName("info")] public string Info { get; set; } = "";
 }
 
 public sealed class GetHeightResult
@@ -387,9 +536,30 @@ public sealed class TransferEntry
     [JsonPropertyName("type")] public string Type { get; set; } = "";
     [JsonPropertyName("address")] public string Address { get; set; } = "";
 
+    /// <summary>Which subaddress received it (incoming) or which account spent it (outgoing).</summary>
+    [JsonPropertyName("subaddr_index")] public SubaddressIndex SubaddrIndex { get; set; } = new();
+
+    /// <summary>Where an outgoing payment went (known only to the wallet that sent it).</summary>
+    [JsonPropertyName("destinations")] public List<TransferDestination>? Destinations { get; set; }
+
+    [JsonPropertyName("confirmations")] public ulong Confirmations { get; set; }
+    [JsonPropertyName("double_spend_seen")] public bool DoubleSpendSeen { get; set; }
+
     /// <summary>Local date/time of the transaction for display (empty if not yet timestamped).</summary>
     [JsonIgnore]
     public string Date => Timestamp == 0
         ? ""
         : DateTimeOffset.FromUnixTimeSeconds((long)Timestamp).ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+}
+
+public sealed class SubaddressIndex
+{
+    [JsonPropertyName("major")] public uint Major { get; set; }
+    [JsonPropertyName("minor")] public uint Minor { get; set; }
+}
+
+public sealed class TransferDestination
+{
+    [JsonPropertyName("amount")] public ulong Amount { get; set; }
+    [JsonPropertyName("address")] public string Address { get; set; } = "";
 }

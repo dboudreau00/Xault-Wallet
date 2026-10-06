@@ -22,8 +22,9 @@ public sealed partial class UnlockViewModel : ViewModelBase
     [RelayCommand]
     private void ToggleReveal() => RevealPassword = !RevealPassword;
 
-    /// <summary>Raised on a correct password. Carries no real/decoy signal — the vault has none.</summary>
-    public event Action<UnlockResult>? Unlocked;
+    /// <summary>Raised on a correct password with the opened profile. Carries no real/decoy signal —
+    /// the vault has none.</summary>
+    public event Action<VaultSession>? Unlocked;
 
     [RelayCommand]
     private async Task UnlockAsync()
@@ -42,24 +43,24 @@ public sealed partial class UnlockViewModel : ViewModelBase
             char[] chars = Password.ToCharArray();
             Password = string.Empty; // clear the bound field ASAP
 
-            UnlockResult? result = await Task.Run(() =>
+            VaultSession? session = await Task.Run(() =>
             {
                 // Take ownership of the password chars FIRST (FromPassword zeroes them): if
                 // Load throws (missing/corrupt vault), the full password must not be left
                 // un-zeroed on the heap.
                 using var pw = SecureBuffer.FromPassword(chars);
                 var mgr = VaultManager.Load(AppServices.Instance.VaultPath);
-                return mgr.Unlock(pw);
+                return mgr.OpenSession(pw);
             });
 
-            if (result is null)
+            if (session is null)
             {
                 // Deliberately generic. Never hint that a duress password exists.
                 Error = "Incorrect password.";
                 return;
             }
 
-            Unlocked?.Invoke(result);
+            Unlocked?.Invoke(session);
         }
         catch (Exception ex)
         {

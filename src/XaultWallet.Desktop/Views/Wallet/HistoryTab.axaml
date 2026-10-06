@@ -1,0 +1,175 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
+             xmlns:conv="clr-namespace:XaultWallet.Desktop"
+             xmlns:c="clr-namespace:XaultWallet.Desktop.Controls"
+             xmlns:w="clr-namespace:XaultWallet.Desktop.Views.Wallet"
+             x:Class="XaultWallet.Desktop.Views.Wallet.HistoryTab"
+             x:DataType="vm:WalletViewModel">
+    <Border Classes="card" Margin="0,14,0,0" Padding="12,10,12,12">
+        <Grid RowDefinitions="Auto,Auto,*">
+            <!-- Title, filter, search, export -->
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,16,Auto,*,Auto,8,Auto" Margin="12,6,4,8">
+                <TextBlock Grid.Column="0" Text="TRANSACTIONS" Classes="eyebrow" VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <RadioButton Classes="chip" GroupName="HistoryFilter" Content="All" AutomationProperties.AutomationId="History.FilterAll"
+                                 IsChecked="{Binding HistoryFilter, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0}"/>
+                    <RadioButton Classes="chip" GroupName="HistoryFilter" Content="Received" AutomationProperties.AutomationId="History.FilterIn"
+                                 IsChecked="{Binding HistoryFilter, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=1}"/>
+                    <RadioButton Classes="chip" GroupName="HistoryFilter" Content="Sent" AutomationProperties.AutomationId="History.FilterOut"
+                                 IsChecked="{Binding HistoryFilter, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=2}"/>
+                    <RadioButton Classes="chip" GroupName="HistoryFilter" Content="Pending" AutomationProperties.AutomationId="History.FilterPending"
+                                 IsChecked="{Binding HistoryFilter, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=3}"/>
+                </StackPanel>
+                <TextBox Grid.Column="4" Width="220" Watermark="Search notes, IDs, names" VerticalAlignment="Center"
+                         AutomationProperties.AutomationId="History.Search" AutomationProperties.Name="Search transactions" Text="{Binding HistorySearch}">
+                    <TextBox.InnerLeftContent>
+                        <c:Icon Data="{StaticResource IconSearch}" Width="15" Height="15" Margin="10,0,0,0" Foreground="{StaticResource TextTertiary}" VerticalAlignment="Center"/>
+                    </TextBox.InnerLeftContent>
+                </TextBox>
+                <Button Grid.Column="6" Classes="ghost" VerticalAlignment="Center" AutomationProperties.AutomationId="History.Export" AutomationProperties.Name="Export CSV"
+                        Command="{Binding ExportHistoryCommand}" ToolTip.Tip="Save this account's transactions (and your notes) as CSV">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <c:Icon Data="{StaticResource IconDownload}" Width="16" Height="16"/>
+                        <TextBlock Text="Export CSV"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
+            <TextBlock Grid.Row="1" Classes="caption" Foreground="{StaticResource WarningBrush}" Margin="12,0,12,6" TextWrapping="Wrap"
+                       AutomationProperties.AutomationId="History.Notice" Text="{Binding HistoryNotice}"
+                       IsVisible="{Binding HistoryNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+            <ScrollViewer Grid.Row="2" IsVisible="{Binding HasHistory}">
+                <ItemsControl AutomationProperties.AutomationId="History.List" AutomationProperties.Name="Transactions" ItemsSource="{Binding History}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:HistoryRow">
+                            <StackPanel>
+                                <!-- The row: click (or the chevron) for details -->
+                                <Border Classes="txRow" Classes.open="{Binding IsExpanded}" Cursor="Hand" Tapped="Row_Tapped">
+                                    <Grid ColumnDefinitions="Auto,14,*,16,Auto,8,Auto">
+                                        <!-- direction badge -->
+                                        <Border Grid.Column="0" Classes="txIcon" Background="{StaticResource SuccessSoft}" IsVisible="{Binding IsIncoming}">
+                                            <c:Icon Data="{StaticResource IconArrowDown}" Foreground="{StaticResource SuccessBrush}" Width="17" Height="17"
+                                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <Border Grid.Column="0" Classes="txIcon" Background="{StaticResource AccentSoft}" IsVisible="{Binding IsOutgoing}">
+                                            <c:Icon Data="{StaticResource IconArrowUp}" Foreground="{StaticResource AccentBrush}" Width="17" Height="17"
+                                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <Border Grid.Column="0" Classes="txIcon" Background="{StaticResource DangerSoft}" IsVisible="{Binding IsFailed}">
+                                            <c:Icon Data="{StaticResource IconWarning}" Foreground="{StaticResource DangerBrush}" Width="17" Height="17"
+                                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+
+                                        <StackPanel Grid.Column="2" Spacing="3" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="14"/>
+                                                <Border Classes="pill warning" IsVisible="{Binding IsPending}" Padding="7,1">
+                                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                                        <c:Icon Data="{StaticResource IconClock}" Width="11" Height="11" StrokeThickness="2.2"
+                                                                Foreground="{StaticResource WarningBrush}" VerticalAlignment="Center"/>
+                                                        <TextBlock Text="pending" FontSize="10.5" FontWeight="SemiBold" Foreground="{StaticResource WarningBrush}"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding Subtitle}" Classes="caption"/>
+                                            <TextBlock Text="{Binding Note}" Classes="caption" FontStyle="Italic" Foreground="{StaticResource TextSecondary}"
+                                                       TextTrimming="CharacterEllipsis" IsVisible="{Binding HasNote}"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="4" Spacing="3" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                            <TextBlock Text="{Binding AmountText}" Classes="mono" FontSize="14" FontWeight="SemiBold"
+                                                       HorizontalAlignment="Right" IsVisible="{Binding IsIncoming}"
+                                                       Foreground="{StaticResource SuccessBrush}"/>
+                                            <TextBlock Text="{Binding AmountText}" Classes="mono" FontSize="14" FontWeight="SemiBold"
+                                                       HorizontalAlignment="Right" IsVisible="{Binding !IsIncoming}"/>
+                                            <TextBlock HorizontalAlignment="Right" Classes="caption mono" Text="{Binding DetailText}"/>
+                                        </StackPanel>
+
+                                        <Button Grid.Column="6" Classes="ghost icon" VerticalAlignment="Center"
+                                                AutomationProperties.AutomationId="History.Details" AutomationProperties.Name="Details" ToolTip.Tip="Details and note"
+                                                Command="{Binding $parent[w:HistoryTab].((vm:WalletViewModel)DataContext).ToggleRowCommand}" CommandParameter="{Binding}">
+                                            <c:Icon Data="{StaticResource IconChevronDown}" Width="16" Height="16"/>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Details -->
+                                <Border Classes="inset" Margin="64,2,12,12" Padding="16,14" IsVisible="{Binding IsExpanded}">
+                                    <StackPanel Spacing="10">
+                                        <Grid ColumnDefinitions="110,*,Auto">
+                                            <TextBlock Grid.Column="0" Text="Transaction ID" Classes="caption" VerticalAlignment="Center"/>
+                                            <SelectableTextBlock Grid.Column="1" Classes="mono" FontSize="11.5" Text="{Binding TxId}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                            <Button Grid.Column="2" Classes="ghost icon" VerticalAlignment="Center" Margin="8,0,0,0"
+                                                    AutomationProperties.AutomationId="History.CopyTxId" AutomationProperties.Name="Copy transaction ID" ToolTip.Tip="Copy transaction ID"
+                                                    Command="{Binding $parent[w:HistoryTab].((vm:WalletViewModel)DataContext).CopyRowTxIdCommand}" CommandParameter="{Binding}">
+                                                <c:Icon Data="{StaticResource IconCopy}" Width="16" Height="16"/>
+                                            </Button>
+                                        </Grid>
+                                        <Grid ColumnDefinitions="110,*">
+                                            <TextBlock Grid.Column="0" Text="Status" Classes="caption"/>
+                                            <TextBlock Grid.Column="1" FontSize="12.5" Text="{Binding ConfirmationsText}" TextWrapping="Wrap"/>
+                                        </Grid>
+                                        <Grid ColumnDefinitions="110,*" IsVisible="{Binding HasReceivedAt}">
+                                            <TextBlock Grid.Column="0" Text="To" Classes="caption"/>
+                                            <TextBlock Grid.Column="1" FontSize="12.5" Text="{Binding ReceivedAt}" TextWrapping="Wrap"/>
+                                        </Grid>
+                                        <Grid ColumnDefinitions="110,*" IsVisible="{Binding HasDestinations}">
+                                            <TextBlock Grid.Column="0" Text="Sent to" Classes="caption"/>
+                                            <ItemsControl Grid.Column="1" ItemsSource="{Binding Destinations}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="x:String">
+                                                        <TextBlock FontSize="12.5" Text="{Binding}" TextWrapping="Wrap" Margin="0,0,0,2"/>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </Grid>
+                                        <Grid ColumnDefinitions="110,*" IsVisible="{Binding HasFeeLine}">
+                                            <TextBlock Grid.Column="0" Text="Network fee" Classes="caption"/>
+                                            <TextBlock Grid.Column="1" Classes="mono" FontSize="12.5" Text="{Binding FeeLine}"/>
+                                        </Grid>
+                                        <Grid ColumnDefinitions="110,*,8,Auto">
+                                            <TextBlock Grid.Column="0" Text="Note" Classes="caption" VerticalAlignment="Center"/>
+                                            <TextBox Grid.Column="1" MaxLength="500" Watermark="Only you see this (kept in your vault)"
+                                                     AutomationProperties.AutomationId="History.Note" AutomationProperties.Name="Note" Text="{Binding NoteDraft}"/>
+                                            <Button Grid.Column="3" AutomationProperties.AutomationId="History.SaveNote" Content="Save note"
+                                                    Command="{Binding $parent[w:HistoryTab].((vm:WalletViewModel)DataContext).SaveNoteCommand}" CommandParameter="{Binding}"/>
+                                        </Grid>
+                                        <Button HorizontalAlignment="Left" IsVisible="{Binding IsOutgoing}" AutomationProperties.AutomationId="History.Prove" AutomationProperties.Name="Prove this payment"
+                                                ToolTip.Tip="Get this payment's transaction key, to prove it to the recipient"
+                                                Command="{Binding $parent[w:HistoryTab].((vm:WalletViewModel)DataContext).ProveRowCommand}" CommandParameter="{Binding}">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <c:Icon Data="{StaticResource IconShield}" Width="15" Height="15"/>
+                                                <TextBlock Text="Prove this payment"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- Nothing matches the filter or search -->
+            <StackPanel Grid.Row="2" AutomationProperties.AutomationId="History.NoMatches" IsVisible="{Binding NoHistoryMatches}" VerticalAlignment="Center"
+                        HorizontalAlignment="Center" Spacing="8" Margin="0,30">
+                <c:Icon Data="{StaticResource IconSearch}" Width="22" Height="22" Foreground="{StaticResource TextTertiary}" HorizontalAlignment="Center"/>
+                <TextBlock Text="No transactions match" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                <TextBlock Classes="muted" HorizontalAlignment="Center" Text="Try another filter, or clear the search."/>
+            </StackPanel>
+
+            <!-- Empty state -->
+            <StackPanel Grid.Row="2" AutomationProperties.AutomationId="History.Empty" IsVisible="{Binding !HasHistory}" VerticalAlignment="Center"
+                        HorizontalAlignment="Center" Spacing="10" Margin="0,30">
+                <Border Width="52" Height="52" CornerRadius="16" Background="{StaticResource SurfaceAlt}" HorizontalAlignment="Center">
+                    <c:Icon Data="{StaticResource IconHistory}" Width="22" Height="22" Foreground="{StaticResource TextTertiary}"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <TextBlock Text="No transactions yet" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                <TextBlock Classes="muted" HorizontalAlignment="Center" TextAlignment="Center" MaxWidth="360" TextWrapping="Wrap"
+                           Text="Payments in and out appear here once the wallet has scanned the blocks they're in."/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

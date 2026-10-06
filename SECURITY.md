@@ -16,20 +16,31 @@ zeroable buffer, run through the KDF, and the derived key is used directly. "Is 
 password?" is answered by whether the GCM authentication tag verifies — never by comparing
 stored password material.
 
+**What a password opens.** Each password opens a *profile*: one or more wallets (from a seed, from
+keys, or watch-only), an address book, and the subaddress labels, account names and transaction
+notes of each wallet. All of it is sealed together in that password's slot. Since 0.5 every slot is
+256 KiB of encrypted data however much it holds, so the file is the same size for one wallet or
+twenty, with or without contacts. When a profile no longer fits, the app refuses the change and
+says so; nothing is written.
+
 **Duress / plausible deniability.** The file always contains two equal-sized slots. Without a
-correct password an adversary cannot tell whether the second slot is a decoy wallet or random
+correct password an adversary cannot tell whether the second slot is a decoy profile or random
 filler, cannot tell which physical slot is real (position is randomised at write time), and
-cannot tell how many real wallets exist. Unlock does constant work across all slots.
+cannot tell how many wallets exist. Unlock does constant work across all slots.
 
 The duress scenario is the one where the adversary DOES hold a password — the duress one — plus
 the device. So the decoy must also be indistinguishable from the inside:
 
-- Every slot decrypts to the same JSON shape (payload v2: no "real"/"decoy" kind, no label). An
-  examiner who decrypts a decoy created by 0.2 with the duress password sees exactly what the only
-  wallet of a single-wallet vault looks like. **Vaults created by 0.1 are the exception until each
-  slot has been converted** — see [Upgrading from 0.1](#upgrading-from-01).
-- Every operation is symmetric: unlock, change password and change node work identically for either
-  slot, with identical wording. A duress unlock does the same key-derivation work as a normal one.
+- Every slot decrypts to the same JSON shape (payload v3: a list of wallets and contacts, with no
+  "real"/"decoy" kind anywhere). An examiner who decrypts the decoy with the duress password sees
+  exactly what a single-password vault looks like. **Vaults created by 0.1 are the exception until
+  each slot has been converted** — see [Upgrading from 0.1](#upgrading-from-01).
+- Every operation is symmetric: unlocking, adding, renaming or removing wallets, contacts, labels,
+  notes, a wallet's node, and changing the password work identically for either profile, with
+  identical wording. An open profile re-seals **only its own slot**, with the key derived at unlock
+  (no Argon2 per change); the other slot is copied back byte for byte. Changing the password from
+  inside an open wallet changes that profile's password only, whichever it is. A duress unlock does
+  the same key-derivation work as a normal one.
 - Wipe-on-duress fires on ANY use of the duress password, then clears its own flag (re-sealing with
   the key already derived, so it takes no extra time). Afterwards the vault is a single-wallet vault.
 - The app's log records nothing that differs between the two wallets (no nodes, restore heights or
@@ -72,6 +83,18 @@ SSDs with wear-levelling, and on copy-on-write or journaling filesystems, the or
 may physically remain. Treat "shred" as best-effort, not a guarantee. For strong guarantees,
 use full-disk encryption underneath this app.
 
+**Several wallets on one remote node.** Each open wallet runs its own monero-wallet-rpc and syncs
+on its own (the one on screen every few seconds, the others once a minute). A node you don't run
+sees all of them asking from the same IP address at the same times, and can reasonably guess they
+belong to one person. Use your own node, or a SOCKS proxy such as Tor (Settings), if your wallets
+must not be linked. Wallets start syncing only once you open them after unlocking.
+
+**What you export or share.** History CSV exports include your transaction notes, in plain text.
+A payment proof (transaction key) proves one payment and nothing else; a reserve proof tells whoever
+checks it how much the account holds (all of it when you don't give an amount); a signed message
+proves you control the address. A watch-only wallet's private view key, like a seed, is sealed in
+the vault: anyone holding it sees every payment the wallet receives.
+
 **Deniability against a sophisticated adversary.** The design defeats inspection of the vault
 file, including by someone holding the duress password. It does **not** defeat an adversary who
 can observe your daemon (a remote node sees your wallet's sync requests and broadcasts), correlate
@@ -80,7 +103,10 @@ swap, crash dumps, file-system journals). Specifically:
 
 - **Copies of the vault taken at different times** show which slots changed. If both slots ever
   changed between two copies (e.g. you changed both passwords), both are live wallets. Hidden
-  volumes share this limitation.
+  volumes share this limitation. Since 0.5 more actions change a slot: adding or editing a wallet,
+  contact, label or note, handing out a subaddress, changing a wallet's node, even switching wallets
+  (the vault remembers the one you used last) re-seal that password's slot. Simply unlocking does
+  not, apart from converting an older vault once and wipe-on-duress.
 - **A wipe flag examined before it fires.** If you enable wipe-on-duress, an examiner who decrypts the
   decoy *offline* — without the app ever opening it — can read `wipeOther: true` and infer a second
   wallet existed. The instruction has to be readable with the duress password; once the app opens the
@@ -142,7 +168,7 @@ password**:
   stay in the 0.1 format forever.
 
 If you never set a duress password in 0.1, the upgrade is complete after your first unlock. If you
-did, the clean fix is to rebuild the vault in 0.2:
+did, the clean fix is to rebuild the vault:
 
 1. Have both seeds (main and decoy) and their restore heights written down, and check them.
 2. Settings → **Open data folder**, quit the app, and move `vault.xv` somewhere offline as a fallback.
@@ -150,6 +176,47 @@ did, the clean fix is to rebuild the vault in 0.2:
    decoy seed, and set both passwords.
 4. Unlock with each password to confirm the right wallet opens. Then destroy the old `vault.xv` and
    every exported copy of it.
+
+## Upgrading to 0.5 (vault format 2)
+
+0.5 stores whole profiles, so its slots are bigger: a vault written by 0.2 or 0.3 (format 1, 4 KiB
+slots) becomes a format 2 file (256 KiB slots) the first time 0.5 opens it. As with 0.1, each slot
+can only be re-sealed by its own password, so:
+
+- The slot your password opens is converted to a one-wallet profile and re-sealed.
+- The **other slot is carried over byte for byte**, at the start of its new, larger slot (the rest is
+  random). It stays readable by its own password, which converts it whenever it is next used, and it
+  looks exactly like random data to anyone else, as before. Opening it does the same work as any
+  other slot: every slot is tried both ways, every time.
+- **There is no way back.** 0.3 and earlier can't open a format 2 file: they report that the vault
+  file has an unexpected size, and change nothing. If you might return to 0.3, export a backup
+  (Settings → Export backup) *before* opening the vault in 0.5.
+- Vaults created by 0.1 are converted the same way, and everything in
+  [Upgrading from 0.1](#upgrading-from-01) still applies to them.
+
+## The monero-wallet-rpc installer
+
+Bringing your own monero-wallet-rpc, downloaded and verified yourself, remains the recommendation:
+then you, not this app, decide what you trust. For everyone else, *Download & install* (on the
+startup screen and in Settings) does what a careful person does by hand, and installs nothing unless
+every step succeeds:
+
+1. It fetches `https://www.getmonero.org/downloads/hashes.txt` and checks its OpenPGP signature
+   against **binaryFate's key, which ships inside the app** (Monero's own `utils/gpg_keys/binaryfate.asc`)
+   and is accepted only for the pinned fingerprints `81AC 591F E9C4 B65C 5806 AFC3 F0AF 4D46 2A0B DF92`
+   (primary key) and `AD56 4CDA 8F16 65AC E78B 5DFD 2593 838E ABB1 F655` (signing subkey). The
+   verifier is deliberately narrow (v4 RSA, canonical-text signatures, SHA-256/512) and refuses
+   anything else, including text outside the signed block.
+2. It downloads this computer's official CLI archive from `downloads.getmonero.org` and requires its
+   SHA-256 to be the signed one.
+3. It extracts only `monero-wallet-rpc`, runs it once with `--version` (after the checks, never
+   before), and installs it in your user profile (on Windows `%LOCALAPPDATA%\XaultWallet\monero-cli`,
+   on Linux `~/.local/share/XaultWallet/monero-cli`), replacing an older one.
+
+What this trusts: the copy of binaryFate's key in the XaultWallet release you are running (verify
+that release's `SHA256SUMS.txt`), and that key itself. A build signed with it is accepted; one that
+isn't, isn't. getmonero.org sees your IP address unless you set a SOCKS proxy (Settings), which the
+download then uses.
 
 ## Choosing a daemon
 

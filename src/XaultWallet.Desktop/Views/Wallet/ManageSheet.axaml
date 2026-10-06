@@ -1,0 +1,150 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
+             xmlns:conv="clr-namespace:XaultWallet.Desktop"
+             xmlns:c="clr-namespace:XaultWallet.Desktop.Controls"
+             x:Class="XaultWallet.Desktop.Views.Wallet.ManageSheet"
+             x:DataType="vm:WalletViewModel">
+    <Border Classes="card" Width="620" Padding="28,24">
+        <StackPanel Spacing="18">
+            <Grid ColumnDefinitions="Auto,12,*,Auto">
+                <Border Width="40" Height="40" CornerRadius="12" Background="{StaticResource AccentSoft}">
+                    <c:Icon Data="{StaticResource IconWallet}" Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="2">
+                    <TextBlock Classes="h2" Text="{Binding WalletName}" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Classes="caption" Text="{Binding NetworkLabel}"/>
+                </StackPanel>
+                <Button Grid.Column="3" Classes="ghost icon" VerticalAlignment="Top" AutomationProperties.AutomationId="Manage.Close" AutomationProperties.Name="Close"
+                        ToolTip.Tip="Close" Command="{Binding CloseManageCommand}">
+                    <c:Icon Data="{StaticResource IconClose}"/>
+                </Button>
+            </Grid>
+
+            <Border Classes="callout" Classes.danger="{Binding ManageNoticeIsError}" Classes.success="{Binding !ManageNoticeIsError}"
+                    IsVisible="{Binding ManageNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                <TextBlock AutomationProperties.AutomationId="Manage.Notice" Text="{Binding ManageNotice}" TextWrapping="Wrap"/>
+            </Border>
+
+            <!-- ===== Name ===== -->
+            <StackPanel Spacing="7">
+                <TextBlock Text="NAME" Classes="eyebrow"/>
+                <Grid ColumnDefinitions="*,8,Auto">
+                    <TextBox MaxLength="40" AutomationProperties.AutomationId="Manage.Name" AutomationProperties.Name="Wallet name" Text="{Binding RenameText}"/>
+                    <Button Grid.Column="2" Content="Rename" AutomationProperties.AutomationId="Manage.Rename" Command="{Binding RenameCommand}"/>
+                </Grid>
+            </StackPanel>
+
+            <!-- ===== Node ===== -->
+            <StackPanel Spacing="7">
+                <TextBlock Text="NODE" Classes="eyebrow"/>
+                <Grid ColumnDefinitions="*,8,Auto,8,Auto">
+                    <TextBox Classes="mono" FontSize="12.5" Watermark="http://host:port" AutomationProperties.AutomationId="Manage.Node"
+                             AutomationProperties.Name="This wallet's node" Text="{Binding NodeAddress}"/>
+                    <Button Grid.Column="2" Content="Test" AutomationProperties.AutomationId="Manage.TestNode" Command="{Binding TestNodeCommand}"/>
+                    <Button Grid.Column="4" Content="Use this node" AutomationProperties.AutomationId="Manage.ApplyNode" Command="{Binding ApplyNodeCommand}"/>
+                </Grid>
+                <TextBlock Classes="caption" TextWrapping="Wrap"
+                           Text="The node this wallet syncs from. A change applies at once (no rescan) and is saved for next time. Your own node is the private choice: a remote node sees your IP address."/>
+            </StackPanel>
+
+            <!-- ===== Accounts ===== -->
+            <StackPanel Spacing="7">
+                <TextBlock Text="ACCOUNTS" Classes="eyebrow"/>
+                <TextBlock Classes="caption" TextWrapping="Wrap"
+                           Text="Separate balances inside this one wallet (the same seed restores them all). Once there are two, pick one next to the balance."/>
+                <Grid ColumnDefinitions="*,8,Auto">
+                    <TextBox MaxLength="40" Watermark="Name for a new account (optional)" AutomationProperties.AutomationId="Manage.NewAccountLabel"
+                             AutomationProperties.Name="New account name" Text="{Binding NewAccountLabel}"/>
+                    <Button Grid.Column="2" AutomationProperties.AutomationId="Manage.CreateAccount" AutomationProperties.Name="New account" Command="{Binding CreateAccountCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="7">
+                            <c:Icon Data="{StaticResource IconPlus}" Width="15" Height="15"/>
+                            <TextBlock Text="New account"/>
+                        </StackPanel>
+                    </Button>
+                </Grid>
+                <Grid ColumnDefinitions="*,8,Auto">
+                    <TextBox MaxLength="40" Watermark="Name of the account on screen" AutomationProperties.AutomationId="Manage.AccountName"
+                             AutomationProperties.Name="Name of the account on screen" Text="{Binding AccountRenameText}"/>
+                    <Button Grid.Column="2" Content="Rename account" AutomationProperties.AutomationId="Manage.RenameAccount" Command="{Binding RenameAccountCommand}"/>
+                </Grid>
+            </StackPanel>
+
+            <!-- ===== Backup: seed and keys ===== -->
+            <Border Classes="inset" Padding="16,14">
+                <StackPanel Spacing="9">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <c:Icon Data="{StaticResource IconKey}" Width="16" Height="16" Foreground="{StaticResource WarningBrush}"/>
+                        <TextBlock Text="BACKUP: SEED AND KEYS" Classes="eyebrow" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Classes="caption" TextWrapping="Wrap"
+                               Text="The seed restores this wallet in any Monero wallet. Write it on paper and keep it offline; never type it into a website or a chat."/>
+                    <Grid ColumnDefinitions="*,8,Auto" IsVisible="{Binding !SecretsShown}">
+                        <c:SecretTextBox PasswordChar="●" Watermark="Your password" AutomationProperties.AutomationId="Manage.RevealPassword"
+                                         AutomationProperties.Name="Password to show the seed" Text="{Binding RevealPassword}"/>
+                        <Button Grid.Column="2" AutomationProperties.AutomationId="Manage.Reveal" AutomationProperties.Name="Show seed and keys" Command="{Binding RevealSecretsCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <c:Icon Data="{StaticResource IconEye}" Width="15" Height="15"/>
+                                <TextBlock Text="Show seed &amp; keys"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <StackPanel Spacing="10" IsVisible="{Binding SecretsShown}">
+                        <StackPanel Spacing="4" IsVisible="{Binding HasMnemonic}">
+                            <TextBlock Text="SEED WORDS" Classes="eyebrow"/>
+                            <SelectableTextBlock Classes="mono" FontSize="13" LineHeight="21" TextWrapping="Wrap" AutomationProperties.AutomationId="Manage.Seed"
+                                                 Text="{Binding RevealedMnemonic}"/>
+                        </StackPanel>
+                        <StackPanel Spacing="4" IsVisible="{Binding RevealedSeedOffset, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                            <TextBlock Text="SEED OFFSET (PASSPHRASE)" Classes="eyebrow"/>
+                            <SelectableTextBlock Classes="mono" FontSize="12.5" TextWrapping="Wrap" Text="{Binding RevealedSeedOffset}"/>
+                            <TextBlock Classes="caption" TextWrapping="Wrap" Text="Needed together with the seed: the seed alone restores a different, empty wallet."/>
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="PRIVATE VIEW KEY" Classes="eyebrow"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <SelectableTextBlock Classes="mono" FontSize="12" TextWrapping="Wrap" AutomationProperties.AutomationId="Manage.ViewKey" Text="{Binding RevealedViewKey}"/>
+                                <Button Grid.Column="1" Classes="ghost icon" Margin="8,0,0,0" VerticalAlignment="Top" AutomationProperties.AutomationId="Manage.CopyViewKey"
+                                        AutomationProperties.Name="Copy view key" ToolTip.Tip="Copy the view key (it shows incoming payments; it can't spend)"
+                                        Command="{Binding CopyViewKeyCommand}">
+                                    <c:Icon Data="{StaticResource IconCopy}" Width="16" Height="16"/>
+                                </Button>
+                            </Grid>
+                        </StackPanel>
+                        <StackPanel Spacing="4" IsVisible="{Binding RevealedSpendKey, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                            <TextBlock Text="PRIVATE SPEND KEY" Classes="eyebrow"/>
+                            <SelectableTextBlock Classes="mono" FontSize="12" TextWrapping="Wrap" AutomationProperties.AutomationId="Manage.SpendKey" Text="{Binding RevealedSpendKey}"/>
+                        </StackPanel>
+                        <Button HorizontalAlignment="Left" AutomationProperties.AutomationId="Manage.Hide" AutomationProperties.Name="Hide seed and keys" Command="{Binding HideSecretsCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <c:Icon Data="{StaticResource IconEyeOff}" Width="15" Height="15"/>
+                                <TextBlock Text="Hide"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Remove ===== -->
+            <Border Classes="callout danger" Padding="16,14">
+                <StackPanel Spacing="9">
+                    <TextBlock Text="REMOVE THIS WALLET" Classes="eyebrow" Foreground="{StaticResource DangerBrush}"/>
+                    <TextBlock TextWrapping="Wrap" Foreground="#F3C2C2"
+                               Text="It leaves this vault. Its money stays on the blockchain, but without the seed written down you can never reach it again. The vault's last wallet can't be removed."/>
+                    <Grid ColumnDefinitions="*,8,*,8,Auto">
+                        <TextBox MaxLength="40" Watermark="Type the wallet's name" AutomationProperties.AutomationId="Manage.RemoveName"
+                                 AutomationProperties.Name="Wallet name, to confirm" Text="{Binding RemoveConfirmName}"/>
+                        <c:SecretTextBox Grid.Column="2" PasswordChar="●" Watermark="Your password" AutomationProperties.AutomationId="Manage.RemovePassword"
+                                         AutomationProperties.Name="Password, to confirm" Text="{Binding RemovePassword}"/>
+                        <Button Grid.Column="4" Classes="danger" AutomationProperties.AutomationId="Manage.Remove" AutomationProperties.Name="Remove this wallet" Command="{Binding RemoveWalletCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <c:Icon Data="{StaticResource IconTrash}" Width="15" Height="15"/>
+                                <TextBlock Text="Remove"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </Border>
+</UserControl>

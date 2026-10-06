@@ -51,7 +51,8 @@ public sealed class MoneroProcessManager : IAsyncDisposable
     private readonly ConcurrentQueue<string> _stderrTail = new();
     private const int StderrTailMax = 60;
 
-    private const string WalletFileName = "w";
+    /// <summary>The wallet's file name inside the session's --wallet-dir.</summary>
+    internal const string WalletFileName = "w";
 
     public Uri? Endpoint { get; private set; }
 
@@ -102,16 +103,24 @@ public sealed class MoneroProcessManager : IAsyncDisposable
     };
 
     /// <summary>
-    /// Restore a wallet from seed into a fresh session directory. Starts monero-wallet-rpc with no
-    /// wallet open (so startup never blocks on the daemon), then restores via the
-    /// restore_deterministic_wallet RPC. The wallet syncs in the background afterward.
+    /// Restore a wallet into a fresh session directory: from its seed, or from its keys (full or
+    /// view-only), per <see cref="WalletSecrets.Kind"/>. Starts monero-wallet-rpc with no wallet open
+    /// (so startup never blocks on the daemon), then restores via restore_deterministic_wallet or
+    /// generate_from_keys. The wallet syncs in the background afterward.
     /// </summary>
     public Task<MoneroRpcClient> StartFromSeedAsync(WalletSecrets secrets, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(secrets);
-        if (string.IsNullOrWhiteSpace(secrets.Mnemonic))
+        if (secrets.Kind == WalletKind.Seed && string.IsNullOrWhiteSpace(secrets.Mnemonic))
         {
             throw new ArgumentException("WalletSecrets.Mnemonic is empty.", nameof(secrets));
+        }
+
+        if (secrets.Kind != WalletKind.Seed
+            && (string.IsNullOrWhiteSpace(secrets.Address) || string.IsNullOrWhiteSpace(secrets.ViewKey)
+                || (secrets.Kind == WalletKind.Keys && string.IsNullOrWhiteSpace(secrets.SpendKey))))
+        {
+            throw new ArgumentException("The wallet's address or keys are missing.", nameof(secrets));
         }
 
         return StartFromSeedInternalAsync(secrets, ct);
@@ -123,18 +132,32 @@ public sealed class MoneroProcessManager : IAsyncDisposable
 
         try
         {
-            EnsureBackendIsOurs(); // last check before the seed goes over the wire
-            await client.RestoreDeterministicWalletAsync(
-                filename: WalletFileName,
-                password: secrets.EphemeralWalletPassword,
-                seed: secrets.Mnemonic.Trim(),
-                restoreHeight: secrets.RestoreHeight,
-                seedOffset: secrets.SeedOffset ?? string.Empty,
-                ct).ConfigureAwait(false);
+            EnsureBackendIsOurs(); // last check before the seed or keys go over the wire
+            if (secrets.Kind == WalletKind.Seed)
+            {
+                await client.RestoreDeterministicWalletAsync(
+                    filename: WalletFileName,
+                    password: secrets.EphemeralWalletPassword,
+                    seed: secrets.Mnemonic.Trim(),
+                    restoreHeight: secrets.RestoreHeight,
+                    seedOffset: secrets.SeedOffset ?? string.Empty,
+                    ct).ConfigureAwait(false);
+            }
+            else
+            {
+                await client.GenerateFromKeysAsync(
+                    filename: WalletFileName,
+                    password: secrets.EphemeralWalletPassword,
+                    address: secrets.Address.Trim(),
+                    viewKey: secrets.ViewKey.Trim(),
+                    spendKey: secrets.Kind == WalletKind.Keys ? secrets.SpendKey.Trim() : string.Empty,
+                    restoreHeight: secrets.RestoreHeight,
+                    ct).ConfigureAwait(false);
+            }
 
-            // Deliberately no node or height here: the log persists, and per-wallet details (a
-            // restore height is unique to a seed) would let it tell two wallets apart.
-            Log.Info("Wallet restored from seed; syncing in the background.");
+            // Deliberately no node, height or kind here: the log persists, and per-wallet details
+            // (a restore height is unique to a seed) would let it tell two wallets apart.
+            Log.Info("Wallet restored; syncing in the background.");
         }
         catch
         {

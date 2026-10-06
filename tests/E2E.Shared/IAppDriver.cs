@@ -21,8 +21,10 @@ public interface IAppDriver
     /// <summary>Replace the text of a text box by typing.</summary>
     Task TypeAsync(string id, string text);
 
-    /// <summary>Pick the combo box item that reads <paramref name="item"/>.</summary>
-    Task SelectAsync(string id, string item);
+    /// <summary>Pick the combo box item that reads <paramref name="item"/>. With
+    /// <paramref name="navigates"/>, choosing it replaces the screen the combo box is on (the wallet
+    /// switcher): the box goes away with it, so it isn't collapsed or read back.</summary>
+    Task SelectAsync(string id, string item, bool navigates = false);
 
     /// <summary>Set a toggle switch, check box or radio button.</summary>
     Task SetCheckedAsync(string id, bool on);

@@ -1,10 +1,8 @@
 using System;
 using System.ComponentModel;
-using System.IO;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using XaultWallet.Desktop.ViewModels;
 
@@ -35,27 +33,17 @@ public partial class WalletView : UserControl
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
-        if (_vm is not null)
-        {
-            _vm.PropertyChanged -= OnViewModelChanged;
-        }
-
+        Unsubscribe();
         _vm = DataContext as WalletViewModel;
         _balanceShown = false;
-        if (_vm is not null)
-        {
-            _vm.PropertyChanged += OnViewModelChanged;
-        }
+        Subscribe();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
-        if (_vm is not null)
-        {
-            _vm.PropertyChanged -= OnViewModelChanged;
-            _vm = null;
-        }
+        Unsubscribe();
+        _vm = null;
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -64,8 +52,34 @@ public partial class WalletView : UserControl
         if (_vm is null && DataContext is WalletViewModel vm)
         {
             _vm = vm;
-            _vm.PropertyChanged += OnViewModelChanged;
+            Subscribe();
         }
+    }
+
+    private void Subscribe()
+    {
+        if (_vm is null)
+        {
+            return;
+        }
+
+        _vm.PropertyChanged += OnViewModelChanged;
+        _vm.CopyRequested += OnCopyRequested;
+        _vm.ToastRequested += OnToastRequested;
+        _vm.ExportHistoryRequested += OnExportHistoryRequested;
+    }
+
+    private void Unsubscribe()
+    {
+        if (_vm is null)
+        {
+            return;
+        }
+
+        _vm.PropertyChanged -= OnViewModelChanged;
+        _vm.CopyRequested -= OnCopyRequested;
+        _vm.ToastRequested -= OnToastRequested;
+        _vm.ExportHistoryRequested -= OnExportHistoryRequested;
     }
 
     /// <summary>Motion that follows the wallet's state: what changed is where the eye goes.</summary>
@@ -87,15 +101,22 @@ public partial class WalletView : UserControl
 
                 _balanceShown = true;
                 break;
-            case nameof(WalletViewModel.SendResult) when _vm.SendResult.Length > 0:
-                _ = Motion.PopInAsync(SendOutcomeCard);
-                break;
             case nameof(WalletViewModel.ShowSendConfirm) when _vm.ShowSendConfirm:
                 _ = Motion.FadeInAsync(ConfirmScrim, 180);
                 _ = Motion.RiseInAsync(ConfirmSheet, distance: 16, milliseconds: 300);
                 break;
+            case nameof(WalletViewModel.ShowManage) when _vm.ShowManage:
+                _ = Motion.FadeInAsync(ManageScrim, 180);
+                _ = Motion.RiseInAsync(ManageSheet, distance: 16, milliseconds: 300);
+                break;
         }
     }
+
+    private void OnToastRequested(string text, bool ok) => ShowToast(text, ok);
+
+    private void OnCopyRequested(string text, string what) => _ = CopyToClipboardAsync(text, what);
+
+    private void OnExportHistoryRequested() => _ = ExportHistoryAsync();
 
     /// <summary>Brief feedback at the bottom of the window, on whichever tab is open.</summary>
     private async void ShowToast(string text, bool ok = true)
@@ -121,40 +142,8 @@ public partial class WalletView : UserControl
         }
     }
 
-    private async void CopyAddress_Click(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is WalletViewModel vm)
-        {
-            await CopyToClipboardAsync(vm.PrimaryAddress, "Address");
-        }
-    }
-
-    private async void CopyLastTxId_Click(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is WalletViewModel vm)
-        {
-            await CopyToClipboardAsync(vm.LastTxId, "Transaction ID");
-        }
-    }
-
-    private async void CopyLastTxKey_Click(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is WalletViewModel vm)
-        {
-            await CopyToClipboardAsync(vm.LastTxKey, "Transaction key");
-        }
-    }
-
-    private async void CopyRowTxId_Click(object? sender, RoutedEventArgs e)
-    {
-        if ((sender as Control)?.DataContext is HistoryRow row && !string.IsNullOrWhiteSpace(row.TxId))
-        {
-            await CopyToClipboardAsync(row.TxId, "Transaction ID");
-        }
-    }
-
     /// <summary>Save the history as CSV via the platform save dialog.</summary>
-    private async void ExportHistory_Click(object? sender, RoutedEventArgs e)
+    private async Task ExportHistoryAsync()
     {
         if (DataContext is not WalletViewModel vm)
         {

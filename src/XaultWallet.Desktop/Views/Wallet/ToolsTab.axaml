@@ -1,0 +1,171 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
+             xmlns:conv="clr-namespace:XaultWallet.Desktop"
+             xmlns:c="clr-namespace:XaultWallet.Desktop.Controls"
+             x:Class="XaultWallet.Desktop.Views.Wallet.ToolsTab"
+             x:DataType="vm:WalletViewModel">
+    <ScrollViewer Margin="0,14,0,0">
+        <StackPanel Spacing="14">
+            <!-- ===== Prove / verify a payment ===== -->
+            <Border Classes="card" Padding="22,20">
+                <StackPanel Spacing="10">
+                    <StackPanel Classes="toolHeader">
+                        <c:Icon Data="{StaticResource IconShield}" Width="18" Height="18" Foreground="{StaticResource SuccessBrush}" VerticalAlignment="Center"/>
+                        <TextBlock Text="Prove or check a payment" Classes="h2" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Classes="muted" TextWrapping="Wrap" MaxWidth="760" HorizontalAlignment="Left"
+                               Text="A transaction key proves that one payment reached an address, and nothing more: it can't spend. Fetch the key of a payment this wallet sent, or check a payment someone says they sent you."/>
+                    <Grid ColumnDefinitions="*,12,*" RowDefinitions="Auto,10,Auto">
+                        <TextBox Grid.Row="0" Grid.Column="0" Classes="mono" FontSize="12" Watermark="Transaction ID" AutomationProperties.AutomationId="Proof.TxId"
+                                 AutomationProperties.Name="Transaction ID" Text="{Binding VerifyTxId}"/>
+                        <TextBox Grid.Row="0" Grid.Column="2" Classes="mono" FontSize="12" Watermark="Transaction key" AutomationProperties.AutomationId="Proof.TxKey"
+                                 AutomationProperties.Name="Transaction key" Text="{Binding VerifyTxKey}"/>
+                        <TextBox Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Classes="mono" FontSize="12" Watermark="The address that was paid" AutomationProperties.AutomationId="Proof.Address"
+                                 AutomationProperties.Name="Destination address" Text="{Binding VerifyAddress}"/>
+                    </Grid>
+                    <WrapPanel Orientation="Horizontal">
+                        <Button Classes="accent" Margin="0,0,8,6" AutomationProperties.AutomationId="Proof.Verify" AutomationProperties.Name="Check payment" Command="{Binding VerifyPaymentCommand}">
+                            <TextBlock Text="Check payment" Foreground="{StaticResource AccentText}"/>
+                        </Button>
+                        <Button Content="Fetch key from this wallet" Margin="0,0,8,6" AutomationProperties.AutomationId="Proof.FetchKey" Command="{Binding FetchTxKeyCommand}"
+                                ToolTip.Tip="Look up the transaction key of a payment this wallet sent"/>
+                        <Button Content="Use last send" Margin="0,0,8,6" AutomationProperties.AutomationId="Proof.UseLast" Command="{Binding PrefillVerifyFromLastCommand}" IsVisible="{Binding HasLastTx}"/>
+                        <Button Margin="0,0,8,6" AutomationProperties.AutomationId="Proof.CopyKey" AutomationProperties.Name="Copy key" Command="{Binding CopyVerifyTxKeyCommand}"
+                                IsVisible="{Binding VerifyTxKey, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <c:Icon Data="{StaticResource IconCopy}" Width="15" Height="15"/>
+                                <TextBlock Text="Copy key"/>
+                            </StackPanel>
+                        </Button>
+                    </WrapPanel>
+                    <TextBlock AutomationProperties.AutomationId="Proof.Result" Text="{Binding VerifyResult}" TextWrapping="Wrap" FontSize="12.5"
+                               IsVisible="{Binding VerifyResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               Foreground="{Binding VerifyOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ===== Messages: sign with this wallet / check someone's signature ===== -->
+            <Grid ColumnDefinitions="*,14,*">
+                <Border Grid.Column="0" Classes="card" Padding="22,20">
+                    <StackPanel Spacing="10">
+                        <StackPanel Classes="toolHeader">
+                            <c:Icon Data="{StaticResource IconEdit}" Width="18" Height="18" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Text="Sign a message" Classes="h2" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <TextBlock Classes="muted" TextWrapping="Wrap" Text="Proves you control this wallet's main address, without moving any money."/>
+                        <TextBox AcceptsReturn="True" TextWrapping="Wrap" MinHeight="72" MaxHeight="160" Watermark="The message to sign"
+                                 AutomationProperties.AutomationId="Tools.SignMessage" AutomationProperties.Name="Message to sign" Text="{Binding SignMessage}"/>
+                        <Button HorizontalAlignment="Left" Classes="accent" AutomationProperties.AutomationId="Tools.Sign" AutomationProperties.Name="Sign" Command="{Binding SignCommand}" IsEnabled="{Binding CanSpend}">
+                            <TextBlock Text="Sign" Foreground="{StaticResource AccentText}"/>
+                        </Button>
+                        <Border Classes="inset" Padding="12,10" IsVisible="{Binding Signature, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <SelectableTextBlock Classes="mono" FontSize="11.5" TextWrapping="Wrap" AutomationProperties.AutomationId="Tools.Signature" Text="{Binding Signature}"/>
+                                <Button Grid.Column="1" Classes="ghost icon" VerticalAlignment="Top" Margin="8,0,0,0" AutomationProperties.AutomationId="Tools.CopySignature"
+                                        AutomationProperties.Name="Copy signature" ToolTip.Tip="Copy signature" Command="{Binding CopySignatureCommand}">
+                                    <c:Icon Data="{StaticResource IconCopy}" Width="16" Height="16"/>
+                                </Button>
+                            </Grid>
+                        </Border>
+                        <TextBlock Classes="caption" TextWrapping="Wrap" AutomationProperties.AutomationId="Tools.SignNotice" Text="{Binding SignNotice}"
+                                   IsVisible="{Binding SignNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                        <Button Classes="link" HorizontalAlignment="Left" Content="Copy the main address" AutomationProperties.AutomationId="Tools.CopyMainAddress"
+                                Command="{Binding CopyPrimaryAddressCommand}" IsVisible="{Binding Signature, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="2" Classes="card" Padding="22,20">
+                    <StackPanel Spacing="10">
+                        <StackPanel Classes="toolHeader">
+                            <c:Icon Data="{StaticResource IconCheck}" Width="18" Height="18" Foreground="{StaticResource SuccessBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Text="Check a signed message" Classes="h2" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <TextBox AcceptsReturn="True" TextWrapping="Wrap" MinHeight="54" MaxHeight="140" Watermark="The message, exactly as signed"
+                                 AutomationProperties.AutomationId="Tools.CheckMessage" AutomationProperties.Name="Signed message" Text="{Binding CheckMessage}"/>
+                        <TextBox Classes="mono" FontSize="12" Watermark="Their address" AutomationProperties.AutomationId="Tools.CheckAddress"
+                                 AutomationProperties.Name="Signer's address" Text="{Binding CheckMessageAddress}"/>
+                        <TextBox Classes="mono" FontSize="12" Watermark="Signature (SigV2…)" AutomationProperties.AutomationId="Tools.CheckSignature"
+                                 AutomationProperties.Name="Signature" Text="{Binding CheckMessageSignature}"/>
+                        <Button HorizontalAlignment="Left" Content="Check signature" AutomationProperties.AutomationId="Tools.CheckMessageButton" Command="{Binding CheckMessageCommand}"/>
+                        <TextBlock FontSize="12.5" TextWrapping="Wrap" AutomationProperties.AutomationId="Tools.CheckMessageResult" Text="{Binding CheckMessageResult}"
+                                   IsVisible="{Binding CheckMessageResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                   Foreground="{Binding CheckMessageOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- ===== Reserve proofs: prove a balance / check someone's ===== -->
+            <Grid ColumnDefinitions="*,14,*">
+                <Border Grid.Column="0" Classes="card" Padding="22,20">
+                    <StackPanel Spacing="10">
+                        <StackPanel Classes="toolHeader">
+                            <c:Icon Data="{StaticResource IconWallet}" Width="18" Height="18" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Text="Prove your balance" Classes="h2" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <TextBlock Classes="muted" TextWrapping="Wrap"
+                                   Text="A reserve proof shows that this account holds at least an amount. Whoever checks it learns that total (or all of it, if you leave the amount empty), not your history."/>
+                        <Grid ColumnDefinitions="150,10,*">
+                            <TextBox Grid.Column="0" Classes="mono" Watermark="Amount (optional)" AutomationProperties.AutomationId="Tools.ReserveAmount"
+                                     AutomationProperties.Name="Amount to prove" Text="{Binding ReserveAmountText}"/>
+                            <TextBox Grid.Column="2" Watermark="Message (e.g. who asked, and when)" AutomationProperties.AutomationId="Tools.ReserveMessage"
+                                     AutomationProperties.Name="Proof message" Text="{Binding ReserveMessage}"/>
+                        </Grid>
+                        <Button HorizontalAlignment="Left" Classes="accent" AutomationProperties.AutomationId="Tools.CreateReserve" AutomationProperties.Name="Create proof" Command="{Binding CreateReserveProofCommand}" IsEnabled="{Binding CanSpend}">
+                            <TextBlock Text="Create proof" Foreground="{StaticResource AccentText}"/>
+                        </Button>
+                        <Border Classes="inset" Padding="12,10" IsVisible="{Binding ReserveProof, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <ScrollViewer MaxHeight="120">
+                                    <SelectableTextBlock Classes="mono" FontSize="11" TextWrapping="Wrap" AutomationProperties.AutomationId="Tools.ReserveProof" Text="{Binding ReserveProof}"/>
+                                </ScrollViewer>
+                                <Button Grid.Column="1" Classes="ghost icon" VerticalAlignment="Top" Margin="8,0,0,0" AutomationProperties.AutomationId="Tools.CopyReserve"
+                                        AutomationProperties.Name="Copy proof" ToolTip.Tip="Copy proof" Command="{Binding CopyReserveProofCommand}">
+                                    <c:Icon Data="{StaticResource IconCopy}" Width="16" Height="16"/>
+                                </Button>
+                            </Grid>
+                        </Border>
+                        <TextBlock Classes="caption" TextWrapping="Wrap" AutomationProperties.AutomationId="Tools.ReserveNotice" Text="{Binding ReserveNotice}"
+                                   IsVisible="{Binding ReserveNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="2" Classes="card" Padding="22,20">
+                    <StackPanel Spacing="10">
+                        <StackPanel Classes="toolHeader">
+                            <c:Icon Data="{StaticResource IconSearch}" Width="18" Height="18" Foreground="{StaticResource SuccessBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Text="Check a balance proof" Classes="h2" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <TextBox Classes="mono" FontSize="12" Watermark="Their main address" AutomationProperties.AutomationId="Tools.CheckReserveAddress"
+                                 AutomationProperties.Name="Prover's address" Text="{Binding CheckReserveAddress}"/>
+                        <TextBox Watermark="The message (if they used one)" AutomationProperties.AutomationId="Tools.CheckReserveMessage"
+                                 AutomationProperties.Name="Proof message" Text="{Binding CheckReserveMessage}"/>
+                        <TextBox Classes="mono" FontSize="11.5" AcceptsReturn="False" TextWrapping="Wrap" MaxHeight="120" Watermark="The proof (ReserveProofV2…)"
+                                 AutomationProperties.AutomationId="Tools.CheckReserveProof" AutomationProperties.Name="Reserve proof" Text="{Binding CheckReserveProof}"/>
+                        <Button HorizontalAlignment="Left" Content="Check proof" AutomationProperties.AutomationId="Tools.CheckReserveButton" Command="{Binding CheckReserveProofCommand}"/>
+                        <TextBlock FontSize="12.5" TextWrapping="Wrap" AutomationProperties.AutomationId="Tools.CheckReserveResult" Text="{Binding CheckReserveResult}"
+                                   IsVisible="{Binding CheckReserveResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                   Foreground="{Binding CheckReserveOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- ===== Maintenance ===== -->
+            <Border Classes="card" Padding="22,18">
+                <Grid ColumnDefinitions="*,16,Auto">
+                    <StackPanel Spacing="4" VerticalAlignment="Center">
+                        <TextBlock Text="Balance looks wrong?" FontWeight="SemiBold" FontSize="14"/>
+                        <TextBlock Classes="muted" TextWrapping="Wrap"
+                                   Text="Re-check which of this wallet's outputs are spent, against the node. It fixes a balance confused by a misbehaving node; it doesn't rescan the chain."/>
+                        <TextBlock Classes="caption" AutomationProperties.AutomationId="Tools.RescanNotice" Text="{Binding RescanNotice}" TextWrapping="Wrap"
+                                   IsVisible="{Binding RescanNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    </StackPanel>
+                    <Button Grid.Column="2" VerticalAlignment="Center" AutomationProperties.AutomationId="Tools.RescanSpent" AutomationProperties.Name="Re-check spent outputs" Command="{Binding RescanSpentCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <c:Icon Data="{StaticResource IconRefresh}" Width="16" Height="16" Classes.spin="{Binding RescanSpentCommand.IsRunning}"/>
+                            <TextBlock Text="Re-check spent outputs"/>
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

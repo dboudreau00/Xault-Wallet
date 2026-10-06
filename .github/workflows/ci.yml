@@ -27,8 +27,8 @@ jobs:
         os: [ubuntu-24.04, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
       - run: dotnet restore XaultWallet.sln
@@ -43,8 +43,8 @@ jobs:
     name: Integration + end-to-end vs real monero-wallet-rpc (private regtest chain)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
       - name: Install Monero from the Ubuntu archive (and the UI font, for the screenshots)
@@ -69,7 +69,7 @@ jobs:
         env:
           XW_E2E_DAEMON: http://127.0.0.1:18081
         run: dotnet run -c Release --project tests/XaultWallet.E2E.Headless -- e2e-screens
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()   # the screenshots matter most when a step failed
         with:
           name: e2e-screens-linux
@@ -80,8 +80,8 @@ jobs:
     name: UI smoke test + screenshots
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
       - name: Fonts and a QR decoder
@@ -90,7 +90,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends fonts-cascadia-code zbar-tools
       - name: Render every screen (fails on any binding error or a QR/address mismatch)
         run: dotnet run -c Release --project tools/UiSnapshots -- ui-snapshots
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ui-snapshots
           path: ui-snapshots/

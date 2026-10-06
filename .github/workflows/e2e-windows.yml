@@ -47,14 +47,14 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
 
       - name: The release zip under test
         if: inputs.artifact != ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.artifact }}
           path: dist
@@ -124,7 +124,7 @@ jobs:
           XW_E2E_TIME_SCALE: '2'
         run: dotnet run -c Release --project tests/XaultWallet.E2E.Windows -- app\XaultWallet.exe e2e-screens-windows
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()   # the screenshots matter most when a step failed
         with:
           name: e2e-screens-windows
@@ -148,7 +148,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: e2e-screens-windows
           path: shots

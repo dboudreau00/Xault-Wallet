@@ -5,13 +5,14 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
-    <!-- Package lock files (packages.lock.json) are committed for every project. Refresh them with
-         dotnet restore with the force-evaluate option after a package change. CI restores in locked
-         mode, so a different package graph than the committed one fails the build. Publishing is
-         excluded: a runtime-specific restore adds runtime packs and SDK-injected packages that no
-         single lock file can describe, and the release job runs the tests (locked restore) first. -->
+    <!-- Package lock files (packages.lock.json) are committed for every project, generated from a
+         Debug restore. Refresh them with dotnet restore and the force-evaluate option after a package
+         change. CI restores in locked mode, so a different package graph than the committed one fails
+         the build. Release restores and publishing are excluded: they resolve a different set (Debug
+         only tools are dropped; runtime packs and SDK-injected packages are added) that no single lock
+         file can describe. The job restoring the solution in Debug has already checked the graph. -->
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-    <RestoreLockedMode Condition="'$(CI)' == 'true' And '$(_IsPublishing)' != 'true'">true</RestoreLockedMode>
+    <RestoreLockedMode Condition="'$(CI)' == 'true' And '$(Configuration)' != 'Release' And '$(_IsPublishing)' != 'true'">true</RestoreLockedMode>
   </PropertyGroup>
 
   <!-- Release artefacts ship without symbol files (for every project in the single file). -->

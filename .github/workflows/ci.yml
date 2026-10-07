@@ -28,8 +28,8 @@ jobs:
         os: [ubuntu-24.04, windows-latest, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
       - run: dotnet restore XaultWallet.sln
@@ -44,8 +44,8 @@ jobs:
     name: Integration + end-to-end vs real monero-wallet-rpc (private regtest chain)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
       - name: Install Monero from the Ubuntu archive (and the UI font, for the screenshots)
@@ -70,7 +70,7 @@ jobs:
         env:
           XW_E2E_DAEMON: http://127.0.0.1:18081
         run: dotnet run -c Release --project tests/XaultWallet.E2E.Headless -- e2e-screens
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()   # the screenshots matter most when a step failed
         with:
           name: e2e-screens-linux
@@ -81,8 +81,8 @@ jobs:
     name: UI smoke test + screenshots
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
       - name: Fonts and a QR decoder
@@ -91,7 +91,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends fonts-cascadia-code zbar-tools
       - name: Render every screen (fails on any binding error or a QR/address mismatch)
         run: dotnet run -c Release --project tools/UiSnapshots -- ui-snapshots
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ui-snapshots
           path: ui-snapshots/

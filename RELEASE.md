@@ -10,8 +10,8 @@ You build this yourself on your own machine; it can't be produced without the .N
 ## Windows (the common case)
 
 ### Prerequisites
-- The **.NET 8 SDK** (you already have it if Visual Studio builds the project).
-  Check in a terminal: `dotnet --version` should print `8.x`.
+- The **.NET 10 SDK** (you already have it if Visual Studio builds the project).
+  Check in a terminal: `dotnet --version` should print `10.x`.
 
 ### One command
 From the project root (the folder with `XaultWallet.sln`), in PowerShell:
@@ -98,7 +98,7 @@ A packaged `.exe` looks finished, but packaging changes nothing about the code's
   first. The wallet never ships someone else's key-handling binary.
 - **Back up your seed** independently of the app.
 
-Version is stamped as `0.5.0-beta` in the project file — bump `<Version>` there for future
+Version is stamped as `0.5.1-beta` in the project file — bump `<Version>` there for future
 builds (Settings → About reads it from the assembly).
 
 ## Automated releases (GitHub Actions)
@@ -108,9 +108,9 @@ executables for `win-x64`, `linux-x64` and `osx-arm64`. Each archive holds the e
 `README.md`, `SECURITY.md`, `CHANGELOG.md` and `LICENSE`. They are attached with a `SHA256SUMS` file
 to a **draft** release for you to review and publish. There are two ways to start it:
 
-- **Push a tag** such as `v0.5.0-beta`.
+- **Push a tag** such as `v0.5.1-beta`.
 - **Run it by hand** (no git needed): GitHub → Actions → Release → *Run workflow*, with `version` set
-  to `v0.5.0-beta`. The draft targets the commit the run started from (normally `main`). GitHub
+  to `v0.5.1-beta`. The draft targets the commit the run started from (normally `main`). GitHub
   creates the tag only when you press **Publish** on the draft: the workflow never creates or moves a
   tag. Run without a version, it only builds (a dry run) and publishes nothing.
 

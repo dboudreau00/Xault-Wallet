@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.5.1-beta - 2026-10-07 - hardening fixes, .NET 10
+
+A security and hygiene release from a code review of 0.5.0-beta. **Vault format and data are
+unchanged**: 0.5.0 vaults open as they are.
+
+### Behaviour changes to know about
+- **https:// nodes now require a certificate that monero-wallet-rpc can verify.** Before, an https
+  node with a bad certificate was accepted with only a log warning, and a failed TLS handshake fell
+  back to plaintext. Now the app starts wallet-rpc with `--daemon-ssl enabled` for https:// nodes
+  (and sets the same on a node switch), so a self-signed node no longer connects. http:// nodes
+  behave as before. See "Choosing a daemon" in [SECURITY.md](SECURITY.md).
+- **macOS fails closed.** The check that the wallet-rpc port belongs to the process the app started
+  does not exist on macOS, and the app used to carry on without it. It now refuses to send seeds
+  there. The osx-arm64 build still builds, but seed-bearing use on macOS does not work until a real
+  port-ownership check lands. Windows and Linux are unchanged.
+- **Seed imports need monero-wallet-rpc.** Importing a seed without it installed used to skip the
+  address confirmation and seal the wallet anyway, so a wrong seed or seed offset opened a different
+  empty wallet later with no error. It is now refused with a message to install wallet-rpc first.
+
+### Fixes
+- **Backup file names no longer reveal a decoy.** The save dialog suggested different names for the
+  real and the decoy seed backup. Both now get the same neutral name, `wallet-backup-<date>-<digits>.txt`.
+- **Download & install refuses downgrades.** It will not replace a newer wallet-rpc with an older
+  signed release, nor install one older than the version the app expects (0.18.5.1). Nothing is
+  downloaded in either case.
+- **Copied secrets leave the clipboard sooner.** Locking or closing the app clears an address or key
+  the app copied, as long as the clipboard still holds it. On Windows, copies are excluded from
+  clipboard history and the cloud clipboard.
+- **A cancelled sweep says so.** Locking or closing during the first relay of a send-max sweep now
+  reports "check History" instead of looking like a clean cancel, since the request may have reached
+  the network.
+- **Seed-verification quiz positions use a cryptographic RNG.** No security impact; it matches the
+  rest of the code.
+- SECURITY.md now names the string binding of the unlock password and the unzeroed copy that the
+  Argon2 library keeps, in the memory-forensics notes.
+
+### Build and supply chain
+- **.NET 10.** The whole solution targets .NET 10 (8 reaches end of support on 2026-11-10).
+  Avalonia stays at 11.1.3. `Tmds.DBus.Protocol` is pinned to 0.21.3 (GHSA-xrw6-gwf8-vvr9).
+- **Pinned and locked.** GitHub Actions are pinned to full commit SHAs, Dependabot keeps them and
+  the NuGet packages current, and `packages.lock.json` is committed for every project. CI restores in
+  locked mode, so a different package graph than the committed one fails the build.
+- The release workflow is read-only by default; only the job that drafts the release can write.
+
 ## 0.5.0-beta — 2026-10-06 — several wallets, contacts, payment requests, verified backend install
 
 Everything below is new since 0.3.0-beta (there was no 0.4). **Your vault keeps its format** (about

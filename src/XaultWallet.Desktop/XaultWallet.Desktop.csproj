@@ -40,6 +40,8 @@
     <PackageReference Include="Avalonia.Diagnostics" Version="11.1.3" Condition="'$(Configuration)' == 'Debug'" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
     <PackageReference Include="QRCoder" Version="1.6.0" />
+    <!-- Avalonia 11.1.3 pulls Tmds.DBus.Protocol 0.16.0 (GHSA-xrw6-gwf8-vvr9); pin the patched release. -->
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.21.3" />
   </ItemGroup>
 
   <ItemGroup>

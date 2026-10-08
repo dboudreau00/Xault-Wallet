@@ -25,15 +25,16 @@ the same files.
 
 ### Dependencies
 - Two packages the app no longer used are gone: Avalonia.Controls.DataGrid (History stopped using a
-  grid in 0.5) and Avalonia.Diagnostics (developer tools, never wired up). The download is a little
-  smaller.
+  grid in 0.5) and Avalonia.Diagnostics (developer tools, never wired up). The downloads still grow
+  by 1 to 2 MB with Avalonia 12 and its newer Skia and HarfBuzz.
 - Tmds.DBus.Protocol no longer needs a pin: Avalonia 12 brings 0.94.1, which has the fix for
   GHSA-xrw6-gwf8-vvr9.
 - With no package depending on the build configuration any more, CI now checks Release builds
   against the committed lock files too, not only Debug ones.
 - CI builds opt out of Avalonia's build-time usage statistics, as they already did for .NET's.
 - Replaces Dependabot's five separate Avalonia bumps (#13, #15 to #18), which could not pass on
-  their own: each moved one package to 12 and left the rest on 11.
+  their own: each moved one package to 12 and left the rest on 11. Dependabot now proposes
+  Avalonia's packages together, in one pull request.
 
 ## 0.6.0-beta - 2026-10-08 - built-in Tor, coin control, a Windows installer
 

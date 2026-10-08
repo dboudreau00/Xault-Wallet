@@ -499,7 +499,7 @@ public sealed partial class WalletViewModel
         catch (Exception ex)
         {
             _preparedTx = null;
-            SendResult = "Couldn't prepare the transaction: " + Friendly(ex);
+            SendResult = "Couldn't prepare the transaction: " + Friendly(ex) + FrozenHint(ex);
         }
         finally
         {
@@ -592,7 +592,7 @@ public sealed partial class WalletViewModel
         catch (Exception ex)
         {
             _preparedSweep = null;
-            SendResult = "Couldn't prepare the sweep: " + Friendly(ex);
+            SendResult = "Couldn't prepare the sweep: " + Friendly(ex) + FrozenHint(ex);
         }
         finally
         {

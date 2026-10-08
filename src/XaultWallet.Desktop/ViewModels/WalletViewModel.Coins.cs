@@ -75,6 +75,13 @@ public sealed partial class WalletViewModel
     /// once the scan has found them).</summary>
     public int FrozenCount => _secrets.FrozenKeyImages.Count;
 
+    /// <summary>When a send fails for want of money while coins are frozen, say that those were left
+    /// out on purpose: otherwise the balance and the refusal seem to disagree.</summary>
+    private string FrozenHint(Exception ex) =>
+        HasFrozen && ex is MoneroRpcClient.MoneroRpcException rpc && rpc.Message.Contains("money", StringComparison.OrdinalIgnoreCase)
+            ? " Frozen coins (Coins tab) are never spent: unfreeze one to use it."
+            : string.Empty;
+
     /// <summary>" · 2 frozen coins left out" for the send summary, or nothing.</summary>
     private string FrozenNote()
     {

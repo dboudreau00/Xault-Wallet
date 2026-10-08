@@ -45,8 +45,36 @@ internal static class IntegrationEnv
 
     public static MoneroWalletService NewService() => new(WalletRpc!, Options);
 
+    /// <summary>One miner at a time: test classes run in parallel, and two generateblocks calls racing
+    /// on the same tip make monerod refuse one of the blocks ("Block not accepted").</summary>
+    private static readonly SemaphoreSlim MiningGate = new(1, 1);
+
     /// <summary>regtest only: mine <paramref name="blocks"/> blocks paying their coinbase to <paramref name="address"/>.</summary>
     public static async Task MineAsync(string address, int blocks)
+    {
+        await MiningGate.WaitAsync();
+        try
+        {
+            for (int attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    await MineOnceAsync(address, blocks);
+                    return;
+                }
+                catch (InvalidOperationException ex) when (attempt < 3 && ex.Message.Contains("Block not accepted", StringComparison.Ordinal))
+                {
+                    await Task.Delay(500); // a stale template: the next call builds on the new tip
+                }
+            }
+        }
+        finally
+        {
+            MiningGate.Release();
+        }
+    }
+
+    private static async Task MineOnceAsync(string address, int blocks)
     {
         using var http = new HttpClient(new SocketsHttpHandler { UseProxy = false }) { Timeout = TimeSpan.FromMinutes(2) };
         var body = new

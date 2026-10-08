@@ -26,7 +26,6 @@
     <Property Id="ARPPRODUCTICON" Value="XaultIcon" />
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/dboudreau00/Xault-Wallet" />
     <Property Id="ARPHELPLINK" Value="https://github.com/dboudreau00/Xault-Wallet/issues" />
-    <Property Id="ARPNOMODIFY" Value="1" />
 
     <WixVariable Id="WixUILicenseRtf" Value="$(var.RepoDir)\installer\License.rtf" />
     <UIRef Id="WixUI_Minimal" />

@@ -101,7 +101,7 @@ internal static partial class Program
             string path = Path.Combine(outDir, name + ".png");
             using (var frame = window.CaptureRenderedFrame())
             {
-                frame!.Save(path);
+                frame!.Save(path, Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
             }
 
             Console.WriteLine("wrote " + path);

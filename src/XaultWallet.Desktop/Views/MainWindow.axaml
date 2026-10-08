@@ -14,14 +14,14 @@
         Icon="/Assets/xault.ico"
         Background="{StaticResource AppBg}"
         ExtendClientAreaToDecorationsHint="True"
-        ExtendClientAreaChromeHints="NoChrome"
-        ExtendClientAreaTitleBarHeightHint="-1">
+        WindowDecorations="BorderOnly">
 
     <Grid RowDefinitions="Auto,*">
-        <!-- Custom title bar: our own chrome extended to the top edge, draggable -->
+        <!-- Custom title bar: our own chrome extended to the top edge. The TitleBar role gives it the
+             system's own dragging, double-click to maximise and snapping; the buttons in it still
+             work as buttons. -->
         <Border Grid.Row="0" Background="{StaticResource TitleBarBg}" BorderBrush="{StaticResource BorderSubtle}"
-                BorderThickness="0,0,0,1" PointerPressed="TitleBar_PointerPressed"
-                DoubleTapped="TitleBar_DoubleTapped">
+                BorderThickness="0,0,0,1" WindowDecorationProperties.ElementRole="TitleBar">
             <Grid ColumnDefinitions="Auto,*,Auto,Auto" Height="46">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="11"
                             VerticalAlignment="Center" Margin="18,0,0,0">

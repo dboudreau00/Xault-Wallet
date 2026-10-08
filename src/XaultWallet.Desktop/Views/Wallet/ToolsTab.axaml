@@ -17,11 +17,11 @@
                     <TextBlock Classes="muted" TextWrapping="Wrap" MaxWidth="760" HorizontalAlignment="Left"
                                Text="A transaction key proves that one payment reached an address, and nothing more: it can't spend. Fetch the key of a payment this wallet sent, or check a payment someone says they sent you."/>
                     <Grid ColumnDefinitions="*,12,*" RowDefinitions="Auto,10,Auto">
-                        <TextBox Grid.Row="0" Grid.Column="0" Classes="mono" FontSize="12" Watermark="Transaction ID" AutomationProperties.AutomationId="Proof.TxId"
+                        <TextBox Grid.Row="0" Grid.Column="0" Classes="mono" FontSize="12" PlaceholderText="Transaction ID" AutomationProperties.AutomationId="Proof.TxId"
                                  AutomationProperties.Name="Transaction ID" Text="{Binding VerifyTxId}"/>
-                        <TextBox Grid.Row="0" Grid.Column="2" Classes="mono" FontSize="12" Watermark="Transaction key" AutomationProperties.AutomationId="Proof.TxKey"
+                        <TextBox Grid.Row="0" Grid.Column="2" Classes="mono" FontSize="12" PlaceholderText="Transaction key" AutomationProperties.AutomationId="Proof.TxKey"
                                  AutomationProperties.Name="Transaction key" Text="{Binding VerifyTxKey}"/>
-                        <TextBox Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Classes="mono" FontSize="12" Watermark="The address that was paid" AutomationProperties.AutomationId="Proof.Address"
+                        <TextBox Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Classes="mono" FontSize="12" PlaceholderText="The address that was paid" AutomationProperties.AutomationId="Proof.Address"
                                  AutomationProperties.Name="Destination address" Text="{Binding VerifyAddress}"/>
                     </Grid>
                     <WrapPanel Orientation="Horizontal">
@@ -54,7 +54,7 @@
                             <TextBlock Text="Sign a message" Classes="h2" VerticalAlignment="Center"/>
                         </StackPanel>
                         <TextBlock Classes="muted" TextWrapping="Wrap" Text="Proves you control this wallet's main address, without moving any money."/>
-                        <TextBox AcceptsReturn="True" TextWrapping="Wrap" MinHeight="72" MaxHeight="160" Watermark="The message to sign"
+                        <TextBox AcceptsReturn="True" TextWrapping="Wrap" MinHeight="72" MaxHeight="160" PlaceholderText="The message to sign"
                                  AutomationProperties.AutomationId="Tools.SignMessage" AutomationProperties.Name="Message to sign" Text="{Binding SignMessage}"/>
                         <Button HorizontalAlignment="Left" Classes="accent" AutomationProperties.AutomationId="Tools.Sign" AutomationProperties.Name="Sign" Command="{Binding SignCommand}" IsEnabled="{Binding CanSpend}">
                             <TextBlock Text="Sign" Foreground="{StaticResource AccentText}"/>
@@ -80,11 +80,11 @@
                             <c:Icon Data="{StaticResource IconCheck}" Width="18" Height="18" Foreground="{StaticResource SuccessBrush}" VerticalAlignment="Center"/>
                             <TextBlock Text="Check a signed message" Classes="h2" VerticalAlignment="Center"/>
                         </StackPanel>
-                        <TextBox AcceptsReturn="True" TextWrapping="Wrap" MinHeight="54" MaxHeight="140" Watermark="The message, exactly as signed"
+                        <TextBox AcceptsReturn="True" TextWrapping="Wrap" MinHeight="54" MaxHeight="140" PlaceholderText="The message, exactly as signed"
                                  AutomationProperties.AutomationId="Tools.CheckMessage" AutomationProperties.Name="Signed message" Text="{Binding CheckMessage}"/>
-                        <TextBox Classes="mono" FontSize="12" Watermark="Their address" AutomationProperties.AutomationId="Tools.CheckAddress"
+                        <TextBox Classes="mono" FontSize="12" PlaceholderText="Their address" AutomationProperties.AutomationId="Tools.CheckAddress"
                                  AutomationProperties.Name="Signer's address" Text="{Binding CheckMessageAddress}"/>
-                        <TextBox Classes="mono" FontSize="12" Watermark="Signature (SigV2…)" AutomationProperties.AutomationId="Tools.CheckSignature"
+                        <TextBox Classes="mono" FontSize="12" PlaceholderText="Signature (SigV2…)" AutomationProperties.AutomationId="Tools.CheckSignature"
                                  AutomationProperties.Name="Signature" Text="{Binding CheckMessageSignature}"/>
                         <Button HorizontalAlignment="Left" Content="Check signature" AutomationProperties.AutomationId="Tools.CheckMessageButton" Command="{Binding CheckMessageCommand}"/>
                         <TextBlock FontSize="12.5" TextWrapping="Wrap" AutomationProperties.AutomationId="Tools.CheckMessageResult" Text="{Binding CheckMessageResult}"
@@ -105,9 +105,9 @@
                         <TextBlock Classes="muted" TextWrapping="Wrap"
                                    Text="A reserve proof shows that this account holds at least an amount. Whoever checks it learns that total (or all of it, if you leave the amount empty), not your history."/>
                         <Grid ColumnDefinitions="150,10,*">
-                            <TextBox Grid.Column="0" Classes="mono" Watermark="Amount (optional)" AutomationProperties.AutomationId="Tools.ReserveAmount"
+                            <TextBox Grid.Column="0" Classes="mono" PlaceholderText="Amount (optional)" AutomationProperties.AutomationId="Tools.ReserveAmount"
                                      AutomationProperties.Name="Amount to prove" Text="{Binding ReserveAmountText}"/>
-                            <TextBox Grid.Column="2" Watermark="Message (e.g. who asked, and when)" AutomationProperties.AutomationId="Tools.ReserveMessage"
+                            <TextBox Grid.Column="2" PlaceholderText="Message (e.g. who asked, and when)" AutomationProperties.AutomationId="Tools.ReserveMessage"
                                      AutomationProperties.Name="Proof message" Text="{Binding ReserveMessage}"/>
                         </Grid>
                         <Button HorizontalAlignment="Left" Classes="accent" AutomationProperties.AutomationId="Tools.CreateReserve" AutomationProperties.Name="Create proof" Command="{Binding CreateReserveProofCommand}" IsEnabled="{Binding CanSpend}">
@@ -134,11 +134,11 @@
                             <c:Icon Data="{StaticResource IconSearch}" Width="18" Height="18" Foreground="{StaticResource SuccessBrush}" VerticalAlignment="Center"/>
                             <TextBlock Text="Check a balance proof" Classes="h2" VerticalAlignment="Center"/>
                         </StackPanel>
-                        <TextBox Classes="mono" FontSize="12" Watermark="Their main address" AutomationProperties.AutomationId="Tools.CheckReserveAddress"
+                        <TextBox Classes="mono" FontSize="12" PlaceholderText="Their main address" AutomationProperties.AutomationId="Tools.CheckReserveAddress"
                                  AutomationProperties.Name="Prover's address" Text="{Binding CheckReserveAddress}"/>
-                        <TextBox Watermark="The message (if they used one)" AutomationProperties.AutomationId="Tools.CheckReserveMessage"
+                        <TextBox PlaceholderText="The message (if they used one)" AutomationProperties.AutomationId="Tools.CheckReserveMessage"
                                  AutomationProperties.Name="Proof message" Text="{Binding CheckReserveMessage}"/>
-                        <TextBox Classes="mono" FontSize="11.5" AcceptsReturn="False" TextWrapping="Wrap" MaxHeight="120" Watermark="The proof (ReserveProofV2…)"
+                        <TextBox Classes="mono" FontSize="11.5" AcceptsReturn="False" TextWrapping="Wrap" MaxHeight="120" PlaceholderText="The proof (ReserveProofV2…)"
                                  AutomationProperties.AutomationId="Tools.CheckReserveProof" AutomationProperties.Name="Reserve proof" Text="{Binding CheckReserveProof}"/>
                         <Button HorizontalAlignment="Left" Content="Check proof" AutomationProperties.AutomationId="Tools.CheckReserveButton" Command="{Binding CheckReserveProofCommand}"/>
                         <TextBlock FontSize="12.5" TextWrapping="Wrap" AutomationProperties.AutomationId="Tools.CheckReserveResult" Text="{Binding CheckReserveResult}"

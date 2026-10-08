@@ -37,7 +37,7 @@
                 <StackPanel Spacing="14">
                     <StackPanel Spacing="6">
                         <TextBlock Text="PASSWORD" Classes="eyebrow"/>
-                        <c:SecretTextBox AutomationProperties.AutomationId="Unlock.Password" AutomationProperties.Name="Password" Watermark="Enter your password"
+                        <c:SecretTextBox AutomationProperties.AutomationId="Unlock.Password" AutomationProperties.Name="Password" PlaceholderText="Enter your password"
                                  PasswordChar="●"
                                  RevealPassword="{Binding RevealPassword}"
                                  Text="{Binding Password}"

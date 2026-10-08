@@ -7,7 +7,7 @@ installed, and fail-closed while it runs) and coin control come built in.
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 ![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4)
-![Avalonia 11](https://img.shields.io/badge/Avalonia-11-8B44AC)
+![Avalonia 12](https://img.shields.io/badge/Avalonia-12-8B44AC)
 ![Status](https://img.shields.io/badge/status-unaudited%20beta-red)
 ![Platforms](https://img.shields.io/badge/release-Windows%20%7C%20Linux%20%7C%20macOS-blue)
 
@@ -501,7 +501,7 @@ XaultWallet.Core                ← class library, no UI deps, unit-tested
     ├── DaemonAddress         the one definition of a valid node URL
     └── SecretRedactor        structural redaction of secrets in RPC JSON
 
-XaultWallet.Desktop             ← Avalonia 11, MVVM (CommunityToolkit.Mvvm)
+XaultWallet.Desktop             ← Avalonia 12, MVVM (CommunityToolkit.Mvvm)
 ├── Startup / Unlock / Create / Wallet / AddWallet / Settings views + view-models
 ├── Profile (the open vault: wallets, contacts, auto-lock) → one Wallet view-model per open wallet
 ├── Views/Wallet/             Receive, Send, History, Contacts, Tools, Coins tabs; the Manage sheet

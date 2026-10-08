@@ -14,18 +14,18 @@
                     <Grid ColumnDefinitions="240,12,*">
                         <StackPanel Grid.Column="0" Spacing="7">
                             <TextBlock Text="NAME" Classes="eyebrow"/>
-                            <TextBox MaxLength="60" Watermark="Who is it?" AutomationProperties.AutomationId="Contacts.Name" AutomationProperties.Name="Contact name"
+                            <TextBox MaxLength="60" PlaceholderText="Who is it?" AutomationProperties.AutomationId="Contacts.Name" AutomationProperties.Name="Contact name"
                                      Text="{Binding ContactName}"/>
                         </StackPanel>
                         <StackPanel Grid.Column="2" Spacing="7">
                             <TextBlock Text="NOTE (OPTIONAL)" Classes="eyebrow"/>
-                            <TextBox MaxLength="200" Watermark="e.g. rent, the shop's donation address" AutomationProperties.AutomationId="Contacts.Note"
+                            <TextBox MaxLength="200" PlaceholderText="e.g. rent, the shop's donation address" AutomationProperties.AutomationId="Contacts.Note"
                                      AutomationProperties.Name="Contact note" Text="{Binding ContactNote}"/>
                         </StackPanel>
                     </Grid>
                     <StackPanel Spacing="7">
                         <TextBlock Text="ADDRESS" Classes="eyebrow"/>
-                        <TextBox Classes="mono" FontSize="12.5" Watermark="Their Monero address (or subaddress)" TextWrapping="Wrap"
+                        <TextBox Classes="mono" FontSize="12.5" PlaceholderText="Their Monero address (or subaddress)" TextWrapping="Wrap"
                                  AutomationProperties.AutomationId="Contacts.Address" AutomationProperties.Name="Contact address" Text="{Binding ContactAddress}"/>
                     </StackPanel>
                     <TextBlock Classes="caption" Foreground="{StaticResource WarningBrush}" TextWrapping="Wrap" AutomationProperties.AutomationId="Contacts.Notice"

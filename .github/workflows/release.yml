@@ -39,6 +39,7 @@ concurrency:
 env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
+  AVALONIA_TELEMETRY_OPTOUT: 1 # Avalonia.BuildServices: no build-time usage report
 
 jobs:
   plan:

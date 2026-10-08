@@ -42,7 +42,7 @@
                         </Grid>
                         <Grid ColumnDefinitions="*,10,Auto">
                             <TextBox Grid.Column="0" Classes="mono" FontSize="13" AutomationProperties.AutomationId="Send.Address" AutomationProperties.Name="Destination address"
-                                     Watermark="Paste an address or a monero: payment link" Text="{Binding SendAddress}"/>
+                                     PlaceholderText="Paste an address or a monero: payment link" Text="{Binding SendAddress}"/>
                             <ComboBox Grid.Column="2" Classes="contactPicker" MinWidth="150" MaxWidth="240" PlaceholderText="Contacts"
                                       AutomationProperties.AutomationId="Send.Contact" AutomationProperties.Name="Pay a contact"
                                       IsVisible="{Binding Profile.HasContacts}" ToolTip.Tip="Pay someone from your contacts"
@@ -62,7 +62,7 @@
                     <Grid ColumnDefinitions="*,12,Auto,12,Auto">
                         <StackPanel Grid.Column="0" Spacing="7">
                             <TextBlock Text="AMOUNT" Classes="eyebrow"/>
-                            <TextBox Classes="mono" FontSize="15" Watermark="0.00" AutomationProperties.AutomationId="Send.Amount" AutomationProperties.Name="Amount" Text="{Binding SendAmountText}"
+                            <TextBox Classes="mono" FontSize="15" PlaceholderText="0.00" AutomationProperties.AutomationId="Send.Amount" AutomationProperties.Name="Amount" Text="{Binding SendAmountText}"
                                      VerticalContentAlignment="Center">
                                 <TextBox.InnerRightContent>
                                     <TextBlock Text="XMR" Classes="eyebrow" VerticalAlignment="Center" Margin="0,0,12,0"/>
@@ -108,13 +108,13 @@
                                             </Button>
                                         </Grid>
                                         <Grid ColumnDefinitions="*,10,Auto">
-                                            <TextBox Grid.Column="0" Classes="mono" FontSize="12.5" Watermark="Address" AutomationProperties.AutomationId="Send.RecipientAddress"
+                                            <TextBox Grid.Column="0" Classes="mono" FontSize="12.5" PlaceholderText="Address" AutomationProperties.AutomationId="Send.RecipientAddress"
                                                      AutomationProperties.Name="Recipient address" Text="{Binding Address}"/>
                                             <ComboBox Grid.Column="2" Classes="contactPicker" MinWidth="140" MaxWidth="220" PlaceholderText="Contacts" AutomationProperties.Name="Pay a contact"
                                                       IsVisible="{Binding Profile.HasContacts}" ItemsSource="{Binding Profile.Contacts}"
                                                       SelectedItem="{Binding Contact}" ItemTemplate="{StaticResource ContactChoice}"/>
                                         </Grid>
-                                        <TextBox Classes="mono" Watermark="Amount" Width="220" HorizontalAlignment="Left" AutomationProperties.AutomationId="Send.RecipientAmount"
+                                        <TextBox Classes="mono" PlaceholderText="Amount" Width="220" HorizontalAlignment="Left" AutomationProperties.AutomationId="Send.RecipientAmount"
                                                  AutomationProperties.Name="Recipient amount" Text="{Binding AmountText}">
                                             <TextBox.InnerRightContent>
                                                 <TextBlock Text="XMR" Classes="eyebrow" VerticalAlignment="Center" Margin="0,0,12,0"/>

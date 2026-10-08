@@ -99,18 +99,6 @@ public partial class MainWindow : Window
             work.Y + Math.Max(0, (int)((work.Height - (Height * scale)) / 2)));
     }
 
-    // Drag the window by its custom title bar.
-    private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-        {
-            BeginMoveDrag(e);
-        }
-    }
-
-    // Double-click the title bar toggles maximize, like a native window.
-    private void TitleBar_DoubleTapped(object? sender, TappedEventArgs e) => ToggleMaximize();
-
     private void Minimize_Click(object? sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
 
     private void MaxRestore_Click(object? sender, RoutedEventArgs e) => ToggleMaximize();

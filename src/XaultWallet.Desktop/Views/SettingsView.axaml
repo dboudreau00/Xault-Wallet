@@ -66,7 +66,7 @@
                         </StackPanel>
                         <Grid ColumnDefinitions="*,8,Auto,8,Auto">
                             <TextBox Grid.Column="0" Classes="mono" FontSize="12.5"
-                                     Watermark="Path to monero-wallet-rpc (blank = auto-detect)" AutomationProperties.AutomationId="Settings.BinaryPath" AutomationProperties.Name="Path to monero-wallet-rpc" Text="{Binding WalletRpcBinaryPath}"/>
+                                     PlaceholderText="Path to monero-wallet-rpc (blank = auto-detect)" AutomationProperties.AutomationId="Settings.BinaryPath" AutomationProperties.Name="Path to monero-wallet-rpc" Text="{Binding WalletRpcBinaryPath}"/>
                             <Button Grid.Column="2" Content="Browse…" AutomationProperties.AutomationId="Settings.Browse" Command="{Binding BrowseCommand}"/>
                             <Button Grid.Column="4" Content="Test" AutomationProperties.AutomationId="Settings.TestBinary" AutomationProperties.Name="Test monero-wallet-rpc" Command="{Binding TestBinaryCommand}" IsEnabled="{Binding !Busy}"/>
                         </Grid>
@@ -97,7 +97,7 @@
                                 <ComboBoxItem>Stagenet</ComboBoxItem>
                                 <ComboBoxItem>Testnet</ComboBoxItem>
                             </ComboBox>
-                            <TextBox Grid.Column="2" Classes="mono" FontSize="12.5" Watermark="http://host:port" AutomationProperties.AutomationId="Settings.DefaultDaemon" AutomationProperties.Name="Default node address" Text="{Binding DefaultDaemonAddress}"/>
+                            <TextBox Grid.Column="2" Classes="mono" FontSize="12.5" PlaceholderText="http://host:port" AutomationProperties.AutomationId="Settings.DefaultDaemon" AutomationProperties.Name="Default node address" Text="{Binding DefaultDaemonAddress}"/>
                             <Button Grid.Column="4" Content="Test" AutomationProperties.AutomationId="Settings.TestDaemon" AutomationProperties.Name="Test node" Command="{Binding TestDaemonCommand}" IsEnabled="{Binding !Busy}"/>
                         </Grid>
                         <ComboBox x:CompileBindings="False" HorizontalAlignment="Stretch"
@@ -144,7 +144,7 @@
                         </StackPanel>
 
                         <Grid ColumnDefinitions="260,12,*" IsVisible="{Binding ProxySelected}">
-                            <TextBox Grid.Column="0" Classes="mono" FontSize="12.5" Watermark="127.0.0.1:9050" AutomationProperties.AutomationId="Settings.Proxy" AutomationProperties.Name="SOCKS proxy" Text="{Binding ProxyAddress}"/>
+                            <TextBox Grid.Column="0" Classes="mono" FontSize="12.5" PlaceholderText="127.0.0.1:9050" AutomationProperties.AutomationId="Settings.Proxy" AutomationProperties.Name="SOCKS proxy" Text="{Binding ProxyAddress}"/>
                             <TextBlock Grid.Column="2" Classes="caption" TextWrapping="Wrap" VerticalAlignment="Center"
                                        Text="host:port. Node traffic and the in-app downloads go through it."/>
                         </Grid>
@@ -174,7 +174,7 @@
                                 </Grid>
                                 <ProgressBar Minimum="0" Maximum="100" Value="{Binding Tor.Percent}" IsVisible="{Binding Tor.IsStarting}"/>
                                 <Grid ColumnDefinitions="*,8,Auto,8,Auto">
-                                    <TextBox Grid.Column="0" Classes="mono" FontSize="12.5" Watermark="Path to tor (blank = the one XaultWallet installed)"
+                                    <TextBox Grid.Column="0" Classes="mono" FontSize="12.5" PlaceholderText="Path to tor (blank = the one XaultWallet installed)"
                                              AutomationProperties.AutomationId="Settings.TorPath" AutomationProperties.Name="Path to tor" Text="{Binding TorBinaryPath}"/>
                                     <Button Grid.Column="2" Content="Browse…" AutomationProperties.AutomationId="Settings.BrowseTor" AutomationProperties.Name="Browse for tor" Command="{Binding BrowseTorCommand}"/>
                                     <Button Grid.Column="4" Content="Test" AutomationProperties.AutomationId="Settings.TestTor" AutomationProperties.Name="Test tor" Command="{Binding TestTorCommand}"/>
@@ -238,10 +238,10 @@
                                    Text="A wallet's node, name and keys are in the wallet itself: Manage wallet, next to its name."/>
 
                         <TextBlock Text="CHANGE PASSWORD" Classes="eyebrow"/>
-                        <c:SecretTextBox Watermark="Current password" PasswordChar="●" AutomationProperties.AutomationId="Settings.CurrentPassword" AutomationProperties.Name="Current password" Text="{Binding CurrentPassword}"/>
+                        <c:SecretTextBox PlaceholderText="Current password" PasswordChar="●" AutomationProperties.AutomationId="Settings.CurrentPassword" AutomationProperties.Name="Current password" Text="{Binding CurrentPassword}"/>
                         <Grid ColumnDefinitions="*,12,*">
-                            <c:SecretTextBox Grid.Column="0" Watermark="New password" PasswordChar="●" AutomationProperties.AutomationId="Settings.NewPassword" AutomationProperties.Name="New password" Text="{Binding NewPassword}"/>
-                            <c:SecretTextBox Grid.Column="2" Watermark="Confirm new password" PasswordChar="●" AutomationProperties.AutomationId="Settings.NewPasswordConfirm" AutomationProperties.Name="Confirm new password" Text="{Binding NewPasswordConfirm}"/>
+                            <c:SecretTextBox Grid.Column="0" PlaceholderText="New password" PasswordChar="●" AutomationProperties.AutomationId="Settings.NewPassword" AutomationProperties.Name="New password" Text="{Binding NewPassword}"/>
+                            <c:SecretTextBox Grid.Column="2" PlaceholderText="Confirm new password" PasswordChar="●" AutomationProperties.AutomationId="Settings.NewPasswordConfirm" AutomationProperties.Name="Confirm new password" Text="{Binding NewPasswordConfirm}"/>
                         </Grid>
                         <Grid ColumnDefinitions="*,Auto">
                             <TextBlock Text="{Binding NewPasswordStrength}" Classes="caption" VerticalAlignment="Center"

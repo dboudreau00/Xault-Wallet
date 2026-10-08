@@ -21,7 +21,7 @@
                     <RadioButton Classes="chip" GroupName="HistoryFilter" Content="Pending" AutomationProperties.AutomationId="History.FilterPending"
                                  IsChecked="{Binding HistoryFilter, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=3}"/>
                 </StackPanel>
-                <TextBox Grid.Column="4" Width="220" Watermark="Search notes, IDs, names" VerticalAlignment="Center"
+                <TextBox Grid.Column="4" Width="220" PlaceholderText="Search notes, IDs, names" VerticalAlignment="Center"
                          AutomationProperties.AutomationId="History.Search" AutomationProperties.Name="Search transactions" Text="{Binding HistorySearch}">
                     <TextBox.InnerLeftContent>
                         <c:Icon Data="{StaticResource IconSearch}" Width="15" Height="15" Margin="10,0,0,0" Foreground="{StaticResource TextTertiary}" VerticalAlignment="Center"/>
@@ -130,7 +130,7 @@
                                         </Grid>
                                         <Grid ColumnDefinitions="110,*,8,Auto">
                                             <TextBlock Grid.Column="0" Text="Note" Classes="caption" VerticalAlignment="Center"/>
-                                            <TextBox Grid.Column="1" MaxLength="500" Watermark="Only you see this (kept in your vault)"
+                                            <TextBox Grid.Column="1" MaxLength="500" PlaceholderText="Only you see this (kept in your vault)"
                                                      AutomationProperties.AutomationId="History.Note" AutomationProperties.Name="Note" Text="{Binding NoteDraft}"/>
                                             <Button Grid.Column="3" AutomationProperties.AutomationId="History.SaveNote" Content="Save note"
                                                     Command="{Binding $parent[w:HistoryTab].((vm:WalletViewModel)DataContext).SaveNoteCommand}" CommandParameter="{Binding}"/>

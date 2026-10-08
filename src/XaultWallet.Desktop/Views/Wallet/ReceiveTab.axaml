@@ -49,13 +49,13 @@
                                             Command="{Binding ClearRequestCommand}" IsVisible="{Binding HasRequest}"/>
                                 </Grid>
                                 <Grid ColumnDefinitions="150,10,*">
-                                    <TextBox Grid.Column="0" Classes="mono" Watermark="Amount" AutomationProperties.AutomationId="Receive.RequestAmount"
+                                    <TextBox Grid.Column="0" Classes="mono" PlaceholderText="Amount" AutomationProperties.AutomationId="Receive.RequestAmount"
                                              AutomationProperties.Name="Requested amount" Text="{Binding RequestAmountText}">
                                         <TextBox.InnerRightContent>
                                             <TextBlock Text="XMR" Classes="eyebrow" VerticalAlignment="Center" Margin="0,0,10,0"/>
                                         </TextBox.InnerRightContent>
                                     </TextBox>
-                                    <TextBox Grid.Column="2" Watermark="What it's for (shown to the payer)" MaxLength="100"
+                                    <TextBox Grid.Column="2" PlaceholderText="What it's for (shown to the payer)" MaxLength="100"
                                              AutomationProperties.AutomationId="Receive.RequestDescription" AutomationProperties.Name="Payment description"
                                              Text="{Binding RequestDescription}"/>
                                 </Grid>
@@ -81,7 +81,7 @@
                             <TextBlock Text="ADDRESSES" Classes="eyebrow"/>
                             <TextBlock Classes="caption" Text="Labels are kept in your vault, never in the wallet file."/>
                         </StackPanel>
-                        <TextBox Grid.Column="1" Width="200" Watermark="Label (optional)" MaxLength="40" VerticalAlignment="Center"
+                        <TextBox Grid.Column="1" Width="200" PlaceholderText="Label (optional)" MaxLength="40" VerticalAlignment="Center"
                                  AutomationProperties.AutomationId="Receive.NewLabel" AutomationProperties.Name="Label for the new subaddress"
                                  Text="{Binding NewAddressLabel}"/>
                         <Button Grid.Column="3" VerticalAlignment="Center" AutomationProperties.AutomationId="Receive.NewSubaddress" AutomationProperties.Name="New subaddress"
@@ -117,7 +117,7 @@
                                             <TextBlock Classes="caption mono" Text="{Binding ShortAddress}"/>
                                         </StackPanel>
                                         <Grid Grid.Column="2" ColumnDefinitions="*,8,Auto,6,Auto" VerticalAlignment="Center" IsVisible="{Binding IsEditing}">
-                                            <TextBox Grid.Column="0" MaxLength="40" Watermark="Label" AutomationProperties.AutomationId="Receive.LabelEditor"
+                                            <TextBox Grid.Column="0" MaxLength="40" PlaceholderText="Label" AutomationProperties.AutomationId="Receive.LabelEditor"
                                                      AutomationProperties.Name="Address label" Text="{Binding LabelDraft}"/>
                                             <Button Grid.Column="2" Classes="accent" AutomationProperties.AutomationId="Receive.SaveLabel" AutomationProperties.Name="Save label"
                                                     Command="{Binding $parent[w:ReceiveTab].((vm:WalletViewModel)DataContext).SaveLabelCommand}" CommandParameter="{Binding}">

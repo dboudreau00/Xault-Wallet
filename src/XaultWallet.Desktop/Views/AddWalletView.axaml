@@ -127,7 +127,7 @@
                             <TextBlock Text="NODE" Classes="eyebrow"/>
                             <Grid ColumnDefinitions="*,10,Auto">
                                 <TextBox Grid.Column="0" Classes="mono" FontSize="13" AutomationProperties.AutomationId="AddWallet.Daemon" AutomationProperties.Name="Node address"
-                                         Text="{Binding DaemonAddress}" Watermark="http://host:port"/>
+                                         Text="{Binding DaemonAddress}" PlaceholderText="http://host:port"/>
                                 <ComboBox Grid.Column="2" x:CompileBindings="False" Width="230" AutomationProperties.Name="Public nodes"
                                           ItemsSource="{Binding PresetNodes}" SelectedItem="{Binding SelectedPreset}" PlaceholderText="Or a public node…">
                                     <ComboBox.ItemTemplate>
@@ -203,9 +203,9 @@
                 <Border Classes="section" IsVisible="{Binding IsSeedImport}">
                     <StackPanel Spacing="10">
                         <TextBlock Text="Seed" Classes="h2"/>
-                        <TextBox Classes="mono" FontSize="13" Watermark="The 25-word seed, separated by spaces" AutomationProperties.AutomationId="AddWallet.Seed"
+                        <TextBox Classes="mono" FontSize="13" PlaceholderText="The 25-word seed, separated by spaces" AutomationProperties.AutomationId="AddWallet.Seed"
                                  AutomationProperties.Name="Seed to restore" Text="{Binding ImportMnemonic}" AcceptsReturn="True" Height="76" TextWrapping="Wrap"/>
-                        <TextBox Classes="mono" FontSize="13" Watermark="Seed offset passphrase (only if you used one)" AutomationProperties.AutomationId="AddWallet.SeedOffset"
+                        <TextBox Classes="mono" FontSize="13" PlaceholderText="Seed offset passphrase (only if you used one)" AutomationProperties.AutomationId="AddWallet.SeedOffset"
                                  AutomationProperties.Name="Seed offset passphrase" Text="{Binding ImportSeedOffset}"/>
                         <TextBlock Classes="caption" TextWrapping="Wrap" Foreground="{StaticResource WarningBrush}"
                                    Text="Leave the offset blank unless this seed was created WITH one. It is case- and space-sensitive; a wrong or missing offset silently opens a different, empty wallet."/>
@@ -216,11 +216,11 @@
                 <Border Classes="section" IsVisible="{Binding UsesKeys}">
                     <StackPanel Spacing="10">
                         <TextBlock Text="Address and keys" Classes="h2"/>
-                        <TextBox Classes="mono" FontSize="12.5" Watermark="The wallet's main address" AutomationProperties.AutomationId="AddWallet.Address"
+                        <TextBox Classes="mono" FontSize="12.5" PlaceholderText="The wallet's main address" AutomationProperties.AutomationId="AddWallet.Address"
                                  AutomationProperties.Name="Main address" Text="{Binding ImportAddress}" TextWrapping="Wrap"/>
-                        <c:SecretTextBox Classes="mono" FontSize="12.5" PasswordChar="●" Watermark="Private view key (64 hex characters)" AutomationProperties.AutomationId="AddWallet.ViewKey"
+                        <c:SecretTextBox Classes="mono" FontSize="12.5" PasswordChar="●" PlaceholderText="Private view key (64 hex characters)" AutomationProperties.AutomationId="AddWallet.ViewKey"
                                          AutomationProperties.Name="Private view key" Text="{Binding ImportViewKey}"/>
-                        <c:SecretTextBox Classes="mono" FontSize="12.5" PasswordChar="●" Watermark="Private spend key (64 hex characters)" AutomationProperties.AutomationId="AddWallet.SpendKey"
+                        <c:SecretTextBox Classes="mono" FontSize="12.5" PasswordChar="●" PlaceholderText="Private spend key (64 hex characters)" AutomationProperties.AutomationId="AddWallet.SpendKey"
                                          AutomationProperties.Name="Private spend key" Text="{Binding ImportSpendKey}" IsVisible="{Binding IsKeyImport}"/>
                         <Border Classes="callout warning" IsVisible="{Binding IsWatchOnly}">
                             <Grid ColumnDefinitions="Auto,*">
@@ -242,7 +242,7 @@
                             <ComboBoxItem>Full history — finds everything (safest, slowest)</ComboBoxItem>
                             <ComboBoxItem>A specific block height</ComboBoxItem>
                         </ComboBox>
-                        <TextBox Classes="mono" Watermark="Block height, e.g. 3150000" AutomationProperties.AutomationId="AddWallet.RestoreHeight" AutomationProperties.Name="Restore height"
+                        <TextBox Classes="mono" PlaceholderText="Block height, e.g. 3150000" AutomationProperties.AutomationId="AddWallet.RestoreHeight" AutomationProperties.Name="Restore height"
                                  Text="{Binding RestoreHeightText}" IsVisible="{Binding IsSpecificHeight}" HorizontalAlignment="Left" Width="280"/>
                         <TextBlock Classes="caption" TextWrapping="Wrap"
                                    Text="Pick a height before the wallet's first payment: anything earlier is never found. Before saving, you'll see the address this opens, to compare with your records."/>

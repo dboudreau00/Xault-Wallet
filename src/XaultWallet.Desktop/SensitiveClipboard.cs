@@ -13,6 +13,18 @@ internal static class SensitiveClipboard
     private static IClipboard? _last;
     private static string? _lastText;
 
+    /// <summary>
+    /// Windows's documented way to keep a copy out of clipboard history and the cloud clipboard
+    /// ("ExcludeClipboardContentFromMonitorProcessing"). Platform formats: their names reach the
+    /// OS as they are, and their values are written raw.
+    /// </summary>
+    private static readonly DataFormat<byte[]>[] WindowsExclusionFormats =
+    [
+        DataFormat.CreateBytesPlatformFormat("ExcludeClipboardContentFromMonitorProcessing"),
+        DataFormat.CreateBytesPlatformFormat("CanIncludeInClipboardHistory"),
+        DataFormat.CreateBytesPlatformFormat("CanUploadToCloudClipboard"),
+    ];
+
     /// <summary>Put <paramref name="text"/> on the clipboard and remember it as ours.</summary>
     public static async Task SetAsync(IClipboard clipboard, string text)
     {
@@ -21,16 +33,16 @@ internal static class SensitiveClipboard
 
         if (OperatingSystem.IsWindows())
         {
-            // Avalonia's Win32 path writes a string as Unicode and an IEnumerable&lt;byte&gt; / byte[] raw.
-            // The three format names are Windows's documented way to keep a copy out of clipboard
-            // history and the cloud clipboard (see "ExcludeClipboardContentFromMonitorProcessing").
-            var data = new DataObject();
-            data.Set(DataFormats.Text, text);
-            byte[] excluded = new byte[4]; // DWORD 0 = false / exclude
-            data.Set("ExcludeClipboardContentFromMonitorProcessing", excluded);
-            data.Set("CanIncludeInClipboardHistory", excluded);
-            data.Set("CanUploadToCloudClipboard", excluded);
-            await clipboard.SetDataObjectAsync(data).ConfigureAwait(true);
+            var item = new DataTransferItem();
+            item.SetText(text);
+            foreach (DataFormat<byte[]> format in WindowsExclusionFormats)
+            {
+                item.Set(format, new byte[4]); // DWORD 0 = false / exclude
+            }
+
+            var data = new DataTransfer();
+            data.Add(item);
+            await clipboard.SetDataAsync(data).ConfigureAwait(true); // the clipboard owns (and disposes) it now
         }
         else
         {
@@ -57,7 +69,7 @@ internal static class SensitiveClipboard
 
         try
         {
-            if (string.Equals(await clipboard.GetTextAsync().ConfigureAwait(true), ours, StringComparison.Ordinal))
+            if (string.Equals(await clipboard.TryGetTextAsync().ConfigureAwait(true), ours, StringComparison.Ordinal))
             {
                 await clipboard.ClearAsync().ConfigureAwait(true);
             }

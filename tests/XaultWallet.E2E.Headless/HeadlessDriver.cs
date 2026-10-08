@@ -190,7 +190,7 @@ internal sealed class HeadlessDriver : IAppDriver
         await SettleAsync(30); // let entrances finish (staggered up to ~0.6 s)
         Directory.CreateDirectory(_screenshots);
         using var frame = _window.CaptureRenderedFrame();
-        frame?.Save(Path.Combine(_screenshots, name + ".png"));
+        frame?.Save(Path.Combine(_screenshots, name + ".png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
     }
 
     public Task<string> DescribeScreenAsync()

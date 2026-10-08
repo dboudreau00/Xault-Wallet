@@ -210,6 +210,10 @@ internal sealed class HeadlessDriver : IAppDriver
         return Task.FromResult(sb.ToString());
     }
 
+    /// <summary>The headless platform's clipboard lives in this process, not the system's: the Windows
+    /// driver checks the real one.</summary>
+    public Task<ClipboardContent?> ReadClipboardAsync() => Task.FromResult<ClipboardContent?>(null);
+
     // ---------------------------------------------------------------- lookup
 
     private Control? Find(string id) =>

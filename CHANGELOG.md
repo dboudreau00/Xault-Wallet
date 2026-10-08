@@ -12,9 +12,11 @@ the same files.
   test of the released exe all pass on it.
 - **The title bar** is now marked as one for the system, so dragging, double-click to maximise and
   snapping are the operating system's own rather than the app's imitation of them. The window keeps
-  its own look and buttons.
+  its own look and buttons. The Windows end-to-end test now checks it with the real mouse: a drag
+  moves the window, a double-click maximises and restores it, and its buttons still take clicks.
 - **Copying an address or key** works as before, Windows clipboard-history exclusion included,
-  rewritten for Avalonia 12's clipboard API.
+  rewritten for Avalonia 12's clipboard API. The Windows end-to-end test now reads the clipboard
+  back after a copy: the address, marked to stay out of clipboard history and the cloud clipboard.
 - **The screenshot tool and the in-process end-to-end test** keep the vault, settings and downloads
   in a throwaway folder on Windows too. They redirected HOME and APPDATA, which Windows ignores for
   these folders, so on a developer's machine they read that person's settings and saved Hide amounts

@@ -1,8 +1,11 @@
 using System.Diagnostics;
+using System.Drawing;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using FlaUI.Core;
 using FlaUI.Core.AutomationElements;
+using FlaUI.Core.Definitions;
+using FlaUI.Core.Input;
 using FlaUI.UIA3;
 
 namespace XaultWallet.E2E;
@@ -70,6 +73,7 @@ internal static class Program
 
             var driver = new UiaDriver(uia, window, pid, screenshots, log);
             await FitOnScreenAsync(window, driver, log);
+            problems.AddRange(await CheckTitleBarAsync(window, log));
 
             scenario = new WalletScenario(driver, chain, log, timeScale, installWalletRpc);
             try
@@ -188,6 +192,95 @@ internal static class Program
         await driver.ClickAsync("Shell.Maximize");
         await Task.Delay(1000);
         log($"  maximized to fit the screen: {window.BoundingRectangle}");
+    }
+
+    /// <summary>
+    /// The app's own title bar is the system's title bar (Avalonia's TitleBar role), checked with the
+    /// real mouse rather than UI Automation: dragging it moves the window, a double-click maximizes and
+    /// restores, and a button on it still takes a click. The window ends where it started.
+    /// </summary>
+    private static async Task<List<string>> CheckTitleBarAsync(Window window, Action<string> log)
+    {
+        log("> The title bar with the mouse: drag, double-click, its Maximize button");
+        var problems = new List<string>();
+        if (IsMaximized(window))
+        {
+            log("  maximized to fit the screen: drag and double-click not checked");
+        }
+        else
+        {
+            // An empty stretch of the bar: half way across the window, half way down the 46 px bar.
+            Rectangle start = window.BoundingRectangle;
+            Point grip = TitleBarPoint(window);
+            Point dropped = new(grip.X + 80, grip.Y + 60);
+            await DragAsync(grip, dropped);
+            Rectangle moved = window.BoundingRectangle;
+            if (Math.Abs(moved.Left - start.Left - 80) > 4 || Math.Abs(moved.Top - start.Top - 60) > 4)
+            {
+                problems.Add($"dragging the title bar by (80, 60) moved the window from {start.Location} to {moved.Location}");
+            }
+
+            await DragAsync(dropped, grip);
+
+            Mouse.DoubleClick(TitleBarPoint(window));
+            await Task.Delay(1000);
+            bool maximized = IsMaximized(window);
+            Mouse.DoubleClick(TitleBarPoint(window));
+            await Task.Delay(1000);
+            bool restored = !IsMaximized(window);
+            if (!maximized || !restored)
+            {
+                problems.Add($"double-clicking the title bar: maximized {maximized}, then restored {restored}");
+            }
+        }
+
+        bool wasMaximized = IsMaximized(window);
+        for (int click = 1; click <= 2; click++)
+        {
+            Rectangle button = window.FindFirstDescendant(cf => cf.ByAutomationId("Shell.Maximize"))?.BoundingRectangle ?? Rectangle.Empty;
+            Mouse.Click(new Point(button.Left + (button.Width / 2), button.Top + (button.Height / 2)));
+            await Task.Delay(1000);
+            bool expected = click == 1 ? !wasMaximized : wasMaximized;
+            if (button.IsEmpty || IsMaximized(window) != expected)
+            {
+                problems.Add($"mouse click {click} on the title bar's Maximize button left the window {(IsMaximized(window) ? "maximized" : "not maximized")}");
+                break;
+            }
+        }
+
+        if (problems.Count == 0)
+        {
+            log($"  dragged, maximized and restored by a double-click and by its button; back at {window.BoundingRectangle}");
+        }
+
+        return problems;
+    }
+
+    private static Point TitleBarPoint(Window window)
+    {
+        Rectangle r = window.BoundingRectangle;
+        return new Point(r.Left + (r.Width / 2), r.Top + 23);
+    }
+
+    private static bool IsMaximized(Window window) =>
+        window.Patterns.Window.TryGetPattern(out var pattern)
+            ? pattern.WindowVisualState.Value == WindowVisualState.Maximized
+            : window.BoundingRectangle.Width >= GetSystemMetrics(0) - 20;
+
+    /// <summary>Press, move in small steps and release the left button, the way a hand does.</summary>
+    private static async Task DragAsync(Point from, Point to)
+    {
+        Mouse.MoveTo(from);
+        Mouse.Down(MouseButton.Left);
+        await Task.Delay(200);
+        for (int step = 1; step <= 10; step++)
+        {
+            Mouse.MoveTo(new Point(from.X + ((to.X - from.X) * step / 10), from.Y + ((to.Y - from.Y) * step / 10)));
+            await Task.Delay(30);
+        }
+
+        Mouse.Up(MouseButton.Left);
+        await Task.Delay(800);
     }
 
     private static bool WaitForExit(int pid, TimeSpan timeout)

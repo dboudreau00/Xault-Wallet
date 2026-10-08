@@ -41,4 +41,12 @@ public interface IAppDriver
 
     /// <summary>Visible automation ids with their text: printed when a step fails.</summary>
     Task<string> DescribeScreenAsync();
+
+    /// <summary>What is on the system clipboard, or null where the driver can't see the system
+    /// clipboard (the headless platform keeps its own, in process).</summary>
+    Task<ClipboardContent?> ReadClipboardAsync();
 }
+
+/// <summary>The clipboard's text, and whether it is marked to stay out of clipboard history and the
+/// cloud clipboard; <paramref name="Marks"/> spells out the marks that were found.</summary>
+public sealed record ClipboardContent(string Text, bool KeptOutOfHistory, string Marks);

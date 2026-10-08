@@ -226,6 +226,108 @@ internal sealed class UiaDriver : IAppDriver
         return Task.FromResult(sb.ToString());
     }
 
+    /// <summary>
+    /// The system clipboard through the Win32 API, the way any other program sees it (the app renders
+    /// its data on request). The marks are Windows's documented clipboard formats for keeping a copy
+    /// out of clipboard history and the cloud clipboard.
+    /// </summary>
+    public async Task<ClipboardContent?> ReadClipboardAsync()
+    {
+        // Another program may hold the clipboard for a moment: retry rather than fail. No await once
+        // it is open: it must be closed on the thread that opened it.
+        for (int attempt = 0; !OpenClipboard(IntPtr.Zero); attempt++)
+        {
+            if (attempt == 40)
+            {
+                throw new InvalidOperationException($"the clipboard stayed open in another program (error {Marshal.GetLastWin32Error()}).");
+            }
+
+            await Task.Delay(50);
+        }
+
+        try
+        {
+            string text = ReadClipboardText();
+            bool excluded = IsClipboardFormatAvailable(RegisterClipboardFormat("ExcludeClipboardContentFromMonitorProcessing"));
+            int? history = ReadClipboardDword("CanIncludeInClipboardHistory");
+            int? cloud = ReadClipboardDword("CanUploadToCloudClipboard");
+            string marks = $"ExcludeClipboardContentFromMonitorProcessing {(excluded ? "present" : "absent")}, "
+                           + $"CanIncludeInClipboardHistory {history?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "absent"}, "
+                           + $"CanUploadToCloudClipboard {cloud?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "absent"}";
+            return new ClipboardContent(text, excluded && history == 0 && cloud == 0, marks);
+        }
+        finally
+        {
+            CloseClipboard();
+        }
+    }
+
+    private const uint CfUnicodeText = 13;
+
+    private static string ReadClipboardText()
+    {
+        IntPtr data = IsClipboardFormatAvailable(CfUnicodeText) ? GetClipboardData(CfUnicodeText) : IntPtr.Zero;
+        IntPtr p = data == IntPtr.Zero ? IntPtr.Zero : GlobalLock(data);
+        if (p == IntPtr.Zero)
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            return Marshal.PtrToStringUni(p) ?? string.Empty;
+        }
+        finally
+        {
+            GlobalUnlock(data);
+        }
+    }
+
+    /// <summary>A DWORD-valued clipboard format, or null when the clipboard doesn't carry it.</summary>
+    private static int? ReadClipboardDword(string format)
+    {
+        uint id = RegisterClipboardFormat(format);
+        IntPtr data = id != 0 && IsClipboardFormatAvailable(id) ? GetClipboardData(id) : IntPtr.Zero;
+        IntPtr p = data == IntPtr.Zero || GlobalSize(data) < 4 ? IntPtr.Zero : GlobalLock(data);
+        if (p == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        try
+        {
+            return Marshal.ReadInt32(p);
+        }
+        finally
+        {
+            GlobalUnlock(data);
+        }
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool OpenClipboard(IntPtr owner);
+
+    [DllImport("user32.dll")]
+    private static extern bool CloseClipboard();
+
+    [DllImport("user32.dll")]
+    private static extern bool IsClipboardFormatAvailable(uint format);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetClipboardData(uint format);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "RegisterClipboardFormatW")]
+    private static extern uint RegisterClipboardFormat(string name);
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GlobalLock(IntPtr memory);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool GlobalUnlock(IntPtr memory);
+
+    [DllImport("kernel32.dll")]
+    private static extern nuint GlobalSize(IntPtr memory);
+
     // ---------------------------------------------------------------- lookup
 
     /// <summary>One element with the properties read in the same round trip (from the cache).</summary>

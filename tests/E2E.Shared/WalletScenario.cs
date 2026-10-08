@@ -246,9 +246,20 @@ public sealed partial class WalletScenario
         await ShotAsync("funded");
 
         // Copy the address: a toast confirms it on whichever tab is open.
+        string shown = await _app.ReadTextAsync("Receive.Address");
         await _app.ClickAsync("Receive.Copy");
         string toast = await EventuallyAsync(() => _app.ReadTextAsync("Wallet.Toast"), t => t.Length > 0, Seconds(10), "the copy toast");
         Check(toast.StartsWith("Address copied", StringComparison.Ordinal), $"copy feedback reads \"{toast}\"");
+
+        // Where the driver sees the system clipboard (the real exe on Windows): the address is on it,
+        // marked to stay out of clipboard history and the cloud clipboard.
+        if (await _app.ReadClipboardAsync() is { } copied)
+        {
+            Check(copied.Text == shown, $"the clipboard holds \"{copied.Text}\", not the address shown ({shown})");
+            Check(copied.KeptOutOfHistory, $"the copied address isn't kept out of clipboard history: {copied.Marks}");
+            _log($"  clipboard: the address, with {copied.Marks}");
+        }
+
         await ShotAsync("address-copied");
     }
 

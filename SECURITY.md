@@ -245,12 +245,82 @@ that release's `SHA256SUMS.txt`), and that key itself. A build signed with it is
 isn't, isn't. getmonero.org sees your IP address unless you set a SOCKS proxy (Settings), which the
 download then uses.
 
+## The Tor installer
+
+*Download & install Tor* (Settings, Network & privacy, with "Tor, built in" chosen) works like the
+monero-wallet-rpc installer, and installs nothing unless every step succeeds:
+
+1. It asks Tor Project's update channel (`aus1.torproject.org`) which Tor Browser release is
+   current. That answer is not signed, so it is only used to pick a folder: it must be a plain
+   version number (no letters, no slashes), not older than the app's minimum
+   (`TorInstaller.MinimumVersion`, 15.0), and not older than a Tor already installed.
+2. It fetches that release's `sha256sums-signed-build.txt` and its detached signature from
+   `dist.torproject.org`, and checks the signature against **the Tor Browser Developers key, which
+   ships inside the app** (exported unchanged from Tor Project's own WKD). Only the current signing
+   subkey `022D A248 432D 2A0E 0F54 E65E 316C 1FAC D62D 07D9` is trusted, not the primary key
+   `EF6E 286D DA85 EA2A 4BA7 DE68 4E2C 6E87 9329 8290` (certification only) and not older subkeys.
+   The unit tests verify a real published list and signature with this key. When Tor Project
+   rotates to a new subkey (this one expires 2028-11-28), installs fail with "no valid signature"
+   until an update of XaultWallet pins the new one: refusing is the safe failure.
+3. It downloads this computer's Tor Expert Bundle and requires its SHA-256 to be the signed one.
+   The file names in the signed list carry the version, so a list from another release can't vouch
+   for this download.
+4. It unpacks only what tor needs (the binary, its libraries on Linux and macOS, and the GeoIP
+   files), never using a path from inside the archive to decide where to write; runs it once with
+   `--version`; and installs it in your user profile (on Windows `%LOCALAPPDATA%\XaultWallet\tor`,
+   on Linux `~/.local/share/XaultWallet/tor`).
+
+Tor can't download itself, so this download goes directly to torproject.org (or through your own
+SOCKS proxy if you have set one instead): Tor Project and anyone watching your connection can see
+that this computer downloaded Tor. You can also point Settings at a tor you installed yourself.
+
+## Built-in Tor
+
+With "Tor, built in" chosen, XaultWallet runs its own `tor` as a child process: a client only (no
+relay, no control port), listening as a SOCKS proxy on a random loopback port, with its own data
+directory (`%LOCALAPPDATA%\XaultWallet\tor-data`, kept between runs so it doesn't fetch the whole
+consensus every start) and every system torrc ignored. It starts with the app, is tied to the app's
+lifetime (a kill-on-close job object on Windows, and Tor's own `__OwningControllerProcess`
+everywhere), and stops when the app exits.
+
+What goes through it: each wallet backend's node traffic (`monero-wallet-rpc --proxy`), the app's
+own node checks (sync height, node tests), and the monero-wallet-rpc download. **It fails closed:**
+while Tor is chosen but not connected, wallets wait ("Connecting to Tor"), node checks are skipped,
+and nothing falls back to a direct connection. A wallet started through Tor keeps that route until
+it is opened again; if Tor stops, its traffic stops with it. The wallet screen says which route a
+wallet uses (TOR, PROXY, DIRECT or LOCAL NODE).
+
+Exceptions, deliberately: a node on this computer (`127.0.0.1`, `localhost`) is reached directly,
+because Tor refuses loopback destinations and that traffic never leaves the machine; and the Tor
+download itself, as above.
+
+What Tor does not hide: the node still sees which blocks the wallet asks for and the transactions it
+broadcasts (just not your IP address); several wallets opened through the same Tor can share
+circuits, so a node may see that the same Tor user syncs all of them; and Tor's presence (the
+install and its data folder) is visible on this computer.
+
+## Coin control
+
+The Coins tab lists the selected account's unspent outputs (each payment received is one), with the
+address label it arrived at. **Freezing** a coin (monero-wallet-rpc's `freeze`) makes the wallet
+leave it out of every transaction, Send max included, until it is unfrozen. Why it matters even with
+Monero's ring signatures: a transaction that spends several of your coins together tells its
+recipient, and anyone they share it with, that those coins belong to one person. Freezing a coin you
+received from, say, an exchange keeps it out of an everyday payment.
+
+The wallet file that holds wallet-rpc's own frozen flags is restored from the seed on every unlock
+and shredded on lock, so the frozen list lives in the vault (`"frozen"`, key images only). Every
+slot carries that field, empty or not, so it doesn't distinguish a real profile from a decoy. After
+an unlock, a coin is frozen again as soon as the scan finds it, and every send re-applies the list
+right before the transaction is built, so a coin found since the last refresh can't slip in. A
+watch-only wallet can't freeze (computing a key image needs the spend key).
+
 ## Choosing a daemon
 
 A remote/public node can see which blocks your wallet asks about and your broadcast
 transactions' timing/origin. For maximum privacy run your own `monerod`, or route the daemon
-connection over Tor. XaultWallet passes your daemon address straight through to
-`monero-wallet-rpc`; it does not add network-level privacy on its own.
+connection over Tor: the built-in Tor (see above), or your own SOCKS proxy. Otherwise XaultWallet
+passes your daemon address straight through to `monero-wallet-rpc`.
 
 **Encryption to the node.** An `http://` node address is unencrypted: anyone on the network path
 sees (and can alter) the wallet's traffic with that node. The built-in presets are all `http://`.

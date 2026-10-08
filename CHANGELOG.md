@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.6.0-beta - 2026-10-08 - built-in Tor, coin control, a Windows installer
+
+**Your vault keeps its format**: 0.5 vaults open as they are. 0.5 can still open a vault after 0.6
+has saved it (it ignores the new frozen-coins field). Screenshots of everything new are in the
+[README](README.md#screenshot-tour).
+
+### Built-in Tor
+- **XaultWallet can run its own Tor**, Wasabi-style. Settings, Network & privacy, now asks how the
+  app reaches the network: **Tor, built in** (recommended), **my own SOCKS proxy**, or **direct**.
+- **Download & install Tor** fetches the Tor Expert Bundle from torproject.org and installs it only
+  after Tor Project's signature on the release's checksum list verifies against the Tor Browser
+  Developers signing key built into the app, and the download matches the signed checksum. Older
+  releases than the one installed, or than the app's minimum, are refused. Or point Settings at a
+  tor you installed yourself. Details: [SECURITY.md](SECURITY.md#the-tor-installer).
+- Tor starts with the app and stops with it. Its progress, and **Start / restart** and **Stop**,
+  are in Settings.
+- **It fails closed.** While Tor is chosen, every wallet's node traffic, the app's own node checks
+  and the monero-wallet-rpc download go through it, and while it connects, nothing goes out
+  directly: wallets say "Connecting to Tor" and wait. A node on this computer is reached directly
+  (Tor can't reach loopback, and nothing leaves the machine).
+- **A route badge** on the wallet screen says how it reaches its node: TOR, PROXY, DIRECT or
+  LOCAL NODE, with TOR · RECONNECTING if Tor stops.
+- If a firewall blocks tor, Settings says so (and which file to allow) within seconds instead of
+  waiting out a timeout.
+
+### Coin control
+- **A Coins tab** lists the account's unspent coins: amount, the address label it arrived at (who
+  knows about it), confirmations, and whether it is still maturing.
+- **Freeze** a coin and no transaction spends it, Send max included, until you unfreeze it. The
+  balance card shows how much is frozen, and the send confirmation says how many frozen coins were
+  left out.
+- Frozen coins stay frozen after a lock: the list is kept in the vault and applied again as soon as
+  the wallet finds the coins, and again right before every send. Details:
+  [SECURITY.md](SECURITY.md#coin-control).
+
+### Quality of life
+- **Keyboard shortcuts**: Ctrl+1 to Ctrl+6 for the tabs, Ctrl+R refresh, Ctrl+L lock, Ctrl+H hide
+  amounts (Cmd on macOS). The tooltips say so.
+- **Time left while syncing**: the sync line estimates how long until the wallet catches up.
+- **The window opens at the size you left it** (maximised too).
+
+### Windows installer
+- Releases now include **`XaultWallet-<version>-win-x64-setup.exe`**: installs for the current user
+  without administrator rights (or for everyone, if chosen), adds a Start menu entry and an
+  uninstaller, and never touches your vault. Unsigned, like the zip, which is still there.
+
 ## 0.5.1-beta - 2026-10-07 - hardening fixes, .NET 10
 
 A security and hygiene release from a code review of 0.5.0-beta. **Vault format and data are

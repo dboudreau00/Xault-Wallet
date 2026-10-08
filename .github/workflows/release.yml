@@ -128,6 +128,37 @@ jobs:
           else
             tar -C out -czf "dist/${name}.tar.gz" "${{ matrix.exe }}" "${docs[@]}"
           fi
+      - name: Installer (Windows; unsigned, like the zip)
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          # Inno Setup is on the Windows runner image; install the pinned version only if it isn't.
+          $iscc = (Get-Command iscc.exe -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) { $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe' }
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --version 6.7.1 -y --no-progress
+            $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          }
+          $version = @(([xml](Get-Content src/XaultWallet.Desktop/XaultWallet.Desktop.csproj)).Project.PropertyGroup.Version | Where-Object { $_ })[0]
+          $numeric = ($version -split '-')[0]
+          $tag = if ($env:TAG) { $env:TAG } else { "dev-$($env:GITHUB_SHA.Substring(0, 7))" }
+          & $iscc /Q "/DAppVersion=$version" "/DAppNumericVersion=$numeric" "/DSourceDir=$PWD\out" "/DOutputDir=$PWD\dist" "/DOutputBaseName=XaultWallet-$tag-win-x64-setup" installer\XaultWallet.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)" }
+      - name: The installer installs the published exe and uninstalls cleanly (silent, current user)
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          $setup = @(Get-ChildItem dist -Filter '*-setup.exe')[0]
+          $dir = Join-Path $env:RUNNER_TEMP 'xw-install-test'
+          $p = Start-Process $setup.FullName -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', "/DIR=$dir" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Setup exited with $($p.ExitCode)" }
+          if (-not (Test-Path "$dir\XaultWallet.exe")) { throw 'XaultWallet.exe was not installed' }
+          if ((Get-FileHash "$dir\XaultWallet.exe").Hash -ne (Get-FileHash out\XaultWallet.exe).Hash) { throw 'The installed exe differs from the published one' }
+          $u = Start-Process "$dir\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
+          if ($u.ExitCode -ne 0) { throw "Uninstall exited with $($u.ExitCode)" }
+          for ($i = 0; $i -lt 30 -and (Test-Path "$dir\XaultWallet.exe"); $i++) { Start-Sleep 1 }
+          if (Test-Path "$dir\XaultWallet.exe") { throw 'Uninstalling left XaultWallet.exe behind' }
+          Write-Host "Installer OK: $($setup.Name) installs the published exe and uninstalls cleanly."
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-${{ matrix.rid }}
@@ -174,7 +205,7 @@ jobs:
             echo "::error::CHANGELOG.md has no '## ${version}' section"; exit 1
           fi
           {
-            echo "**Unaudited beta: do not use with real funds.** The binaries are unsigned; verify them against \`SHA256SUMS\`. \`monero-wallet-rpc\` is not bundled: download and verify it from getmonero.org."
+            echo "**Unaudited beta: do not use with real funds.** The binaries and the Windows installer are unsigned; verify them against \`SHA256SUMS\`. \`monero-wallet-rpc\` is not bundled: download and verify it from getmonero.org."
             # Relative links (docs/…, SECURITY.md#…) would resolve against the releases page: pin them to
             # the exact commit being released, which exists even while the tag does not (a draft).
             perl -pe 's{\]\((?!https?://|#|mailto:)([^)\s]+)\)}{](https://github.com/$ENV{GITHUB_REPOSITORY}/blob/$ENV{GITHUB_SHA}/$1)}g' section.md

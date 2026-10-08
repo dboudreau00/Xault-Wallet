@@ -36,11 +36,14 @@ public sealed partial class TorController : ObservableObject
     private int _port;
     private bool _stopping;
 
-    internal TorController(Func<string> installRoot, Func<string> dataDirectory, Func<string> configuredBinary)
+    private readonly Func<bool> _shouldRun;
+
+    internal TorController(Func<string> installRoot, Func<string> dataDirectory, Func<string> configuredBinary, Func<bool> shouldRun)
     {
         _installRoot = installRoot;
         _dataDirectory = dataDirectory;
         _configuredBinary = configuredBinary;
+        _shouldRun = shouldRun;
     }
 
     [ObservableProperty]
@@ -173,8 +176,42 @@ public sealed partial class TorController : ObservableObject
         _process = null;
         SocksAddress = string.Empty;
         State = TorState.Failed;
-        Detail = "Tor stopped unexpectedly. Node traffic is held back until it runs again: Restart Tor in Settings.";
         Log.Warn("Built-in Tor exited unexpectedly.");
+        if (_autoRestarts < MaxAutoRestarts)
+        {
+            _autoRestarts++;
+            Detail = "Tor stopped unexpectedly. Restarting it; node traffic waits meanwhile.";
+            _ = RestartAfterExitAsync();
+        }
+        else
+        {
+            Detail = "Tor stopped unexpectedly. Node traffic is held back until it runs again: Restart Tor in Settings.";
+        }
+    }
+
+    /// <summary>Automatic restarts after an unexpected exit, per run (a tor that keeps dying needs a person).</summary>
+    private const int MaxAutoRestarts = 3;
+
+    private int _autoRestarts;
+
+    /// <summary>Wallets started through Tor keep its port: once it is back on the same port, their
+    /// traffic simply resumes.</summary>
+    private async Task RestartAfterExitAsync()
+    {
+        await Task.Delay(TimeSpan.FromSeconds(3));
+        if (State != TorState.Failed || _stopping || !_shouldRun())
+        {
+            return;
+        }
+
+        try
+        {
+            await EnsureStartedAsync();
+        }
+        catch (TorNotReadyException)
+        {
+            // StatusText says why; Settings offers Start / restart.
+        }
     }
 
     /// <summary>A state to show with no tor behind it (UI snapshots and tests only).</summary>

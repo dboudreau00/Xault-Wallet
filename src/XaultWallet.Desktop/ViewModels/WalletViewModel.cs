@@ -317,8 +317,16 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         _ => "This wallet reaches its node directly: the node sees your IP address. Turn on Tor in Settings to hide it.",
     };
 
+    /// <summary>The backend is waiting for the built-in Tor: its progress goes on the sync line.</summary>
+    private bool _waitingForTor;
+
     private void OnTorChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        if (_waitingForTor && e.PropertyName == nameof(TorController.StatusText))
+        {
+            SyncText = AppServices.Instance.Tor.StatusText;
+        }
+
         if (e.PropertyName == nameof(TorController.State))
         {
             OnPropertyChanged(nameof(RouteDown));
@@ -400,9 +408,18 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             if (RouteIsTor && !AppServices.Instance.Tor.IsReady)
             {
                 Status = "Connecting to Tor…";
+                SyncText = AppServices.Instance.Tor.StatusText;
+                _waitingForTor = true;
             }
 
-            _route = await AppServices.Instance.GetNetworkProxyAsync(_secrets.DaemonAddress, _cts.Token);
+            try
+            {
+                _route = await AppServices.Instance.GetNetworkProxyAsync(_secrets.DaemonAddress, _cts.Token);
+            }
+            finally
+            {
+                _waitingForTor = false;
+            }
             try { await _wallet.DisposeAsync(); } catch { /* the placeholder never opened */ }
             _wallet = AppServices.Instance.CreateWalletService(_route);
 

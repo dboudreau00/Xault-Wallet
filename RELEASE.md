@@ -98,19 +98,22 @@ A packaged `.exe` looks finished, but packaging changes nothing about the code's
   first. The wallet never ships someone else's key-handling binary.
 - **Back up your seed** independently of the app.
 
-Version is stamped as `0.5.1-beta` in the project file — bump `<Version>` there for future
+Version is stamped as `0.6.0-beta` in the project file — bump `<Version>` there for future
 builds (Settings → About reads it from the assembly).
 
 ## Automated releases (GitHub Actions)
 
 `.github/workflows/release.yml` runs the unit tests, then builds single-file self-contained
-executables for `win-x64`, `linux-x64` and `osx-arm64`. Each archive holds the executable plus
+executables for `win-x64`, `linux-x64` and `osx-arm64`, plus a Windows installer
+(`XaultWallet-<version>-win-x64-setup.exe`, Inno Setup, from `installer/XaultWallet.iss`). The
+installer is checked in the same job: a silent per-user install must put the exact published exe
+in place and the uninstaller must remove it again. Each archive holds the executable plus
 `README.md`, `SECURITY.md`, `CHANGELOG.md` and `LICENSE`. They are attached with a `SHA256SUMS` file
 to a **draft** release for you to review and publish. There are two ways to start it:
 
-- **Push a tag** such as `v0.5.1-beta`.
+- **Push a tag** such as `v0.6.0-beta`.
 - **Run it by hand** (no git needed): GitHub → Actions → Release → *Run workflow*, with `version` set
-  to `v0.5.1-beta`. The draft targets the commit the run started from (normally `main`). GitHub
+  to `v0.6.0-beta`. The draft targets the commit the run started from (normally `main`). GitHub
   creates the tag only when you press **Publish** on the draft: the workflow never creates or moves a
   tag. Run without a version, it only builds (a dry run) and publishes nothing.
 

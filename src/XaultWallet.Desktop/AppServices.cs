@@ -24,7 +24,7 @@ public sealed class AppServices
         WalletRpcInstallRoot = Path.Combine(LocalDataRoot() ?? DataDirectory, "XaultWallet", "monero-cli");
         TorInstallRoot = Path.Combine(LocalDataRoot() ?? DataDirectory, "XaultWallet", "tor");
         TorDataDirectory = Path.Combine(LocalDataRoot() ?? DataDirectory, "XaultWallet", "tor-data");
-        Tor = new TorController(() => TorInstallRoot, () => TorDataDirectory, () => Settings.TorBinaryPath);
+        Tor = new TorController(() => TorInstallRoot, () => TorDataDirectory, () => Settings.TorBinaryPath, () => Settings.UseBuiltInTor);
     }
 
     /// <summary>Where "Download &amp; install Tor" puts tor: one folder per Tor Browser release.</summary>

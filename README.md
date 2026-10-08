@@ -2,7 +2,8 @@
 
 **A privacy-first desktop Monero (XMR) wallet with a duress password that opens a decoy wallet.**
 Built on .NET 10 + Avalonia. Encrypted at rest with AES-256-GCM (Argon2id KDF). Drives the official
-`monero-wallet-rpc` — it never reimplements Monero's cryptography.
+`monero-wallet-rpc` — it never reimplements Monero's cryptography. Its own Tor (verified when it is
+installed, and fail-closed while it runs) and coin control come built in.
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 ![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4)
@@ -11,22 +12,41 @@ Built on .NET 10 + Avalonia. Encrypted at rest with AES-256-GCM (Argon2id KDF). 
 ![Platforms](https://img.shields.io/badge/release-Windows%20%7C%20Linux%20%7C%20macOS-blue)
 
 <p align="center">
-  <img src="docs/screenshots/wallet-receive.png" width="49%" alt="Wallet — receive with QR code" />
-  <img src="docs/screenshots/wallet-history.png" width="49%" alt="Wallet — transaction history" />
+  <img src="docs/screenshots/wallet-receive.png" width="49%" alt="Wallet: receive with QR code, routed through the built-in Tor" />
+  <img src="docs/screenshots/wallet-coins.png" width="49%" alt="Wallet: the Coins tab, with one coin frozen" />
 </p>
 
 ## Notification - Documentation and code review assisted by Claude Code.
 
+## What's new in 0.6
 
+- **Built-in Tor.** Choose *Tor, built in* in Settings and XaultWallet runs its own Tor: installed
+  from torproject.org only after Tor Project's signature and the download's checksum verify, started
+  with the app, and the only way node traffic may leave while it is on. Nothing goes out directly
+  while Tor connects. [How-to #10](#10-route-everything-through-tor)
+- **Coin control.** A Coins tab lists every unspent coin with the label of the address it arrived
+  at. Freeze the ones you don't want to spend, so a payment can't combine them with others; frozen
+  stays frozen across locks. [How-to #11](#11-coin-control-freeze-coins)
+- **A Windows installer** (`…-win-x64-setup.exe`): per-user, no administrator rights, Start menu entry
+  and uninstaller, never touches your vault.
+- **Keyboard shortcuts** (Ctrl+1 to 6, R, L, H), a time-left estimate while syncing, and a window that
+  reopens at the size you left it. [Shortcuts](#12-keyboard-shortcuts)
+
+<p align="center">
+  <img src="docs/screenshots/settings-tor.png" width="49%" alt="Settings: the built-in Tor, connected" />
+  <img src="docs/screenshots/wallet-tor-connecting.png" width="49%" alt="A wallet waiting for Tor: TOR · RECONNECTING, nothing sent directly" />
+</p>
 
 ---
 
 ## Contents
 
+- [What's new in 0.6](#whats-new-in-06)
 - [Highlights](#highlights)
 - [How it works (trust model)](#how-it-works-trust-model)
 - [Quick start (~10 minutes)](#quick-start-10-minutes)
 - [How-to guides](#how-to-guides)
+- [Screenshot tour](#screenshot-tour)
 - [What syncs from where (restore heights)](#what-syncs-from-where-restore-heights)
 - [Where your data lives](#where-your-data-lives)
 - [Security model in one page](#security-model-in-one-page)
@@ -54,6 +74,9 @@ Built on .NET 10 + Avalonia. Encrypted at rest with AES-256-GCM (Argon2id KDF). 
 | **Address echo on import** | Importing a seed shows the **derived primary address** to confirm before anything is saved — catching a wrong seed-offset, typo, or network. |
 | **Proofs** | The **transaction key** of any payment you sent (safe to share — it cannot spend) and a check for anyone's payment; **signed messages** (prove you own an address) and **reserve proofs** (prove a balance) — make and check both. |
 | **Verified one-click backend** | Bring your own `monero-wallet-rpc` (recommended), or press **Download & install**: the app checks getmonero.org's `hashes.txt` against **binaryFate's signature** (key pinned in the app) and the download against its signed SHA-256 before installing anything. |
+| **Built-in Tor** | Choose *Tor, built in* and the app runs its own `tor`: node traffic, node checks and downloads go through it, and **nothing goes out directly while it connects** (fail closed). *Download & install Tor* checks Tor Project's signature (Tor Browser Developers key, pinned in the app) and the download's signed SHA-256 first. A badge on every wallet says how it reaches its node. |
+| **Coin control** | The **Coins** tab lists unspent coins with the address label they arrived at. **Freeze** one and no transaction spends it (Send max included) until you unfreeze it; the frozen list is sealed in the vault and survives a lock. |
+| **Windows installer** | A per-user `setup.exe` (no admin rights), Start menu entry and uninstaller; the vault in `%APPDATA%` is never touched. Or keep using the zip. |
 | **Locked-down backend** | wallet-rpc runs on loopback with **per-session random credentials**, its files (wallet, log, ring database) live in one folder **shredded on lock**, and the app checks the port belongs to the process it started before sending it anything. |
 | **Hygiene by default** | Copied addresses/keys **auto-clear from the clipboard after 30 s**. Logs **redact seeds, passwords and keys** and record nothing that tells your two wallets apart. Auto-lock on inactivity. |
 | **No hand-rolled crypto** | All key derivation, signing, proofs and address logic is done by the **official `monero-wallet-rpc`**. |
@@ -69,16 +92,18 @@ password-protected child process** on a random local port, restores your wallet 
 yours, or a public one.
 
 ```
-┌─────────────────┐  JSON-RPC (127.0.0.1, random port,   ┌────────────────────┐        ┌─────────┐
-│   XaultWallet    │ ───── per-session digest auth) ─────▶│  monero-wallet-rpc  │ ─────▶ │ monerod │
-│  (this project)  │                                       │  (official, yours)  │        │ (a node)│
-└────────┬────────┘                                       └────────────────────┘        └─────────┘
+┌─────────────────┐  JSON-RPC (127.0.0.1, random port,   ┌────────────────────┐  built-in Tor   ┌─────────┐
+│   XaultWallet    │ ───── per-session digest auth) ─────▶│  monero-wallet-rpc  │ ── (or your ──▶ │ monerod │
+│  (this project)  │                                       │  (official, yours)  │   own proxy)    │ (a node)│
+└────────┬────────┘                                       └────────────────────┘                 └─────────┘
          │ owns: encrypted vault (seed at rest), duress logic, UI
          │ never: keys, signing, address derivation — that's Monero's official code
 ```
 
 XaultWallet's own code is responsible for exactly three things: the **encrypted vault format**, the
-**duress/deniability logic**, and the **UI**.
+**duress/deniability logic**, and the **UI**. With built-in Tor on, the link to the node goes
+through a `tor` the app runs (Tor Project's own build, signature-checked when it was installed):
+the node never sees your IP address.
 
 ## Quick start (~10 minutes)
 
@@ -88,8 +113,11 @@ XaultWallet's own code is responsible for exactly three things: the **encrypted 
 
 Download the latest `XaultWallet-<version>-<platform>` archive from the releases page, check it
 against `SHA256SUMS`, and extract it. It is one self-contained executable — **no .NET install
-required** (Windows 10/11 x64, Linux x64, macOS Apple Silicon). Binaries are currently **unsigned**,
-so Windows SmartScreen / macOS Gatekeeper will ask before the first run.
+required** (Windows 10/11 x64, Linux x64, macOS Apple Silicon). On Windows you can run
+`XaultWallet-<version>-win-x64-setup.exe` instead: it installs for your user without administrator
+rights, adds a Start menu entry and an uninstaller, and never touches your vault. Binaries and the
+installer are currently **unsigned**, so Windows SmartScreen / macOS Gatekeeper will ask before the
+first run.
 
 ### Step 2 — Get monero-wallet-rpc
 
@@ -118,7 +146,9 @@ This wallet's whole trust model rests on that binary being genuine. Two ways:
    A typed path must be a full path; a bare `monero-wallet-rpc` is looked up on PATH, and relative
    paths are refused.
 3. **Network & privacy**: pick a **stagenet** public node from the list (or your own `monerod
-   --stagenet`) → **Test**. **Save changes**, then **Close**.
+   --stagenet`) → **Test**. Under *How XaultWallet reaches the network*, choose **Tor, built in**
+   and *Download & install Tor* if you want nodes never to see your IP address
+   ([How-to #10](#10-route-everything-through-tor)). **Save changes**, then **Close**.
 
 ### Step 4 — Create a wallet on stagenet
 
@@ -303,6 +333,87 @@ wallet or two with some labels and contacts — until you upgrade it in Settings
 
 <br clear="right"/>
 
+### 10) Route everything through Tor
+
+<img src="docs/screenshots/settings-tor-connecting.png" width="50%" align="right" alt="Settings: the built-in Tor connecting, 45%" />
+
+1. **Settings** → **Network & privacy** → *How XaultWallet reaches the network*: choose
+   **Tor, built in**.
+2. **Download & install Tor**. XaultWallet asks torproject.org for the current release, checks Tor
+   Project's signature on its checksum list against the Tor Browser Developers key built into the
+   app, checks the download against the signed checksum, and installs only `tor` in your user
+   profile. If any check fails, nothing is installed. (Already have tor? Put its path in the box
+   instead, and **Test**.)
+3. **Save changes**. Tor starts (the status line shows its progress) and from then on starts with the
+   app. Wallets you open now reach their node through it: the badge next to the wallet's name says
+   **TOR**.
+
+While Tor is chosen, **nothing goes out directly**: if Tor is still connecting, or stopped, a wallet
+waits ("Connecting to Tor…", badge **TOR · RECONNECTING**) rather than connect without it. A node on
+this computer is the exception (badge **LOCAL NODE**): Tor can't reach it, and its traffic never
+leaves the machine. A wallet already open keeps its route until it is opened again.
+
+If a firewall or security product blocks `tor`, Settings says so within seconds, with the file to
+allow. Prefer your own Tor (Tor Browser listens on `127.0.0.1:9150`)? Choose **My own SOCKS
+proxy** instead. What Tor does and doesn't hide: [SECURITY.md](SECURITY.md#built-in-tor).
+
+<br clear="right"/>
+
+### 11) Coin control: freeze coins
+
+<img src="docs/screenshots/wallet-coins.png" width="50%" align="right" alt="Coins: four coins, the freelance one frozen" />
+
+Every payment you receive is its own **coin**. The **Coins** tab lists the account's unspent coins:
+the amount, the address it arrived at (by its label: a quick reminder of who knows about that coin),
+its confirmations, and whether it is still maturing.
+
+- **Freeze** a coin and the wallet leaves it out of every transaction, **Send max** included, until
+  you **Unfreeze** it. The balance card shows how much is frozen, and the send confirmation mentions
+  frozen coins it left out.
+- Why bother, with ring signatures? A transaction that spends several of your coins together tells
+  its recipient that they belong to one person. Keep a coin from an exchange, or from a job you'd
+  rather keep separate, out of everyday payments by freezing it.
+- Frozen stays frozen: the list is sealed in your vault (the wallet file is shredded on lock) and
+  applied again as soon as the wallet finds those coins after an unlock, and again right before
+  every send.
+- A watch-only wallet lists its coins but can't freeze them (that takes the spend key).
+
+<br clear="right"/>
+
+### 12) Keyboard shortcuts
+
+| Keys (Cmd on macOS) | Does |
+|---|---|
+| **Ctrl+1** … **Ctrl+6** | Receive, Send, History, Contacts, Tools, Coins |
+| **Ctrl+R** | Refresh now |
+| **Ctrl+L** | Lock the vault (every wallet) |
+| **Ctrl+H** | Hide or show amounts |
+
+They work wherever the focus is, a text box included. The window also reopens at the size you left
+it, and while a wallet catches up the sync line estimates the time left.
+
+---
+
+## Screenshot tour
+
+Every screen below is rendered from the app's real views by `tools/UiSnapshots` (headless, demo data
+on stagenet; the same run fails on any binding error), so what you see is what ships.
+
+| | |
+|---|---|
+| <img src="docs/screenshots/startup.png" alt="Startup checks" /><br/>**Startup** checks for monero-wallet-rpc and your node. | <img src="docs/screenshots/startup-installing.png" alt="Installing monero-wallet-rpc" /><br/>**Download & install** monero-wallet-rpc, verified against binaryFate's key. |
+| <img src="docs/screenshots/create-vault-seed.png" alt="Writing down the seed" /><br/>**Create a vault**: the seed comes from monero-wallet-rpc itself. | <img src="docs/screenshots/create-vault-duress.png" alt="The duress password" /><br/>**Duress password**: a decoy that looks like the real thing. |
+| <img src="docs/screenshots/unlock.png" alt="Unlock" /><br/>**Unlock**: either password, same screen, same timing. | <img src="docs/screenshots/wallet-receive.png" alt="Receive" /><br/>**Receive**: QR code, full address, the route badge (TOR). |
+| <img src="docs/screenshots/wallet-receive-request.png" alt="Payment request" /><br/>**Request a payment**: amount and description in the QR code. | <img src="docs/screenshots/wallet-receive-addresses.png" alt="Subaddresses" /><br/>**Subaddresses**, labelled, used ones marked. |
+| <img src="docs/screenshots/wallet-send-multi.png" alt="Send to two recipients" /><br/>**Send** to several people in one transaction. | <img src="docs/screenshots/wallet-send-confirm-multi.png" alt="Confirm a send" /><br/>**Confirm** with the exact fee, before anything is broadcast. |
+| <img src="docs/screenshots/wallet-sent.png" alt="Sent" /><br/>**Sent**, with the payment proof ready to share. | <img src="docs/screenshots/wallet-history-details.png" alt="History" /><br/>**History**: filters, search, details and private notes. |
+| <img src="docs/screenshots/wallet-coins.png" alt="Coins" /><br/>**Coins**: freeze the ones you don't want spent. | <img src="docs/screenshots/wallet-contacts.png" alt="Contacts" /><br/>**Contacts**, shared by the wallets of a password. |
+| <img src="docs/screenshots/wallet-tools.png" alt="Tools" /><br/>**Tools**: prove a payment, sign and check messages. | <img src="docs/screenshots/wallet-tools-proofs.png" alt="Reserve proofs" /><br/>**Reserve proofs**: prove a balance, check someone's. |
+| <img src="docs/screenshots/wallet-manage.png" alt="Manage" /><br/>**Manage**: name, node, accounts, backup, remove. | <img src="docs/screenshots/wallet-accounts.png" alt="Accounts" /><br/>**Accounts**: separate balances inside one wallet. |
+| <img src="docs/screenshots/add-wallet.png" alt="Add a wallet" /><br/>**Add a wallet**: new, from seed, from keys, watch-only. | <img src="docs/screenshots/wallet-watch-only.png" alt="Watch-only" /><br/>**Watch-only**: sees what arrives, can't spend. |
+| <img src="docs/screenshots/settings-tor.png" alt="Built-in Tor" /><br/>**Built-in Tor**, connected. | <img src="docs/screenshots/settings-tor-installing.png" alt="Installing Tor" /><br/>**Download & install Tor**, verified against Tor Project's key. |
+| <img src="docs/screenshots/settings-tor-blocked.png" alt="Tor blocked" /><br/>**Blocked by a firewall?** It says which file to allow. | <img src="docs/screenshots/wallet-tor-connecting.png" alt="Waiting for Tor" /><br/>**Fail closed**: a wallet waits for Tor rather than go direct. |
+
 ---
 
 ## What syncs from where (restore heights)
@@ -323,17 +434,20 @@ syncs in seconds; one restored from full history takes as long as the node needs
 | Path | What | Secret? |
 |---|---|---|
 | `%APPDATA%\XaultWallet\vault.xv` (Linux: `~/.config/XaultWallet/`; macOS: `~/Library/Application Support/XaultWallet/`) | Your encrypted vault — the **only** persistent wallet data | Encrypted (AES-256-GCM, Argon2id) |
-| `…\XaultWallet\settings.json` | Binary path, default node, refresh/auto-lock intervals, proxy | No secrets, plain JSON |
+| `…\XaultWallet\settings.json` | Binary path, default node, refresh/auto-lock intervals, Tor/proxy choice, window size | No secrets, plain JSON |
 | `…\XaultWallet\logs\` | Diagnostic log | Seeds/passwords/keys redacted; nothing per-wallet (no heights, nodes or send events) |
 | `%TEMP%\xaultwallet_*` (per open wallet) | wallet-rpc's restored wallet files, its log, its ring database | **Shredded** (overwritten + deleted) on lock/exit; private to your user |
 | `%LOCALAPPDATA%\XaultWallet\monero-cli\` (Linux: `~/.local/share/XaultWallet/monero-cli/`) | `monero-wallet-rpc`, only if *Download & install* put it there | Not secret (an official, signature-checked binary) |
+| `%LOCALAPPDATA%\XaultWallet\tor\` (Linux: `~/.local/share/XaultWallet/tor/`) | `tor` and its GeoIP files, only if *Download & install Tor* put them there | Not secret (Tor Project's signature-checked build) |
+| `%LOCALAPPDATA%\XaultWallet\tor-data\` | Tor's own state (consensus cache, guard choice), while built-in Tor is used | Not secret; shows that Tor is used on this computer |
 
 On Linux/macOS the `XaultWallet` folder is `0700` and its files `0600` regardless of your umask (older
 installs are tightened at startup); exports and seed backups you save are written `0600` too.
 
 **Privacy notes:** a public node's operator can see your IP and the transactions you broadcast (not
 your balance or history) — and, with several wallets open, that the same computer is syncing all of
-them. For privacy, run your own node or set a SOCKS proxy (Tor) in Settings.
+them. For privacy, run your own node, or turn on the built-in Tor (or your own SOCKS proxy) in
+Settings: the node then sees a Tor exit, not your IP address.
 Deleting `vault.xv` without a seed backup means the funds are gone — the seed *is* the wallet.
 
 ## Security model in one page
@@ -351,6 +465,12 @@ Deleting `vault.xv` without a seed backup means the funds are gone — the seed 
   requires **per-session random digest credentials** (never on its command line). Before a seed is sent,
   the app checks the port belongs to the process it started (Linux, Windows). Browser-based attacks on
   the local RPC (cross-site requests, DNS rebinding) are refused.
+- **Over Tor:** with built-in Tor on, node traffic, node checks and downloads go only through it,
+  and wait while it connects (fail closed). The `tor` binary is installed only after Tor Project's
+  signature (Tor Browser Developers key, pinned) and the download's checksum verify:
+  [SECURITY.md](SECURITY.md#built-in-tor).
+- **Coin control:** frozen coins are never spent; the frozen list is sealed in the vault, in a field
+  every slot has, so it says nothing about which profile is real.
 - **Not protected against:** malware on your machine, an attacker with both your vault and your
   password, and coercion that doesn't stop at the decoy. No software fixes those.
 
@@ -369,6 +489,7 @@ XaultWallet.Core                ← class library, no UI deps, unit-tested
 │   └── PasswordStrength      conservative entropy estimate + pattern discounts
 ├── Models/                   WalletProfile, WalletSecrets (seed / keys / watch-only), Contact, SeedOffsetPolicy
 ├── Installer/                fetch + verify (binaryFate's OpenPGP signature, SHA-256) + install monero-wallet-rpc
+├── Tor/                      TorInstaller (Tor Project's detached signature + SHA-256), TorProcess (a SOCKS-only tor child)
 └── Monero/
     ├── MoneroWalletService   generate / validate / open / accounts / subaddresses / multi-recipient send / relay / proofs
     ├── MoneroProcessManager  authenticated loopback wallet-rpc child; private session dir shredded on dispose
@@ -383,12 +504,14 @@ XaultWallet.Core                ← class library, no UI deps, unit-tested
 XaultWallet.Desktop             ← Avalonia 11, MVVM (CommunityToolkit.Mvvm)
 ├── Startup / Unlock / Create / Wallet / AddWallet / Settings views + view-models
 ├── Profile (the open vault: wallets, contacts, auto-lock) → one Wallet view-model per open wallet
-├── Views/Wallet/             Receive, Send, History, Contacts, Tools tabs; the Manage sheet
+├── Views/Wallet/             Receive, Send, History, Contacts, Tools, Coins tabs; the Manage sheet
+├── TorController             the app's own Tor: start with the app, the one route while on (fail closed)
 ├── Controls/                 Icon (line icons), QrCodeView (QRCoder)
 └── The UI is IDENTICAL for the real and duress profiles — by construction
 
 tests/   XaultWallet.Core.Tests        unit tests (vault, deniability, crypto, parsing, hardening)
          XaultWallet.IntegrationTests  real monero-wallet-rpc on a private regtest chain
+installer/ XaultWallet.iss             the Windows installer (Inno Setup), built by the release workflow
 tools/   TestRunner                    reflection test runner (fails on zero discovered tests)
          UiSnapshots                   renders every screen headlessly; fails on binding errors / QR mismatch
 ```
@@ -405,6 +528,9 @@ dotnet run --project src/XaultWallet.Desktop    # run the app
 - **Visual Studio 2022** (17.8+): open `XaultWallet.sln`, F5. Windows: `./build.ps1`.
 - **Single-file release** for your platform: `./publish-windows.ps1` / `./publish-linux.sh`, or
   `dotnet publish src/XaultWallet.Desktop -c Release -r <win-x64|linux-x64|osx-arm64>`.
+- **Windows installer**: publish `win-x64` into `out/`, copy the docs next to the exe, then
+  `iscc /DAppVersion=0.6.0-beta /DAppNumericVersion=0.6.0 /DSourceDir=%CD%\out installer\XaultWallet.iss`
+  (Inno Setup 6). The release workflow does exactly this and test-installs the result.
 - **UI snapshots** (every screen, zero-binding-error check, QR round-trip with `zbarimg`):
   `dotnet run -c Release --project tools/UiSnapshots -- ui-snapshots`
 - **Integration tests** against a real `monero-wallet-rpc` — a private regtest chain is the quickest:
@@ -428,6 +554,9 @@ released; see [RELEASE.md](RELEASE.md#automated-releases-github-actions).
 | Stuck on **"Connecting to node…"** | The node is down, syncing, or on the wrong network. **Manage** → *Node*: *Test*, or switch this wallet to another node ([How-to #6](#6-several-wallets-add-switch-manage)). A node that doesn't answer at all holds that wallet's monero-wallet-rpc for each connection attempt (about 20 s on Windows, up to 2 min on Linux) before anything else it's asked gets an answer: *Test* a node before you apply it. |
 | **"The vault is full"** | One password's profile has to fit in 256 KiB: hundreds of wallets, contacts and notes do, but not without limit. Remove some (long notes first), then try again. Nothing was written. |
 | **"This vault still has the format of XaultWallet 0.3…"** | That format holds about 4 KB per password. Settings → **Vault format** → *Upgrade* makes room; if you have a duress password, read [Coming from 0.3](#9-coming-from-03) first. Nothing was written. |
+| **"Your firewall or security software is blocking tor"** | Allow the `tor` file named in the message to make outgoing connections (Windows Defender Firewall, or your security product), then **Start / restart** in Settings. |
+| **"Connecting to Tor…" never finishes** | Settings → Network & privacy shows Tor's own progress. A network that blocks Tor can't be helped by this release (no bridges yet): use **My own SOCKS proxy** with a Tor that has bridges, or **Direct**. |
+| **A local node stops working with Tor on** | It shouldn't: a node at `127.0.0.1` is reached directly. A node elsewhere on your LAN goes through Tor, which can't reach private addresses: use its public address, or choose **Direct** for it. |
 | **Watch-only balance looks too high** | A watch-only wallet sees what it receives but not what was spent (that needs the spend key). Its figure is labelled *received*. |
 | **Imported wallet shows 0 balance** | Wrong **seed offset**, wrong **network**, or a too-recent **scan from** choice. Re-import with *Full history* and compare the derived address at the confirmation step. |
 | **Balance says maturing** | Fresh coins need 10 confirmations (~20 min) to unlock; change and mining rewards too. |
@@ -452,6 +581,17 @@ many wallets and contacts each password's profile has. What remains is
 opsec (a bank statement showing 10 XMR bought while the decoy holds 0.1 is the giveaway) plus the
 limits in [SECURITY.md](SECURITY.md) — notably copies of the vault taken at different times.
 
+**Why isn't Tor bundled in the release?**
+For the same reason monero-wallet-rpc isn't: you shouldn't have to trust a wallet's copy of someone
+else's network binary. *Download & install Tor* fetches Tor Project's own build and installs it only
+after Tor Project's signature and the checksum verify, and you can point Settings at a tor you
+installed yourself.
+
+**Does Monero need coin control?**
+Less than Bitcoin, because ring signatures and stealth addresses already hide which outputs a
+transaction spends from everyone else. But the recipient of a transaction that combines several of
+your coins learns they belong together. Freezing keeps a coin you want separate out of it.
+
 **Can I use this on mainnet?**
 The UI allows it behind red warnings, but the honest answer is: **don't**. It's unaudited beta.
 
@@ -464,7 +604,8 @@ the spend key (or, for privacy, the view key).
 - Faster unlocks for old wallets (advance the stored restore height past spent history, or an opt-in
   encrypted wallet cache)
 - Signed releases and reproducible builds
-- Built-in Tor toggle with `.onion` node presets
+- Verified `.onion` node presets, and Tor bridges for networks that block Tor
+- Spending only the coins you pick in a send (coin selection), on top of freezing
 - Key-image import for watch-only wallets (so they can see spends), and offline signing
 - Hardware wallets (Ledger / Trezor through monero-wallet-rpc)
 - Screen-capture protection while the seed is shown

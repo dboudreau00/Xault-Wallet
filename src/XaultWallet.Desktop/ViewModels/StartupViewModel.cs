@@ -102,6 +102,9 @@ public sealed partial class StartupViewModel : ViewModelBase
                     // Built-in Tor: nothing reaches the node until Tor is connected.
                     Status = "Connecting to Tor\u2026";
                     CanContinue = true;
+                    TorController tor = AppServices.Instance.Tor;
+                    void ShowTor(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => Detail = tor.StatusText;
+                    tor.PropertyChanged += ShowTor;
                     try
                     {
                         proxy = await AppServices.Instance.GetNetworkProxyAsync(daemon, _cts.Token);
@@ -110,6 +113,10 @@ public sealed partial class StartupViewModel : ViewModelBase
                     {
                         routed = false;
                         Detail = ex.Message;
+                    }
+                    finally
+                    {
+                        tor.PropertyChanged -= ShowTor;
                     }
                 }
                 else

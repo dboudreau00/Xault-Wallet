@@ -57,6 +57,13 @@ Launch the app, click **Settings**, and:
   it by pasting the copied `monero:` link into another wallet's Send; pay two recipients at once.
 - **Tools:** prove a payment from History (*Prove this payment*), sign and check a message, make and
   check a reserve proof.
+- **Built-in Tor:** Settings, Network & privacy: choose *Tor, built in*, *Download & install Tor*,
+  save, and watch the status reach *Connected to Tor*. Lock and unlock: the wallet's badge reads
+  **TOR** and it syncs. *Stop* Tor: the badge turns to **TOR · RECONNECTING** and the node height stops
+  updating (nothing goes direct); *Start / restart* and it carries on.
+- **Coin control:** receive two payments, freeze one on the Coins tab, and try to send more than the
+  other: it is refused. Send max sends only the unfrozen coin. Lock and unlock: the coin is still
+  frozen. Unfreeze it and it can be spent again.
 - **A vault from 0.3** (a copy — keep the original): it opens in 0.5 unchanged, and Settings shows
   *Vault format*. Following [Coming from 0.3](README.md#9-coming-from-03), unlock with the duress
   password first, upgrade from there, then unlock with the main password; both open their wallets,
@@ -80,7 +87,9 @@ dotnet test tests/XaultWallet.IntegrationTests -c Release
 
 On regtest the suite mines coins to a fresh wallet and runs a full money flow — prepare a send,
 check the exact fee, relay it, prove it with the tx key, check history, sweep everything back — plus
-the security checks: the backend refuses unauthenticated and cross-origin requests, keeps its files
+coin control (two coins, one frozen: a send that would need it is refused, Send max leaves it out,
+and after a lock the vault's list freezes it again), and the security checks: the backend refuses
+unauthenticated and cross-origin requests, keeps its files
 inside the shredded session folder, and never puts its password on the command line. An impostor that
 grabs the backend's port first never receives the seed, both when it answers at once and when it
 waits for the real backend to die before answering.
@@ -94,11 +103,12 @@ skip notice, so a green run with nothing configured means "skipped", not "passed
 One scenario (`tests/E2E.Shared/WalletScenario.cs`) uses the app the way a person does: create a
 vault, write down and verify the seed, set a duress password with a decoy, unlock both wallets,
 receive (mined) coins, copy the address, send 12.5 XMR to the decoy with the confirmation checked line
-by line, see it in History, see the decoy receive it, open Settings. Then the 0.5 features: add a
-second wallet (new seed, backup checked), switch back, save the decoy as a contact, pay the contact and
-the second wallet in one transaction, see the second wallet receive its share, lock, check the vault
-reopens on the wallet used last with the contact still there, and check the duress password still opens
-only the decoy (paid twice, with no contacts). Mining is the only thing done outside the UI. It needs
+by line, see it in History, see the decoy receive it, freeze a coin on the Coins tab, open Settings.
+Then the 0.5 features: add a second wallet (new seed, backup checked), switch back, save the decoy as a
+contact, pay the contact and the second wallet in one transaction, see the second wallet receive its
+share, lock, check the vault reopens on the wallet used last with the contact still there and the
+coin still frozen, and check the duress password still opens only the decoy (paid twice, with no
+contacts). Mining is the only thing done outside the UI. It needs
 the regtest node above and `monero-wallet-rpc`, and leaves a screenshot of every step. Two drivers run
 it:
 

@@ -5,10 +5,11 @@ using ICSharpCode.SharpZipLib.BZip2;
 namespace XaultWallet.Core.Installer;
 
 /// <summary>
-/// Copies ONE named file out of a Monero CLI archive (.zip on Windows, .tar.bz2 elsewhere). The
-/// archive has already been matched against the signed checksum, so its content is exactly what
-/// Monero published; this still never uses a path from inside the archive to decide where to write
-/// (only the file's own name is compared), and caps how much it will write.
+/// Copies ONE named file out of a Monero CLI archive (.zip on Windows, .tar.bz2 elsewhere), or the
+/// few files Tor needs out of a Tor Expert Bundle (.tar.gz). The archive has already been matched
+/// against the signed checksum, so its content is exactly what was published; this still never uses
+/// a path from inside the archive to decide where to write (only the file's own name is compared),
+/// and caps how much it will write.
 /// </summary>
 internal static class ArchiveExtractor
 {
@@ -76,6 +77,65 @@ internal static class ArchiveExtractor
 
         throw new InvalidOperationException($"{fileName} is not in the downloaded archive.");
     }
+
+    /// <summary>
+    /// Unpack what a Tor Expert Bundle (.tar.gz) needs to run into <paramref name="destinationDir"/>
+    /// (flat): every file directly under <c>tor/</c> (the binary and, on Linux and macOS, the
+    /// libraries beside it) plus <c>data/geoip</c> and <c>data/geoip6</c>. Pluggable transports,
+    /// debug builds and docs are left out. Entry names are only compared, never used as paths:
+    /// a name must be a plain file name to be written at all.
+    /// </summary>
+    /// <returns>The file names written.</returns>
+    /// <exception cref="InvalidOperationException">The archive has no tor binary, or an entry is too large.</exception>
+    public static IReadOnlyList<string> ExtractTorBundle(string archivePath, string torFileName, string destinationDir, CancellationToken ct)
+    {
+        var written = new List<string>();
+        using FileStream file = File.OpenRead(archivePath);
+        using var gzip = new GZipStream(file, CompressionMode.Decompress);
+        using var tar = new TarReader(gzip);
+        while (tar.GetNextEntry() is { } entry)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (entry.EntryType is not (TarEntryType.RegularFile or TarEntryType.V7RegularFile) || entry.DataStream is not { } data)
+            {
+                continue;
+            }
+
+            string name = entry.Name.StartsWith("./", StringComparison.Ordinal) ? entry.Name[2..] : entry.Name;
+            string? keep = name switch
+            {
+                "data/geoip" => "geoip",
+                "data/geoip6" => "geoip6",
+                _ when name.StartsWith("tor/", StringComparison.Ordinal) && IsPlainFileName(name[4..]) => name[4..],
+                _ => null,
+            };
+            if (keep is null || written.Contains(keep, StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (entry.Length > MaxFileBytes)
+            {
+                throw new InvalidOperationException($"{keep} in the archive is unexpectedly large.");
+            }
+
+            CopyCapped(data, Path.Combine(destinationDir, keep), ct);
+            written.Add(keep);
+        }
+
+        if (!written.Contains(torFileName, StringComparer.Ordinal))
+        {
+            throw new InvalidOperationException($"{torFileName} is not in the downloaded Tor Expert Bundle.");
+        }
+
+        return written;
+    }
+
+    /// <summary>A bare file name: letters, digits, dot, dash, underscore; not "." or "..".</summary>
+    private static bool IsPlainFileName(string name) =>
+        name.Length is > 0 and <= 100
+        && name.Trim('.').Length > 0
+        && name.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_');
 
     /// <summary>The last path component, whichever separator the archive used.</summary>
     private static string NameOf(string entryPath)

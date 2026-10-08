@@ -17,6 +17,7 @@ public partial class SettingsView : UserControl
         if (DataContext is SettingsViewModel vm)
         {
             vm.BrowseHandler = BrowseForBinaryAsync;
+            vm.BrowseTorHandler = BrowseForTorAsync;
             vm.ExportPickHandler = PickBackupDestinationAsync;
             vm.RestorePickHandler = PickBackupSourceAsync;
         }
@@ -58,6 +59,23 @@ public partial class SettingsView : UserControl
                 new FilePickerFileType("XaultWallet vault") { Patterns = new[] { "*.xv" } },
                 FilePickerFileTypes.All,
             },
+        });
+
+        return files.Count > 0 ? files[0].Path.LocalPath : null;
+    }
+
+    private async Task<string?> BrowseForTorAsync()
+    {
+        TopLevel? top = TopLevel.GetTopLevel(this);
+        if (top is null)
+        {
+            return null;
+        }
+
+        IReadOnlyList<IStorageFile> files = await top.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Select tor",
+            AllowMultiple = false,
         });
 
         return files.Count > 0 ? files[0].Path.LocalPath : null;

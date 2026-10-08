@@ -521,8 +521,72 @@ public sealed class MoneroWalletService : IAsyncDisposable
         return all.OrderByDescending(t => t.Timestamp).ToList();
     }
 
+    // ------------------------------------------------------------------ coin control
+
+    /// <summary>Key images frozen in THIS backend since it opened: the wallet file that holds
+    /// wallet-rpc's own flags starts empty on every open (it is restored from the seed).</summary>
+    private readonly HashSet<string> _frozenHere = new(StringComparer.Ordinal);
+
+    /// <summary>The account's unspent outputs, largest first.</summary>
+    public async Task<IReadOnlyList<OwnedOutput>> GetCoinsAsync(uint account, CancellationToken ct = default)
+    {
+        IncomingTransfersResult r = await Rpc.GetUnspentOutputsAsync(account, ct).ConfigureAwait(false);
+        return r.Transfers.Where(o => !o.Spent).OrderByDescending(o => o.Amount).ThenBy(o => o.BlockHeight).ToList();
+    }
+
+    /// <summary>Freeze (or unfreeze) one coin in the running backend.</summary>
+    /// <exception cref="ArgumentException">Not a key image.</exception>
+    public async Task SetFrozenAsync(string keyImage, bool frozen, CancellationToken ct = default)
+    {
+        if (!Security.SlotPayload.IsKeyImage(keyImage))
+        {
+            throw new ArgumentException("That is not a coin's key image.", nameof(keyImage));
+        }
+
+        if (frozen)
+        {
+            await Rpc.FreezeAsync(keyImage, ct).ConfigureAwait(false);
+            _frozenHere.Add(keyImage);
+        }
+        else
+        {
+            await Rpc.ThawAsync(keyImage, ct).ConfigureAwait(false);
+            _frozenHere.Remove(keyImage);
+        }
+    }
+
+    /// <summary>
+    /// Freeze every coin of <paramref name="keyImages"/> this backend has found since it opened. A
+    /// coin the scan hasn't reached yet is unknown to wallet-rpc (and so can't be spent either); it
+    /// is frozen on a later call, once found. Call on every refresh and right before building a
+    /// transaction. Returns how many of the list are frozen here now.
+    /// </summary>
+    public async Task<int> ApplyFrozenAsync(IReadOnlyCollection<string> keyImages, CancellationToken ct = default)
+    {
+        foreach (string keyImage in keyImages)
+        {
+            if (_frozenHere.Contains(keyImage) || !Security.SlotPayload.IsKeyImage(keyImage))
+            {
+                continue;
+            }
+
+            try
+            {
+                await Rpc.FreezeAsync(keyImage, ct).ConfigureAwait(false);
+                _frozenHere.Add(keyImage);
+            }
+            catch (MoneroRpcClient.MoneroRpcException)
+            {
+                // Not found yet (still scanning): try again next time.
+            }
+        }
+
+        return keyImages.Count(_frozenHere.Contains);
+    }
+
     public async Task CloseAsync()
     {
+        _frozenHere.Clear();
         try
         {
             _rpc?.Dispose();

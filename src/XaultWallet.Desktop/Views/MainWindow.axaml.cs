@@ -27,10 +27,48 @@ public partial class MainWindow : Window
     private void OnUserActivity(object? sender, RoutedEventArgs e) =>
         (DataContext as ViewModels.MainWindowViewModel)?.NotifyActivity();
 
+    private bool _maximizeOnOpen;
+
     protected override void OnOpened(EventArgs e)
     {
         base.OnOpened(e);
         FitToScreen();
+        if (_maximizeOnOpen)
+        {
+            WindowState = WindowState.Maximized;
+        }
+    }
+
+    /// <summary>Open at the size the window had when it was last closed (still fitted to the screen).</summary>
+    public void RestorePlacement(AppSettings settings)
+    {
+        if (settings.WindowWidth >= MinWidth && settings.WindowHeight >= MinHeight)
+        {
+            Width = settings.WindowWidth;
+            Height = settings.WindowHeight;
+        }
+
+        _maximizeOnOpen = settings.WindowMaximized;
+    }
+
+    /// <summary>Note the window's size for next time (saved with the other settings; best effort).</summary>
+    public void RememberPlacement(AppSettings settings)
+    {
+        try
+        {
+            settings.WindowMaximized = WindowState == WindowState.Maximized;
+            if (WindowState == WindowState.Normal)
+            {
+                settings.WindowWidth = Math.Round(ClientSize.Width);
+                settings.WindowHeight = Math.Round(ClientSize.Height);
+            }
+
+            AppServices.Instance.SaveSettings();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // A window size is not worth a failed shutdown.
+        }
     }
 
     /// <summary>

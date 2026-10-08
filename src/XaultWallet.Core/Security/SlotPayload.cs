@@ -64,6 +64,7 @@ internal static class SlotPayload
                 Labels = w.Labels,
                 AccountLabels = w.AccountLabels,
                 TxNotes = w.TxNotes,
+                Frozen = w.FrozenKeyImages,
             }).ToList(),
             Contacts = profile.Contacts.Select(c => new ContactDto { Id = c.Id, Name = c.Name, Address = c.Address, Note = c.Note }).ToList(),
         }, Json);
@@ -132,6 +133,7 @@ internal static class SlotPayload
                 Labels = w.Labels ?? new(),
                 AccountLabels = w.AccountLabels ?? new(),
                 TxNotes = w.TxNotes ?? new(),
+                FrozenKeyImages = (w.Frozen ?? []).Where(IsKeyImage).Distinct(StringComparer.Ordinal).ToList(),
             });
         }
 
@@ -179,6 +181,11 @@ internal static class SlotPayload
     }
 
     private const int LegacyDuressKind = 1;
+
+    /// <summary>A key image as wallet-rpc prints it: 64 lower-case hex digits. Anything else in the
+    /// frozen list is dropped rather than sent to the backend.</summary>
+    internal static bool IsKeyImage(string? s) =>
+        s is { Length: 64 } && s.All(c => c is (>= '0' and <= '9') or (>= 'a' and <= 'f'));
 
     /// <summary>What v3 writes.</summary>
     private sealed class ProfileDto
@@ -235,6 +242,9 @@ internal static class SlotPayload
         [JsonPropertyName("labels")] public Dictionary<string, string>? Labels { get; set; }
         [JsonPropertyName("accountLabels")] public Dictionary<uint, string>? AccountLabels { get; set; }
         [JsonPropertyName("notes")] public Dictionary<string, string>? TxNotes { get; set; }
+
+        // Always written (as [] when empty), so every slot has it whatever its wallets hold.
+        [JsonPropertyName("frozen")] public List<string>? Frozen { get; set; }
     }
 
     private sealed class ContactDto

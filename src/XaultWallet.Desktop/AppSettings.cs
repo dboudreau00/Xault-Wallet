@@ -35,6 +35,22 @@ public sealed class AppSettings
     /// as --proxy so the configured node never sees the user's real IP.</summary>
     public string ProxyAddress { get; set; } = "";
 
+    /// <summary>Route node traffic (and the in-app downloads) through the app's own Tor. While on,
+    /// nothing goes direct: until Tor is connected, node traffic waits. Overrides <see cref="ProxyAddress"/>.
+    /// A node on this computer (127.0.0.1) is reached directly: Tor can't, and nothing leaves the machine.</summary>
+    public bool UseBuiltInTor { get; set; }
+
+    /// <summary>Explicit tor binary. Empty = the one XaultWallet installed, else tor on PATH.</summary>
+    public string TorBinaryPath { get; set; } = "";
+
+    /// <summary>The main window as it was last closed (0 = never saved). Not secret, and the same for
+    /// every password, so it says nothing about which one was used.</summary>
+    public double WindowWidth { get; set; }
+
+    public double WindowHeight { get; set; }
+
+    public bool WindowMaximized { get; set; }
+
     /// <summary>True when the last Load found a corrupt settings file and fell back to
     /// defaults (the corrupt file is preserved next to the original as *.bad).</summary>
     public static bool RecoveredFromCorruptFile { get; private set; }
@@ -96,6 +112,11 @@ public sealed class AppSettings
         WalletRpcBinaryPath ??= "";
         DefaultDaemonAddress ??= "";
         ProxyAddress ??= "";
+        TorBinaryPath ??= "";
+        if (WindowWidth is < 0 or > 20000 || double.IsNaN(WindowWidth) || WindowHeight is < 0 or > 20000 || double.IsNaN(WindowHeight))
+        {
+            WindowWidth = WindowHeight = 0;
+        }
         if (DefaultNetworkIndex is < 0 or > 2)
         {
             DefaultNetworkIndex = 1;

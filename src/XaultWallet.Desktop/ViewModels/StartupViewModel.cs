@@ -95,12 +95,34 @@ public sealed partial class StartupViewModel : ViewModelBase
             string daemon = AppServices.Instance.DefaultDaemonAddress;
             if (!string.IsNullOrWhiteSpace(daemon))
             {
+                string? proxy = null;
+                bool routed = true;
+                if (AppServices.Instance.Settings.UseBuiltInTor)
+                {
+                    // Built-in Tor: nothing reaches the node until Tor is connected.
+                    Status = "Connecting to Tor\u2026";
+                    CanContinue = true;
+                    try
+                    {
+                        proxy = await AppServices.Instance.GetNetworkProxyAsync(daemon, _cts.Token);
+                    }
+                    catch (TorNotReadyException ex)
+                    {
+                        routed = false;
+                        Detail = ex.Message;
+                    }
+                }
+                else
+                {
+                    proxy = await AppServices.Instance.GetNetworkProxyAsync(daemon, _cts.Token);
+                }
+
                 Status = "Contacting your node\u2026";
-                for (int attempt = 0; attempt < 5 && !_cts.IsCancellationRequested; attempt++)
+                for (int attempt = 0; routed && attempt < 5 && !_cts.IsCancellationRequested; attempt++)
                 {
                     try
                     {
-                        ulong height = await MoneroDiagnostics.ProbeDaemonAsync(daemon, AppServices.Instance.Settings.ProxyAddress, _cts.Token);
+                        ulong height = await MoneroDiagnostics.ProbeDaemonAsync(daemon, proxy, _cts.Token);
                         Detail = $"Node reachable \u00b7 block {height:N0}";
                         Log.Info($"Startup: node OK at height {height}");
                         break;

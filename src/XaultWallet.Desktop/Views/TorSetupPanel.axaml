@@ -1,0 +1,46 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
+             xmlns:c="clr-namespace:XaultWallet.Desktop.Controls"
+             x:Class="XaultWallet.Desktop.Views.TorSetupPanel"
+             x:DataType="vm:TorSetupViewModel">
+
+    <!-- "Download & install Tor" (Settings → Network & privacy). -->
+    <StackPanel Spacing="10">
+        <TextBlock Classes="caption" TextWrapping="Wrap"
+                   Text="XaultWallet fetches the Tor Expert Bundle from torproject.org, checks Tor Project's signature on the release's checksum list against the Tor Browser Developers key (built into the app), checks the download against the signed checksum, and installs only tor."/>
+        <TextBlock Classes="caption" TextWrapping="Wrap" Text="{Binding RouteNote}"/>
+
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Classes="accent" Command="{Binding InstallCommand}"
+                    AutomationProperties.AutomationId="Tor.Install"
+                    AutomationProperties.Name="Download and install Tor">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                    <c:Icon Data="{StaticResource IconDownload}" Width="14" Height="14" Foreground="{StaticResource AccentText}"/>
+                    <TextBlock Text="Download &amp; install Tor" Foreground="{StaticResource AccentText}"/>
+                </StackPanel>
+            </Button>
+            <Button Content="Cancel" Command="{Binding CancelCommand}" IsVisible="{Binding Installing}"
+                    AutomationProperties.AutomationId="Tor.CancelInstall"
+                    AutomationProperties.Name="Cancel the Tor install"/>
+        </StackPanel>
+
+        <StackPanel Spacing="6" IsVisible="{Binding Installing}">
+            <ProgressBar Height="4" Minimum="0" Maximum="100" Value="{Binding Progress}" IsIndeterminate="{Binding !ProgressKnown}"/>
+            <TextBlock Classes="caption" Text="{Binding StageText}" TextWrapping="Wrap"
+                       AutomationProperties.AutomationId="Tor.Stage"/>
+        </StackPanel>
+
+        <Border Classes="callout" Classes.success="{Binding Succeeded}" Classes.warning="{Binding !Succeeded}"
+                IsVisible="{Binding HasResult}">
+            <Grid ColumnDefinitions="Auto,10,*">
+                <c:Icon Grid.Column="0" Width="15" Height="15" VerticalAlignment="Top" Margin="0,1,0,0"
+                        Data="{StaticResource IconShield}" IsVisible="{Binding Succeeded}" Foreground="{StaticResource SuccessBrush}"/>
+                <c:Icon Grid.Column="0" Width="15" Height="15" VerticalAlignment="Top" Margin="0,1,0,0"
+                        Data="{StaticResource IconWarning}" IsVisible="{Binding !Succeeded}" Foreground="{StaticResource WarningBrush}"/>
+                <TextBlock Grid.Column="2" Text="{Binding ResultText}" TextWrapping="Wrap"
+                           AutomationProperties.AutomationId="Tor.Result"/>
+            </Grid>
+        </Border>
+    </StackPanel>
+</UserControl>

@@ -287,7 +287,7 @@ public sealed class WalletRpcInstaller
     /// <summary>The user's SOCKS proxy when set, otherwise DIRECT — the same route the wallet takes.
     /// Redirects are followed (the download host may hand off to a mirror) but never from HTTPS to
     /// HTTP; the signed checksum makes the mirror irrelevant to integrity anyway.</summary>
-    private static SocketsHttpHandler CreateHandler(string? proxy)
+    internal static SocketsHttpHandler CreateHandler(string? proxy)
     {
         var handler = new SocketsHttpHandler
         {
@@ -347,7 +347,7 @@ public sealed class WalletRpcInstaller
 
     /// <summary>Stream the archive to disk, hashing as it arrives. Fails on a stall (60 s without
     /// data) or past <see cref="MaxArchiveBytes"/>. Returns the SHA-256.</summary>
-    private static async Task<byte[]> DownloadAsync(HttpClient http, Uri url, string destination, IProgress<InstallProgress>? progress, CancellationToken ct)
+    internal static async Task<byte[]> DownloadAsync(HttpClient http, Uri url, string destination, IProgress<InstallProgress>? progress, CancellationToken ct)
     {
         using var stall = CancellationTokenSource.CreateLinkedTokenSource(ct);
         stall.CancelAfter(TimeSpan.FromSeconds(60));
@@ -406,7 +406,7 @@ public sealed class WalletRpcInstaller
         }
     }
 
-    private static void EnsureOk(HttpResponseMessage resp, Uri url)
+    internal static void EnsureOk(HttpResponseMessage resp, Uri url)
     {
         if (!resp.IsSuccessStatusCode)
         {

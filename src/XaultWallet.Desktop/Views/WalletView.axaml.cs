@@ -37,6 +37,51 @@ public partial class WalletView : UserControl
         // way: here those keys open the list instead, and the choice is made in it (Enter or a click).
         Switcher.AddHandler(KeyDownEvent, OnSwitcherKeyDown, RoutingStrategies.Tunnel);
         Switcher.AddHandler(PointerWheelChangedEvent, OnSwitcherWheel, RoutingStrategies.Tunnel);
+
+    }
+
+    /// <summary>The window the shortcuts listen on while this view is shown. On the window, not the
+    /// view: with nothing focused (a tab change removes the focused box) keys only reach the window.</summary>
+    private TopLevel? _shortcutHost;
+
+    /// <summary>Ctrl (Cmd on macOS) + 1…6 picks a tab, + R refreshes, + L locks, + H hides amounts.</summary>
+    private void OnShortcutKeyDown(object? sender, KeyEventArgs e)
+    {
+        KeyModifiers command = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
+        if (e.KeyModifiers != command || DataContext is not WalletViewModel vm)
+        {
+            return;
+        }
+
+        int tab = e.Key switch
+        {
+            >= Key.D1 and <= Key.D6 => e.Key - Key.D1,
+            >= Key.NumPad1 and <= Key.NumPad6 => e.Key - Key.NumPad1,
+            _ => -1,
+        };
+        if (tab >= 0)
+        {
+            vm.GoToTab(tab);
+            e.Handled = true;
+            return;
+        }
+
+        System.Windows.Input.ICommand? action = e.Key switch
+        {
+            Key.R => vm.RefreshCommand,
+            Key.L => vm.LockCommand,
+            Key.H => vm.ToggleBalancesCommand,
+            _ => null,
+        };
+        if (action is not null)
+        {
+            if (action.CanExecute(null))
+            {
+                action.Execute(null);
+            }
+
+            e.Handled = true;
+        }
     }
 
     private void OnSwitcherKeyDown(object? sender, KeyEventArgs e)
@@ -91,6 +136,8 @@ public partial class WalletView : UserControl
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
+        _shortcutHost?.RemoveHandler(KeyDownEvent, OnShortcutKeyDown);
+        _shortcutHost = null;
         Unsubscribe();
         _vm = null;
         // Lock replaces this view: clear any wallet data we still own on the clipboard.
@@ -100,6 +147,10 @@ public partial class WalletView : UserControl
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
+
+        // Keyboard shortcuts, wherever focus is (none of these keys means anything in a text box).
+        _shortcutHost = TopLevel.GetTopLevel(this);
+        _shortcutHost?.AddHandler(KeyDownEvent, OnShortcutKeyDown, RoutingStrategies.Tunnel);
         if (_vm is null && DataContext is WalletViewModel vm)
         {
             _vm = vm;

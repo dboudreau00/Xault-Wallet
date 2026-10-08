@@ -114,12 +114,81 @@
                                    IsVisible="{Binding DaemonTestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                    Foreground="{Binding DaemonTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
 
-                        <TextBlock Text="SOCKS PROXY" Classes="eyebrow" Margin="0,6,0,0"/>
-                        <Grid ColumnDefinitions="260,12,*">
+                        <TextBlock Text="HOW XAULTWALLET REACHES THE NETWORK" Classes="eyebrow" Margin="0,6,0,0"/>
+                        <StackPanel Spacing="6">
+                            <RadioButton GroupName="NetworkMode" AutomationProperties.AutomationId="Settings.ModeTor" AutomationProperties.Name="Built-in Tor"
+                                         IsChecked="{Binding NetworkMode, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=1}">
+                                <StackPanel Spacing="1">
+                                    <StackPanel Orientation="Horizontal" Spacing="7">
+                                        <c:Icon Data="{StaticResource IconOnion}" Width="15" Height="15" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Tor, built in (recommended)" FontWeight="SemiBold"/>
+                                    </StackPanel>
+                                    <TextBlock Classes="caption" TextWrapping="Wrap"
+                                               Text="XaultWallet runs its own Tor. Nodes never see your IP address, and nothing goes out directly while Tor connects. A node on this computer is reached directly."/>
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton GroupName="NetworkMode" AutomationProperties.AutomationId="Settings.ModeProxy" AutomationProperties.Name="My own SOCKS proxy"
+                                         IsChecked="{Binding NetworkMode, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=2}">
+                                <StackPanel Spacing="1">
+                                    <TextBlock Text="My own SOCKS proxy" FontWeight="SemiBold"/>
+                                    <TextBlock Classes="caption" TextWrapping="Wrap" Text="A Tor you already run (Tor Browser listens on 127.0.0.1:9150), or another SOCKS proxy."/>
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton GroupName="NetworkMode" AutomationProperties.AutomationId="Settings.ModeDirect" AutomationProperties.Name="Direct"
+                                         IsChecked="{Binding NetworkMode, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0}">
+                                <StackPanel Spacing="1">
+                                    <TextBlock Text="Direct" FontWeight="SemiBold"/>
+                                    <TextBlock Classes="caption" TextWrapping="Wrap" Text="The node sees your IP address."/>
+                                </StackPanel>
+                            </RadioButton>
+                        </StackPanel>
+
+                        <Grid ColumnDefinitions="260,12,*" IsVisible="{Binding ProxySelected}">
                             <TextBox Grid.Column="0" Classes="mono" FontSize="12.5" Watermark="127.0.0.1:9050" AutomationProperties.AutomationId="Settings.Proxy" AutomationProperties.Name="SOCKS proxy" Text="{Binding ProxyAddress}"/>
                             <TextBlock Grid.Column="2" Classes="caption" TextWrapping="Wrap" VerticalAlignment="Center"
-                                       Text="Optional. Routes node traffic through Tor or another SOCKS proxy so the node never sees your IP. Applies the next time a wallet opens."/>
+                                       Text="host:port. Node traffic and the in-app downloads go through it."/>
                         </Grid>
+
+                        <!-- Built-in Tor: status, start/stop, which tor, install -->
+                        <Border Classes="inset" Padding="16,14" IsVisible="{Binding TorSelected}" AutomationProperties.AutomationId="Settings.TorPanel">
+                            <StackPanel Spacing="10">
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                    <Ellipse Grid.Column="0" Width="8" Height="8" Margin="0,0,9,0" VerticalAlignment="Center"
+                                             Classes.pulse="{Binding Tor.IsStarting}"
+                                             Fill="{Binding Tor.IsReady, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+                                    <TextBlock Grid.Column="1" Classes="mono" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap"
+                                               AutomationProperties.AutomationId="Settings.TorStatus" Text="{Binding Tor.StatusText}"/>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0">
+                                        <Button AutomationProperties.AutomationId="Settings.RestartTor" AutomationProperties.Name="Start or restart Tor"
+                                                Command="{Binding RestartTorCommand}" IsEnabled="{Binding !Tor.IsStarting}"
+                                                ToolTip.Tip="Start Tor with the saved settings, or restart it">
+                                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                                <c:Icon Data="{StaticResource IconRefresh}" Width="14" Height="14"/>
+                                                <TextBlock Text="Start / restart"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Content="Stop" AutomationProperties.AutomationId="Settings.StopTor" AutomationProperties.Name="Stop Tor"
+                                                Command="{Binding StopTorCommand}"
+                                                ToolTip.Tip="Stop Tor. While Tor is chosen, wallets wait for it rather than connect directly."/>
+                                    </StackPanel>
+                                </Grid>
+                                <ProgressBar Minimum="0" Maximum="100" Value="{Binding Tor.Percent}" IsVisible="{Binding Tor.IsStarting}"/>
+                                <Grid ColumnDefinitions="*,8,Auto,8,Auto">
+                                    <TextBox Grid.Column="0" Classes="mono" FontSize="12.5" Watermark="Path to tor (blank = the one XaultWallet installed)"
+                                             AutomationProperties.AutomationId="Settings.TorPath" AutomationProperties.Name="Path to tor" Text="{Binding TorBinaryPath}"/>
+                                    <Button Grid.Column="2" Content="Browse…" AutomationProperties.AutomationId="Settings.BrowseTor" AutomationProperties.Name="Browse for tor" Command="{Binding BrowseTorCommand}"/>
+                                    <Button Grid.Column="4" Content="Test" AutomationProperties.AutomationId="Settings.TestTor" AutomationProperties.Name="Test tor" Command="{Binding TestTorCommand}"/>
+                                </Grid>
+                                <TextBlock Text="{Binding TorBinaryHint}" Classes="caption mono" TextWrapping="Wrap"/>
+                                <TextBlock AutomationProperties.AutomationId="Settings.TorTestResult" Text="{Binding TorTestResult}" Classes="result"
+                                           IsVisible="{Binding TorTestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                           Foreground="{Binding TorTestOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+                                <Separator Margin="0,2"/>
+                                <v:TorSetupPanel DataContext="{Binding TorSetup}"/>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Classes="caption" TextWrapping="Wrap"
+                                   Text="A wallet that is already open keeps its route until it is opened again (lock and unlock, or Retry)."/>
                     </StackPanel>
                 </Border>
 

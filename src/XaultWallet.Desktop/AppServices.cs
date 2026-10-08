@@ -22,7 +22,49 @@ public sealed class AppServices
         SettingsPath = Path.Combine(DataDirectory, "settings.json");
         Settings = AppSettings.Load(SettingsPath);
         WalletRpcInstallRoot = Path.Combine(LocalDataRoot() ?? DataDirectory, "XaultWallet", "monero-cli");
+        TorInstallRoot = Path.Combine(LocalDataRoot() ?? DataDirectory, "XaultWallet", "tor");
+        TorDataDirectory = Path.Combine(LocalDataRoot() ?? DataDirectory, "XaultWallet", "tor-data");
+        Tor = new TorController(() => TorInstallRoot, () => TorDataDirectory, () => Settings.TorBinaryPath);
     }
+
+    /// <summary>Where "Download &amp; install Tor" puts tor: one folder per Tor Browser release.</summary>
+    public string TorInstallRoot { get; }
+
+    /// <summary>Tor's DataDirectory (its consensus cache and guard choice, kept between runs).</summary>
+    public string TorDataDirectory { get; }
+
+    /// <summary>The app's own Tor.</summary>
+    public TorController Tor { get; }
+
+    /// <summary>
+    /// The SOCKS proxy for traffic to <paramref name="destination"/> (a node URL; null for the
+    /// internet at large, e.g. downloads): the built-in Tor's when it is on (started and waited
+    /// for here, so nothing slips out directly meanwhile), else the user's own proxy, else null
+    /// (direct). A node on this computer is always reached directly: Tor refuses loopback
+    /// destinations, and that traffic never leaves the machine.
+    /// </summary>
+    /// <exception cref="TorNotReadyException">Built-in Tor is on but couldn't connect.</exception>
+    public async Task<string?> GetNetworkProxyAsync(string? destination, CancellationToken ct = default)
+    {
+        if (Settings.UseBuiltInTor)
+        {
+            if (destination is not null && DaemonAddress.IsLoopback(destination))
+            {
+                return null;
+            }
+
+            return await Tor.EnsureStartedAsync(ct);
+        }
+
+        string proxy = Settings.ProxyAddress.Trim();
+        return proxy.Length > 0 ? proxy : null;
+    }
+
+    /// <summary>How traffic to <paramref name="destination"/> is routed, in a word, for the wallet's badge.</summary>
+    public string DescribeRoute(string? destination) =>
+        Settings.UseBuiltInTor
+            ? destination is not null && DaemonAddress.IsLoopback(destination) ? "Local node" : "Tor"
+            : Settings.ProxyAddress.Trim().Length > 0 ? "SOCKS proxy" : "Direct";
 
     /// <summary>%LOCALAPPDATA% on Windows (not the roaming profile: a 30 MB program has no business
     /// following the user between machines), ~/.local/share on Linux; null if it can't be determined.</summary>
@@ -86,7 +128,9 @@ public sealed class AppServices
 
     public void SaveSettings() => Settings.Save(SettingsPath);
 
-    public MoneroWalletService CreateWalletService() => new(WalletRpcBinaryPath, Settings.ProxyAddress);
+    /// <summary>A wallet backend whose node traffic goes through <paramref name="proxy"/> (from
+    /// <see cref="GetNetworkProxyAsync"/>), or direct when null.</summary>
+    public MoneroWalletService CreateWalletService(string? proxy) => new(WalletRpcBinaryPath, proxy);
 
     /// <summary>Backends started for a moment outside an open wallet (seed generation, import checks).</summary>
     public TemporaryBackends TemporaryBackends { get; } = new();

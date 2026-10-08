@@ -74,7 +74,7 @@ public sealed partial class WalletViewModel
         Notice("Contacting the node…");
         try
         {
-            ulong height = await MoneroDiagnostics.ProbeDaemonAsync(NodeAddress.Trim(), AppServices.Instance.Settings.ProxyAddress, _cts.Token);
+            ulong height = await MoneroDiagnostics.ProbeDaemonAsync(NodeAddress.Trim(), await AppServices.Instance.GetNetworkProxyAsync(NodeAddress.Trim(), _cts.Token), _cts.Token);
             Notice($"OK — node at height {height:N0}.");
         }
         catch (Exception ex)

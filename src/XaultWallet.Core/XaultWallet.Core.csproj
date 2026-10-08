@@ -27,6 +27,9 @@
     <!-- binaryFate's public key, unchanged from the Monero source tree (utils/gpg_keys). The
          installer trusts it only for the fingerprints pinned in MoneroSigningKeys. -->
     <EmbeddedResource Include="Installer\binaryfate.asc" LogicalName="XaultWallet.Core.Installer.binaryfate.asc" />
+    <!-- The Tor Browser Developers key, exported unchanged from Tor Project's WKD. The Tor installer
+         trusts only the signing subkey pinned in TorSigningKeys. -->
+    <EmbeddedResource Include="Tor\torbrowser.asc" LogicalName="XaultWallet.Core.Tor.torbrowser.asc" />
   </ItemGroup>
 
 </Project>

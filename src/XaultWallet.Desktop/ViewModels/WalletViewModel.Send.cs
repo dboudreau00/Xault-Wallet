@@ -462,6 +462,7 @@ public sealed partial class WalletViewModel
             string prio = priority switch { 1 => "Low", 2 => "Medium", 3 => "High", _ => "Default" };
 
             _replacedAddresses.Clear();
+            await ApplyFrozenCoinsAsync(_cts.Token);
             TransferResult prepared = await _wallet.PrepareSendAsync(destinations, AccountIndex, priority, _cts.Token);
             if (destinations.Any(d => _replacedAddresses.Contains(d.address)))
             {
@@ -484,7 +485,7 @@ public sealed partial class WalletViewModel
 
             decimal fee = MoneroRpcClient.AtomicToXmr(_preparedTx.Fee);
             string several = destinations.Count > 1 ? $" · {destinations.Count} recipients" : string.Empty;
-            SendSummary = $"{prio} priority{several} · built and signed, not yet broadcast";
+            SendSummary = $"{prio} priority{several}{FrozenNote()} · built and signed, not yet broadcast";
             ConfirmAmountText = $"{XmrAmount.Format(total)} XMR";
             SendFeeText = $"{XmrAmount.Format(fee)} XMR";
             SendTotalText = $"{XmrAmount.Format(total + fee)} XMR";
@@ -556,6 +557,7 @@ public sealed partial class WalletViewModel
             string destination = SendAddress.Trim();
 
             _replacedAddresses.Clear();
+            await ApplyFrozenCoinsAsync(_cts.Token);
             SweepAllResult sweep = await _wallet.PrepareSweepAllAsync(destination, AccountIndex, priority, _cts.Token);
             if (_replacedAddresses.Contains(destination))
             {
@@ -576,7 +578,7 @@ public sealed partial class WalletViewModel
             ConfirmLines.Add(new ConfirmLine(Who(destination), destination, $"{XmrAmount.Format(amount)} XMR"));
 
             string txNote = sweep.TxMetadataList.Count > 1 ? $" across {sweep.TxMetadataList.Count} transactions" : "";
-            SendSummary = $"Sweep of ALL spendable funds{txNote} · not yet broadcast";
+            SendSummary = $"Sweep of ALL spendable funds{txNote}{FrozenNote()} · not yet broadcast";
             ConfirmAmountText = $"{XmrAmount.Format(amount)} XMR";
             SendFeeText = $"{XmrAmount.Format(fee)} XMR";
             SendTotalText = $"{XmrAmount.Format(amount + fee)} XMR";

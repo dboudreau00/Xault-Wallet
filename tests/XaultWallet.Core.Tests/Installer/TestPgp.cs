@@ -92,6 +92,55 @@ internal sealed class TestPgp : IDisposable
         return sb.ToString();
     }
 
+    /// <summary>A detached signature (".asc") over <paramref name="data"/>, the way Tor Project signs
+    /// its checksum lists: binary signature type, SHA-512.</summary>
+    /// <param name="signatureType">0x00 (binary) normally; 0x01 to make a wrong-type signature.</param>
+    public string DetachedSign(byte[] data, byte signatureType = 0x00)
+    {
+        var hashed = new List<byte>();
+        hashed.AddRange([5, 2]);
+        hashed.AddRange(BigEndian((uint)DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
+        hashed.AddRange([22, 33, 4]);
+        hashed.AddRange(Fingerprint);
+
+        var head = new List<byte> { 4, signatureType, 1, 10 }; // v4, type, RSA, SHA-512
+        head.Add((byte)(hashed.Count >> 8));
+        head.Add((byte)hashed.Count);
+        head.AddRange(hashed);
+
+        using var h = IncrementalHash.CreateHash(HashAlgorithmName.SHA512);
+        h.AppendData(data);
+        h.AppendData(head.ToArray());
+        h.AppendData([4, 0xFF]);
+        h.AppendData(BigEndian((uint)head.Count));
+        byte[] digest = h.GetHashAndReset();
+        byte[] signature = _rsa.SignHash(digest, HashAlgorithmName.SHA512, RSASignaturePadding.Pkcs1);
+
+        var body = new List<byte>(head);
+        body.AddRange([0, 0]);
+        body.Add(digest[0]);
+        body.Add(digest[1]);
+        body.AddRange(Mpi(signature));
+
+        int len = body.Count;
+        var packet = new List<byte> { 0xC2, (byte)(((len - 192) >> 8) + 192), (byte)((len - 192) & 0xFF) };
+        packet.AddRange(body);
+        byte[] bytes = packet.ToArray();
+
+        int crc = OpenPgp.Crc24(bytes);
+        var sb = new StringBuilder();
+        sb.Append("-----BEGIN PGP SIGNATURE-----\n\n");
+        string b64 = Convert.ToBase64String(bytes);
+        for (int i = 0; i < b64.Length; i += 64)
+        {
+            sb.Append(b64, i, Math.Min(64, b64.Length - i)).Append('\n');
+        }
+
+        sb.Append('=').Append(Convert.ToBase64String([(byte)(crc >> 16), (byte)(crc >> 8), (byte)crc])).Append('\n');
+        sb.Append("-----END PGP SIGNATURE-----\n");
+        return sb.ToString();
+    }
+
     private static byte[] BigEndian(uint v)
     {
         byte[] b = new byte[4];

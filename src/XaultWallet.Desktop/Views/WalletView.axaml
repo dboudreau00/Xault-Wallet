@@ -152,6 +152,19 @@
                         </Button>
                     </StackPanel>
                     <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <!-- Route badge: how this wallet reaches its node (Tor, a proxy, or directly) -->
+                        <Border Classes="pill success" VerticalAlignment="Center" AutomationProperties.AutomationId="Wallet.RouteBadge"
+                                IsVisible="{Binding RouteIsPrivate}" Classes.warning="{Binding RouteDown}" ToolTip.Tip="{Binding RouteTip}">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <c:Icon Data="{StaticResource IconOnion}" Width="12" Height="12" StrokeThickness="2" VerticalAlignment="Center"
+                                        Foreground="{StaticResource SuccessBrush}" IsVisible="{Binding RouteIsTor}"/>
+                                <TextBlock AutomationProperties.AutomationId="Wallet.RouteText" Text="{Binding RouteText}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Classes="pill" VerticalAlignment="Center" AutomationProperties.AutomationId="Wallet.RouteDirect"
+                                IsVisible="{Binding RouteIsPublic}" ToolTip.Tip="{Binding RouteTip}">
+                            <TextBlock Text="{Binding RouteText}"/>
+                        </Border>
                         <!-- Network badge: a real-funds mainnet wallet must never be mistaken for a test one -->
                         <Border Classes="pill info" VerticalAlignment="Center" AutomationProperties.AutomationId="Wallet.NetworkBadge" IsVisible="{Binding !IsMainnetWallet}">
                             <TextBlock Text="{Binding NetworkLabel}"/>
@@ -167,11 +180,11 @@
                             </StackPanel>
                         </Border>
                         <Button Classes="icon" AutomationProperties.AutomationId="Wallet.Refresh" AutomationProperties.Name="Refresh now" Command="{Binding RefreshCommand}" IsEnabled="{Binding IsReady}"
-                                ToolTip.Tip="Refresh now">
+                                ToolTip.Tip="Refresh now (Ctrl+R)">
                             <c:Icon Data="{StaticResource IconRefresh}" Classes.spin="{Binding RefreshCommand.IsRunning}"/>
                         </Button>
                         <Button Classes="accent" AutomationProperties.AutomationId="Wallet.Lock" AutomationProperties.Name="Lock" Command="{Binding LockCommand}"
-                                ToolTip.Tip="Lock the vault: every wallet stops and its temporary files are shredded">
+                                ToolTip.Tip="Lock the vault: every wallet stops and its temporary files are shredded (Ctrl+L)">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <c:Icon Data="{StaticResource IconLock}" Width="16" Height="16"/>
                                 <TextBlock Text="Lock" Foreground="{StaticResource AccentText}"/>
@@ -207,7 +220,7 @@
                         <TextBlock Text="XMR" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Bottom"
                                    Margin="0,0,0,8" Foreground="{StaticResource TextTertiary}"/>
                         <Button Classes="ghost icon" VerticalAlignment="Bottom" Margin="0,0,0,3"
-                                AutomationProperties.AutomationId="Wallet.HideBalances" AutomationProperties.Name="Hide or show amounts" Command="{Binding ToggleBalancesCommand}" ToolTip.Tip="Hide or show amounts">
+                                AutomationProperties.AutomationId="Wallet.HideBalances" AutomationProperties.Name="Hide or show amounts" Command="{Binding ToggleBalancesCommand}" ToolTip.Tip="Hide or show amounts (Ctrl+H)">
                             <Panel>
                                 <c:Icon Data="{StaticResource IconEye}" IsVisible="{Binding !HideBalances}"/>
                                 <c:Icon Data="{StaticResource IconEyeOff}" IsVisible="{Binding HideBalances}"/>
@@ -223,6 +236,14 @@
                                 <c:Icon Data="{StaticResource IconClock}" Width="12" Height="12" StrokeThickness="2.2"
                                         Foreground="{StaticResource WarningBrush}" VerticalAlignment="Center"/>
                                 <TextBlock AutomationProperties.AutomationId="Wallet.Maturing" Text="{Binding LockedDisplay}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Classes="pill info" Margin="8,0,0,0" IsVisible="{Binding HasFrozen}"
+                                ToolTip.Tip="Coins you froze on the Coins tab: never spent until you unfreeze them">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <c:Icon Data="{StaticResource IconSnow}" Width="12" Height="12" StrokeThickness="2.2"
+                                        Foreground="{StaticResource InfoBrush}" VerticalAlignment="Center"/>
+                                <TextBlock AutomationProperties.AutomationId="Wallet.Frozen" Text="{Binding FrozenDisplay}"/>
                             </StackPanel>
                         </Border>
                     </WrapPanel>
@@ -314,6 +335,15 @@
                     </StackPanel>
                 </TabItem.Header>
                 <w:ToolsTab/>
+            </TabItem>
+            <TabItem AutomationProperties.AutomationId="Wallet.Tab.Coins" AutomationProperties.Name="Coins">
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <c:Icon Classes="tabIcon" Data="{StaticResource IconCoins}" Width="16" Height="16"/>
+                        <TextBlock Text="Coins" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <w:CoinsTab/>
             </TabItem>
         </TabControl>
 

@@ -220,6 +220,18 @@ public sealed class MoneroRpcClient : IDisposable
     public Task SetDaemonAsync(string address, bool trusted, CancellationToken ct = default) =>
         CallAsync<JsonElement>("set_daemon", new { address, trusted, ssl_support = MoneroProcessManager.DaemonSslMode(address) }, ct);
 
+    /// <summary>The account's unspent outputs ("coins"), each with its key image and frozen flag.
+    /// A watch-only wallet lists them with empty key images (computing one takes the spend key).</summary>
+    public Task<IncomingTransfersResult> GetUnspentOutputsAsync(uint accountIndex, CancellationToken ct = default) =>
+        CallAsync<IncomingTransfersResult>("incoming_transfers", new { transfer_type = "available", account_index = accountIndex }, ct);
+
+    /// <summary>Never spend this output until <see cref="ThawAsync"/>: transfer and sweep_all skip it.</summary>
+    public Task FreezeAsync(string keyImage, CancellationToken ct = default) =>
+        CallAsync<JsonElement>("freeze", new { key_image = keyImage }, ct);
+
+    public Task ThawAsync(string keyImage, CancellationToken ct = default) =>
+        CallAsync<JsonElement>("thaw", new { key_image = keyImage }, ct);
+
     public Task<GetHeightResult> GetHeightAsync(CancellationToken ct = default) =>
         CallAsync<GetHeightResult>("get_height", null, ct);
 
@@ -553,6 +565,28 @@ public sealed class TransferEntry
     public string Date => Timestamp == 0
         ? ""
         : DateTimeOffset.FromUnixTimeSeconds((long)Timestamp).ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+}
+
+/// <summary>incoming_transfers answers {} (no "transfers") when there are none.</summary>
+public sealed class IncomingTransfersResult
+{
+    [JsonPropertyName("transfers")] public List<OwnedOutput> Transfers { get; set; } = new();
+}
+
+/// <summary>One output the wallet owns: a "coin", in coin-control terms.</summary>
+public sealed class OwnedOutput
+{
+    [JsonPropertyName("amount")] public ulong Amount { get; set; }
+    [JsonPropertyName("spent")] public bool Spent { get; set; }
+    [JsonPropertyName("frozen")] public bool Frozen { get; set; }
+    [JsonPropertyName("unlocked")] public bool Unlocked { get; set; }
+    [JsonPropertyName("key_image")] public string KeyImage { get; set; } = "";
+    [JsonPropertyName("tx_hash")] public string TxHash { get; set; } = "";
+    [JsonPropertyName("block_height")] public ulong BlockHeight { get; set; }
+    [JsonPropertyName("global_index")] public ulong GlobalIndex { get; set; }
+
+    /// <summary>Which subaddress received it.</summary>
+    [JsonPropertyName("subaddr_index")] public SubaddressIndex SubaddrIndex { get; set; } = new();
 }
 
 public sealed class SubaddressIndex

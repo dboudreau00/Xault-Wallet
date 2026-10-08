@@ -3,15 +3,16 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using XaultWallet.Core.Diagnostics;
 using XaultWallet.Core.Installer;
+using XaultWallet.Core.Tor;
 
 namespace XaultWallet.Desktop.ViewModels;
 
 /// <summary>
-/// "Download &amp; install" for monero-wallet-rpc, shared by the startup screen and Settings. Wraps
-/// <see cref="WalletRpcInstaller"/>: progress, cancel, and a plain result. On success the installed
-/// path becomes the configured one, so the app uses exactly what was just verified.
+/// "Download &amp; install Tor" in Settings: wraps <see cref="TorInstaller"/> with progress, cancel and
+/// a plain result. The installed tor is then the one the built-in Tor runs (unless Settings names
+/// another), and a running Tor is restarted onto it.
 /// </summary>
-public sealed partial class WalletRpcSetupViewModel : ViewModelBase
+public sealed partial class TorSetupViewModel : ViewModelBase
 {
     private CancellationTokenSource? _cts;
 
@@ -19,7 +20,6 @@ public sealed partial class WalletRpcSetupViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(CanInstall))]
     private bool _installing;
 
-    /// <summary>0–100 while the size is known; see <see cref="ProgressKnown"/>.</summary>
     [ObservableProperty] private double _progress;
     [ObservableProperty] private bool _progressKnown;
     [ObservableProperty] private string _stageText = string.Empty;
@@ -35,22 +35,17 @@ public sealed partial class WalletRpcSetupViewModel : ViewModelBase
     public bool CanInstall => !Installing;
 
     /// <summary>Raised on the UI thread after a verified install.</summary>
-    public event Action<InstalledWalletRpc>? Installed;
+    public event Action<InstalledTor>? Installed;
 
-    /// <summary>Which route the download takes — the same one the wallet's own traffic takes.</summary>
+    /// <summary>Which route the download takes. Tor can't fetch itself.</summary>
     public string RouteNote
     {
         get
         {
-            if (AppServices.Instance.Settings.UseBuiltInTor)
-            {
-                return "The download goes through the built-in Tor, like the wallet's own traffic.";
-            }
-
             string proxy = AppServices.Instance.Settings.ProxyAddress.Trim();
-            return proxy.Length > 0
-                ? $"The download goes through your proxy ({proxy}), like the wallet's own traffic."
-                : "It connects to getmonero.org directly. Set a SOCKS proxy (e.g. Tor) under Network & privacy first if you'd rather it didn't.";
+            return !AppServices.Instance.Settings.UseBuiltInTor && proxy.Length > 0
+                ? $"The download goes through your proxy ({proxy})."
+                : "It connects to torproject.org directly (Tor can't download itself). No node is contacted.";
         }
     }
 
@@ -65,38 +60,31 @@ public sealed partial class WalletRpcSetupViewModel : ViewModelBase
         _cts = new CancellationTokenSource();
         try
         {
-            StageText = AppServices.Instance.Settings.UseBuiltInTor ? "Connecting to Tor\u2026" : string.Empty;
-            string? proxy = await AppServices.Instance.GetNetworkProxyAsync(null, _cts.Token);
-            var installer = new WalletRpcInstaller(AppServices.Instance.WalletRpcInstallRoot, proxy);
+            AppSettings s = AppServices.Instance.Settings;
+            string? proxy = !s.UseBuiltInTor && s.ProxyAddress.Trim().Length > 0 ? s.ProxyAddress.Trim() : null;
+            var installer = new TorInstaller(AppServices.Instance.TorInstallRoot, proxy);
             var progress = new Progress<InstallProgress>(Report); // created on the UI thread: reports land there
-            InstalledWalletRpc installed = await installer.InstallAsync(progress, _cts.Token);
-
-            AppServices.Instance.Settings.WalletRpcBinaryPath = installed.Path;
-            AppServices.Instance.SaveSettings();
+            InstalledTor installed = await installer.InstallAsync(progress, _cts.Token);
 
             Succeeded = true;
-            ResultText = $"Installed monero-wallet-rpc {installed.Version}. binaryFate's signature and the download's " +
-                         "checksum were verified, and it ran on this system.";
-            Log.Info("Installed monero-wallet-rpc " + installed.Version + " (signature and checksum verified).");
+            ResultText = $"Installed Tor from Tor Browser {installed.Version} ({installed.VersionLine.TrimEnd('.')}). " +
+                         "Tor Project's signature and the download's checksum were verified, and it ran on this system.";
+            Log.Info("Installed Tor " + installed.Version + " (signature and checksum verified).");
             Installed?.Invoke(installed);
         }
         catch (OperationCanceledException)
         {
             ResultText = "Cancelled. Nothing was installed.";
         }
-        catch (TorNotReadyException ex)
-        {
-            ResultText = "Nothing was downloaded: " + ex.Message;
-        }
-        catch (WalletRpcInstallException ex)
+        catch (TorInstallException ex)
         {
             ResultText = ex.Message;
-            Log.Warn("monero-wallet-rpc install failed: " + ex.Message);
+            Log.Warn("Tor install failed: " + ex.Message);
         }
         catch (Exception ex)
         {
             ResultText = "The install failed: " + ex.Message;
-            Log.Error("monero-wallet-rpc install failed", ex);
+            Log.Error("Tor install failed", ex);
         }
         finally
         {
@@ -120,13 +108,13 @@ public sealed partial class WalletRpcSetupViewModel : ViewModelBase
 
         StageText = p.Stage switch
         {
-            InstallStage.FetchingList => "Getting Monero's signed release list from getmonero.org…",
-            InstallStage.CheckingSignature => "Checking binaryFate's signature on it…",
+            InstallStage.FetchingList => "Asking torproject.org for the current release and its signed checksums…",
+            InstallStage.CheckingSignature => "Checking the Tor Browser Developers' signature on them…",
             InstallStage.Downloading => p.BytesTotal > 0
-                ? $"Downloading the official Monero CLI… {Mb(p.BytesDone)} of {Mb(p.BytesTotal)} MB"
-                : $"Downloading the official Monero CLI… {Mb(p.BytesDone)} MB",
+                ? $"Downloading the Tor Expert Bundle… {Mb(p.BytesDone)} of {Mb(p.BytesTotal)} MB"
+                : $"Downloading the Tor Expert Bundle… {Mb(p.BytesDone)} MB",
             InstallStage.CheckingChecksum => "Checking the download against the signed checksum…",
-            InstallStage.Extracting => "Unpacking monero-wallet-rpc…",
+            InstallStage.Extracting => "Unpacking tor…",
             InstallStage.Testing => "Running it once to make sure it works here…",
             _ => StageText,
         };

@@ -56,14 +56,16 @@ public sealed class PgpRsaKey
 
 /// <summary>
 /// The small part of OpenPGP (RFC 4880) needed to check a release-hash list the way
-/// <c>gpg --verify</c> does: read RSA public keys from an armored key block, and verify a
-/// cleartext-signed message ("-----BEGIN PGP SIGNED MESSAGE-----") against them.
+/// <c>gpg --verify</c> does: read RSA public keys from an armored key block, and verify either a
+/// cleartext-signed message ("-----BEGIN PGP SIGNED MESSAGE-----", Monero's hashes.txt) or a
+/// detached signature over a file (an ".asc" next to it, Tor Project's checksum lists).
 ///
 /// Deliberately narrow, and strict where it can be: version-4 RSA keys and signatures, SHA-256 or
-/// SHA-512, canonical-text signatures only. Anything else — another algorithm, a weak hash, a
-/// critical feature it doesn't know, text outside the signed block — is refused, so a failure here
-/// always means "not proven", never "accepted by a lenient guess". The text it returns is exactly
-/// the text the signature covers: callers parse nothing else.
+/// SHA-512, and only the one signature type each format uses (canonical text for cleartext, binary
+/// for detached). Anything else — another algorithm, a weak hash, a critical feature it doesn't
+/// know, text outside the signed block — is refused, so a failure here always means "not proven",
+/// never "accepted by a lenient guess". What it returns or accepts is exactly what the signature
+/// covers: callers parse nothing else.
 /// </summary>
 internal static class OpenPgp
 {
@@ -73,10 +75,27 @@ internal static class OpenPgp
 
     private const byte AlgoRsa = 1;
     private const byte AlgoRsaSignOnly = 3;
+    private const byte SigTypeBinary = 0x00;
     private const byte SigTypeCanonicalText = 0x01;
+
+    /// <summary>A format problem found while parsing; the public entry points turn it into a
+    /// <see cref="SignatureCheckException"/> that names what was being checked.</summary>
+    private sealed class FormatProblem(string why) : Exception(why);
 
     /// <summary>Every v4 RSA key (primary and subkeys) in an ASCII-armored public key block.</summary>
     public static IReadOnlyList<PgpRsaKey> ReadRsaKeys(string armoredKeyBlock)
+    {
+        try
+        {
+            return ReadRsaKeysCore(armoredKeyBlock);
+        }
+        catch (FormatProblem p)
+        {
+            throw new SignatureCheckException($"The signing key could not be read: {p.Message}.");
+        }
+    }
+
+    private static List<PgpRsaKey> ReadRsaKeysCore(string armoredKeyBlock)
     {
         ArgumentNullException.ThrowIfNull(armoredKeyBlock);
         string[] lines = SplitLines(armoredKeyBlock);
@@ -102,6 +121,64 @@ internal static class OpenPgp
     /// <exception cref="SignatureCheckException">The message is malformed, or no signature in it
     /// verifies with a trusted key.</exception>
     public static IReadOnlyList<string> VerifyClearSigned(string message, IReadOnlyList<PgpRsaKey> trustedKeys)
+    {
+        try
+        {
+            return VerifyClearSignedCore(message, trustedKeys);
+        }
+        catch (FormatProblem p)
+        {
+            throw new SignatureCheckException($"The signed release list could not be checked: {p.Message}.");
+        }
+    }
+
+    /// <summary>
+    /// Verify a detached signature (<paramref name="armoredSignature"/>, the content of an ".asc"
+    /// file) over <paramref name="data"/>, byte for byte, against <paramref name="trustedKeys"/>.
+    /// </summary>
+    /// <param name="subject">What is being checked, for messages ("Tor Project's checksum list").</param>
+    /// <param name="signerName">Whose key it must be, for messages ("the Tor Browser signing key").</param>
+    /// <exception cref="SignatureCheckException">The signature is malformed, or none of its
+    /// signatures verifies with a trusted key.</exception>
+    public static void VerifyDetached(ReadOnlySpan<byte> data, string armoredSignature, IReadOnlyList<PgpRsaKey> trustedKeys,
+        string subject, string signerName)
+    {
+        ArgumentNullException.ThrowIfNull(armoredSignature);
+        ArgumentNullException.ThrowIfNull(trustedKeys);
+
+        bool verified = false;
+        try
+        {
+            string[] lines = SplitLines(armoredSignature);
+            int i = SkipBlank(lines, 0);
+            byte[] signatureData = DecodeArmor(lines, ref i, "SIGNATURE");
+            if (SkipBlank(lines, i) != lines.Length)
+            {
+                throw Fail("there is text after the signature");
+            }
+
+            foreach ((int tag, byte[] body) in ReadPackets(signatureData))
+            {
+                if (tag != TagSignature)
+                {
+                    throw Fail("the signature block holds something other than a signature");
+                }
+
+                verified |= VerifySignaturePacket(body, data, SigTypeBinary, declaredHashes: null, trustedKeys);
+            }
+        }
+        catch (FormatProblem p)
+        {
+            throw new SignatureCheckException($"{subject} could not be checked: {p.Message}.");
+        }
+
+        if (!verified)
+        {
+            throw new SignatureCheckException($"{subject} has no valid signature by {signerName}.");
+        }
+    }
+
+    private static List<string> VerifyClearSignedCore(string message, IReadOnlyList<PgpRsaKey> trustedKeys)
     {
         ArgumentNullException.ThrowIfNull(message);
         ArgumentNullException.ThrowIfNull(trustedKeys);
@@ -180,7 +257,7 @@ internal static class OpenPgp
                 throw Fail("the signature block holds something other than a signature");
             }
 
-            verified |= VerifySignaturePacket(body, canonical, declaredHashes, trustedKeys);
+            verified |= VerifySignaturePacket(body, canonical, SigTypeCanonicalText, declaredHashes, trustedKeys);
         }
 
         if (!verified)
@@ -192,10 +269,12 @@ internal static class OpenPgp
         return text;
     }
 
-    /// <summary>True when this v4 signature packet is a valid signature over
-    /// <paramref name="canonicalText"/> by one of <paramref name="trustedKeys"/>.</summary>
+    /// <summary>True when this v4 signature packet is a valid signature of type
+    /// <paramref name="expectedSigType"/> over <paramref name="signedData"/> by one of
+    /// <paramref name="trustedKeys"/>. <paramref name="declaredHashes"/> is the cleartext format's
+    /// "Hash:" header (null for a detached signature, which has none).</summary>
     private static bool VerifySignaturePacket(
-        byte[] p, byte[] canonicalText, HashSet<string> declaredHashes, IReadOnlyList<PgpRsaKey> trustedKeys)
+        byte[] p, ReadOnlySpan<byte> signedData, byte expectedSigType, HashSet<string>? declaredHashes, IReadOnlyList<PgpRsaKey> trustedKeys)
     {
         if (p.Length < 6 || p[0] != 4)
         {
@@ -205,9 +284,9 @@ internal static class OpenPgp
         byte sigType = p[1];
         byte pubAlgo = p[2];
         byte hashAlgo = p[3];
-        if (sigType != SigTypeCanonicalText)
+        if (sigType != expectedSigType)
         {
-            throw Fail("it is not a signature over text");
+            throw Fail(expectedSigType == SigTypeCanonicalText ? "it is not a signature over text" : "it is not a signature over a file");
         }
 
         (HashAlgorithmName hash, string hashName) = hashAlgo switch
@@ -217,7 +296,7 @@ internal static class OpenPgp
             _ => throw Fail("it uses a hash algorithm this app does not accept"),
         };
 
-        if (!declaredHashes.Contains(hashName))
+        if (declaredHashes is not null && !declaredHashes.Contains(hashName))
         {
             throw Fail("its Hash header doesn't match the signature");
         }
@@ -263,7 +342,7 @@ internal static class OpenPgp
 
         // Digest = H(text || version..hashed subpackets || 0x04 0xFF || that length) (RFC 4880 §5.2.4).
         using var h = IncrementalHash.CreateHash(hash);
-        h.AppendData(canonicalText);
+        h.AppendData(signedData);
         h.AppendData(p, 0, 6 + hashedLength);
         Span<byte> trailer = stackalloc byte[6];
         trailer[0] = 4;
@@ -646,6 +725,5 @@ internal static class OpenPgp
         }
     }
 
-    private static SignatureCheckException Fail(string why) =>
-        new($"The signed release list could not be checked: {why}.");
+    private static FormatProblem Fail(string why) => new(why);
 }

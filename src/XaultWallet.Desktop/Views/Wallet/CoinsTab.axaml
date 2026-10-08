@@ -1,0 +1,92 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:XaultWallet.Desktop.ViewModels"
+             xmlns:c="clr-namespace:XaultWallet.Desktop.Controls"
+             xmlns:w="clr-namespace:XaultWallet.Desktop.Views.Wallet"
+             x:Class="XaultWallet.Desktop.Views.Wallet.CoinsTab"
+             x:DataType="vm:WalletViewModel">
+    <Border Classes="card" Margin="0,14,0,0" Padding="12,10,12,12">
+        <Grid RowDefinitions="Auto,Auto,Auto,*">
+            <!-- Title and summary -->
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,14,*" Margin="12,6,4,4">
+                <TextBlock Grid.Column="0" Text="COINS" Classes="eyebrow" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="2" Classes="caption" VerticalAlignment="Center" AutomationProperties.AutomationId="Coins.Summary"
+                           Text="{Binding CoinsSummary}"/>
+            </Grid>
+            <TextBlock Grid.Row="1" Classes="caption" Margin="12,0,12,8" TextWrapping="Wrap" Foreground="{StaticResource TextSecondary}"
+                       Text="Each payment you receive is its own coin. Freeze the ones you don't want to spend, so a payment can't combine them with others and show the recipient that they belong together. A frozen coin stays frozen after you lock, until you unfreeze it."/>
+            <TextBlock Grid.Row="2" Classes="caption" Foreground="{StaticResource WarningBrush}" Margin="12,0,12,6" TextWrapping="Wrap"
+                       AutomationProperties.AutomationId="Coins.Notice" Text="{Binding CoinsNotice}"
+                       IsVisible="{Binding CoinsNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+            <ScrollViewer Grid.Row="3" IsVisible="{Binding HasCoins}">
+                <ItemsControl AutomationProperties.AutomationId="Coins.List" AutomationProperties.Name="Coins" ItemsSource="{Binding Coins}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:CoinRow">
+                            <Border Classes="txRow">
+                                <Grid ColumnDefinitions="Auto,14,*,16,Auto,12,Auto">
+                                    <Border Grid.Column="0" Classes="txIcon" Background="{StaticResource AccentSoft}" IsVisible="{Binding !IsFrozen}">
+                                        <c:Icon Data="{StaticResource IconCoins}" Foreground="{StaticResource AccentBrush}" Width="17" Height="17"
+                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <Border Grid.Column="0" Classes="txIcon" Background="{StaticResource InfoSoft}" IsVisible="{Binding IsFrozen}">
+                                        <c:Icon Data="{StaticResource IconSnow}" Foreground="{StaticResource InfoBrush}" Width="17" Height="17"
+                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+
+                                    <StackPanel Grid.Column="2" Spacing="3" VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="{Binding ReceivedAt}" FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis"/>
+                                            <Border Classes="pill info" IsVisible="{Binding IsFrozen}" Padding="7,1">
+                                                <TextBlock Text="frozen" FontSize="10.5" FontWeight="SemiBold"/>
+                                            </Border>
+                                            <Border Classes="pill warning" IsVisible="{Binding IsLocked}" Padding="7,1">
+                                                <TextBlock Text="maturing" FontSize="10.5" FontWeight="SemiBold" Foreground="{StaticResource WarningBrush}"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <TextBlock Classes="caption" Text="{Binding Age}"/>
+                                            <TextBlock Classes="caption mono" Text="{Binding ShortTxId}" Foreground="{StaticResource TextTertiary}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <TextBlock Grid.Column="4" Text="{Binding AmountText}" Classes="mono" FontSize="14" FontWeight="SemiBold"
+                                               VerticalAlignment="Center" HorizontalAlignment="Right"/>
+
+                                    <StackPanel Grid.Column="6" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                        <Button Classes="ghost icon" AutomationProperties.AutomationId="Coins.CopyTxId" AutomationProperties.Name="Copy transaction ID"
+                                                ToolTip.Tip="Copy the ID of the transaction that paid this coin"
+                                                Command="{Binding $parent[w:CoinsTab].((vm:WalletViewModel)DataContext).CopyCoinTxIdCommand}" CommandParameter="{Binding}">
+                                            <c:Icon Data="{StaticResource IconCopy}" Width="16" Height="16"/>
+                                        </Button>
+                                        <Button Width="118" HorizontalContentAlignment="Center" IsVisible="{Binding CanFreeze}"
+                                                AutomationProperties.AutomationId="Coins.ToggleFreeze" AutomationProperties.Name="{Binding FreezeLabel}"
+                                                ToolTip.Tip="A frozen coin is never spent (Send max leaves it out too) until you unfreeze it"
+                                                Command="{Binding $parent[w:CoinsTab].((vm:WalletViewModel)DataContext).ToggleFreezeCommand}" CommandParameter="{Binding}">
+                                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                                <c:Icon Data="{StaticResource IconSnow}" Width="14" Height="14"/>
+                                                <TextBlock Text="{Binding FreezeLabel}"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- Empty state -->
+            <StackPanel Grid.Row="3" AutomationProperties.AutomationId="Coins.Empty" IsVisible="{Binding !HasCoins}" VerticalAlignment="Center"
+                        HorizontalAlignment="Center" Spacing="10" Margin="0,30">
+                <Border Width="52" Height="52" CornerRadius="16" Background="{StaticResource SurfaceAlt}" HorizontalAlignment="Center">
+                    <c:Icon Data="{StaticResource IconCoins}" Width="22" Height="22" Foreground="{StaticResource TextTertiary}"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <TextBlock Text="No coins yet" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                <TextBlock Classes="muted" HorizontalAlignment="Center" TextAlignment="Center" MaxWidth="380" TextWrapping="Wrap"
+                           Text="The payments this account has received and not spent appear here once the wallet has scanned them."/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

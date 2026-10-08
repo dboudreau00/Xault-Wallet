@@ -134,7 +134,7 @@ public sealed partial class AddWalletViewModel : ViewModelBase
         try
         {
             await Task.Delay(350, cts.Token);
-            bool testChain = await MoneroDiagnostics.IsLocalTestChainAsync(address, AppServices.Instance.Settings.ProxyAddress, cts.Token);
+            bool testChain = await MoneroDiagnostics.IsLocalTestChainAsync(address, await AppServices.Instance.GetNetworkProxyAsync(address, cts.Token), cts.Token);
             if (!cts.IsCancellationRequested)
             {
                 IsLocalTestChain = testChain;
@@ -143,6 +143,10 @@ public sealed partial class AddWalletViewModel : ViewModelBase
         catch (OperationCanceledException)
         {
             // superseded by a newer address
+        }
+        catch (TorNotReadyException)
+        {
+            // Built-in Tor isn't connected: the node can't be asked, so it isn't a test chain to us.
         }
     }
 
@@ -194,7 +198,7 @@ public sealed partial class AddWalletViewModel : ViewModelBase
             string daemon = DaemonAddress.Trim();
             (string mnemonic, ulong height) = await _profile.RunWithBackendAsync(async ct =>
             {
-                await using MoneroWalletService svc = AppServices.Instance.CreateWalletService();
+                await using MoneroWalletService svc = AppServices.Instance.CreateWalletService(await AppServices.Instance.GetNetworkProxyAsync(daemon, ct));
                 return await svc.GenerateNewSeedAsync(network, daemon, ct);
             }, _leave.Token);
             if (Network != network)
@@ -367,7 +371,7 @@ public sealed partial class AddWalletViewModel : ViewModelBase
             // Open it in monero-wallet-rpc first: a bad seed or keys must never reach the vault.
             string address = await _profile.RunWithBackendAsync(async ct =>
             {
-                await using MoneroWalletService svc = AppServices.Instance.CreateWalletService();
+                await using MoneroWalletService svc = AppServices.Instance.CreateWalletService(await AppServices.Instance.GetNetworkProxyAsync(wallet.DaemonAddress, ct));
                 return await svc.ValidateWalletOpensAsync(wallet, ct);
             }, _leave.Token);
             if (Abandoned)
@@ -586,7 +590,7 @@ public sealed partial class AddWalletViewModel : ViewModelBase
     {
         try
         {
-            return await MoneroDiagnostics.ProbeDaemonAsync(daemon, AppServices.Instance.Settings.ProxyAddress, ct);
+            return await MoneroDiagnostics.ProbeDaemonAsync(daemon, await AppServices.Instance.GetNetworkProxyAsync(daemon, ct), ct);
         }
         catch
         {

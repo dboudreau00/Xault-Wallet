@@ -91,6 +91,11 @@ public sealed class WalletSecrets
     /// <summary>The user's notes on transactions, keyed by transaction id.</summary>
     public Dictionary<string, string> TxNotes { get; set; } = new();
 
+    /// <summary>Coins (outputs) the user froze, by key image (64 hex): the wallet never spends them
+    /// until they are unfrozen. Kept here because the wallet file, where monero-wallet-rpc keeps its
+    /// own frozen flags, is shredded on lock; re-applied every time the wallet opens.</summary>
+    public List<string> FrozenKeyImages { get; set; } = new();
+
     /// <summary>Wallets have a name from the start; both slots use the same default, so a default
     /// name never tells a real wallet from a decoy.</summary>
     public const string DefaultName = "My wallet";

@@ -79,6 +79,12 @@ internal static partial class Program
             ("settings-vault-format", SettingsVaultFormat, w => ScrollTo(w, 520)),
             ("settings-rpc-installed", () => SettingsAfterInstall(ok: true), null),
             ("settings-rpc-install-failed", () => SettingsAfterInstall(ok: false), null),
+            ("wallet-coins", WalletCoins, w => SelectTab(w, 5)),
+            ("wallet-tor-connecting", WalletTorConnecting, w => SelectTab(w, 0)),
+            ("settings-tor", () => SettingsTor(TorState.Ready), w => ScrollToNamed(w, "Settings.TorPanel")),
+            ("settings-tor-connecting", () => SettingsTor(TorState.Starting), w => ScrollToNamed(w, "Settings.TorPanel")),
+            ("settings-tor-installing", SettingsTorInstalling, w => ScrollToNamed(w, "Settings.TorPanel", above: 120)),
+            ("settings-tor-blocked", () => SettingsTor(TorState.Failed), w => ScrollToNamed(w, "Settings.TorPanel")),
         };
 
         foreach ((string name, Func<ViewModelBase> screen, Action<Window>? arrange) in shots)
@@ -126,6 +132,9 @@ internal static partial class Program
         CheckOverspendKeepsTheBalanceHidden();
         CheckTemporaryBackendsEnd();
         CheckMotion();
+        CheckCoinControl();
+        CheckShortcutsPickTabs();
+        AppServices.Instance.Tor.ShowForPreview(TorState.Off);
         if (!OperatingSystem.IsWindows())
         {
             CheckDataFolderIsUnder(configRoot);
@@ -622,6 +631,80 @@ internal static partial class Program
 
     private static WalletViewModel Wallet() => Fill(ProfileViewModel.ForPreview(DemoProfile()).Start());
 
+    /// <summary>The Coins tab: four coins, the freelance one frozen (kept apart from the rest).</summary>
+    private static WalletViewModel WalletCoins()
+    {
+        WalletViewModel vm = Wallet();
+        string frozen = FakeKeyImage(41);
+        vm.FreezeForPreview(frozen);
+        vm.Balance = 4.483017420331m;            // wallet-rpc leaves frozen coins out of the balance
+        vm.UnlockedBalance = 3.371017420331m;
+        vm.SetCoins(DemoCoins(frozen));
+        return vm;
+    }
+
+    private static List<OwnedOutput> DemoCoins(string frozenKeyImage) =>
+    [
+        new OwnedOutput
+        {
+            Amount = 8_000_000_000_000, KeyImage = frozenKeyImage, TxHash = FakeTxId(3), BlockHeight = 1_711_902, Unlocked = true,
+            SubaddrIndex = new SubaddressIndex { Major = 0, Minor = 1 },
+        },
+        new OwnedOutput { Amount = 3_371_017_420_331, KeyImage = FakeKeyImage(42), TxHash = FakeTxId(2), BlockHeight = 1_712_380, Unlocked = true },
+        new OwnedOutput { Amount = 612_000_000_000, KeyImage = FakeKeyImage(43), TxHash = FakeTxId(5), BlockHeight = 1_712_371, Unlocked = false },
+        new OwnedOutput
+        {
+            Amount = 500_000_000_000, KeyImage = FakeKeyImage(44), TxHash = FakeTxId(1), BlockHeight = 0, Unlocked = false,
+            SubaddrIndex = new SubaddressIndex { Major = 0, Minor = 2 },
+        },
+    ];
+
+    private static string FakeKeyImage(int seed) => FakeTxId(1000 + seed);
+
+    /// <summary>A wallet whose node is reached through the built-in Tor, while Tor reconnects.</summary>
+    private static WalletViewModel WalletTorConnecting()
+    {
+        WalletViewModel vm = Wallet();
+        vm.ShowRouteForPreview("Tor", torUp: false);
+        vm.IsSynced = false;
+        vm.DaemonHeight = 0;
+        vm.SyncProgress = 0;
+        vm.SyncText = "Connecting to node…";
+        return vm;
+    }
+
+    /// <summary>Settings with the built-in Tor chosen, in the given state.</summary>
+    private static ViewModelBase SettingsTor(TorState state)
+    {
+        (int pct, string detail) = state switch
+        {
+            TorState.Starting => (45, "Loading relay descriptors"),
+            TorState.Failed => (0, "Your firewall or security software is blocking tor from connecting. Allow \"C:\\Users\\you\\AppData\\Local\\XaultWallet\\tor\\v15.0.24\\tor.exe\" to make outgoing connections, then start Tor again."),
+            _ => (100, ""),
+        };
+        AppServices.Instance.Tor.ShowForPreview(state, pct, detail, state == TorState.Ready ? "127.0.0.1:61442" : "");
+        var vm = new SettingsViewModel { NetworkMode = 1 };
+        vm.TorBinaryHint = @"Leave blank to use: C:\Users\you\AppData\Local\XaultWallet\tor\v15.0.24\tor.exe";
+        if (state == TorState.Ready)
+        {
+            vm.TorTestOk = true;
+            vm.TorTestResult = "OK: Tor version 0.4.9.13 (git-3c575400909efe65) (C:\\Users\\you\\AppData\\Local\\XaultWallet\\tor\\v15.0.24\\tor.exe)";
+        }
+
+        return vm;
+    }
+
+    private static ViewModelBase SettingsTorInstalling()
+    {
+        AppServices.Instance.Tor.ShowForPreview(TorState.Off);
+        var vm = new SettingsViewModel { NetworkMode = 1 };
+        vm.TorSetup.Installing = true;
+        vm.TorSetup.ProgressKnown = true;
+        vm.TorSetup.Progress = 62;
+        vm.TorSetup.StageText = "Downloading the Tor Expert Bundle… 12.4 of 20.1 MB";
+        return vm;
+    }
+
     /// <summary>Demo state for a wallet screen (no backend behind it).</summary>
     private static WalletViewModel Fill(WalletViewModel vm)
     {
@@ -658,6 +741,7 @@ internal static partial class Program
             new TransferEntry { TxId = FakeTxId(4), Type = "in", Amount = 5_233_017_420_331, Fee = 0, Height = 1_709_115, Timestamp = (ulong)(now - 400_000) },
         };
         vm.SetHistory(history);
+        vm.ShowRouteForPreview("Tor");
         return vm;
     }
 

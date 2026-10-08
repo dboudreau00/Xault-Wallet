@@ -75,11 +75,12 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     {
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
         _secrets = secrets ?? throw new ArgumentNullException(nameof(secrets));
-        _wallet = AppServices.Instance.CreateWalletService();
+        _wallet = AppServices.Instance.CreateWalletService(proxy: null); // replaced once the route is known
         Accounts.Add(new AccountChoice(0, AccountLabel(0)));
         _selectedAccount = Accounts[0];
         _nodeAddress = secrets.DaemonAddress;
         _renameText = secrets.Name;
+        AppServices.Instance.Tor.PropertyChanged += OnTorChanged;
         if (startBackend)
         {
             _ = InitializeAsync();
@@ -187,6 +188,8 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     partial void OnHideBalancesChanged(bool value)
     {
         RebuildHistoryRows(); // history amounts mask too
+        RebuildCoinRows(); // and coin amounts
+        OnPropertyChanged(nameof(FrozenDisplay));
         foreach (AccountChoice account in Accounts)
         {
             account.Mask(value); // and the account picker's balances
@@ -243,8 +246,86 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     [NotifyPropertyChangedFor(nameof(IsMainnetWallet))]
     private bool _isLocalTestChain;
 
-    /// <summary>Which tab is showing: 0 Receive, 1 Send, 2 History, 3 Contacts, 4 Tools.</summary>
+    /// <summary>Which tab is showing: 0 Receive, 1 Send, 2 History, 3 Contacts, 4 Tools, 5 Coins.</summary>
     [ObservableProperty] private int _selectedTab;
+
+    /// <summary>The number of tabs (keyboard shortcuts Ctrl+1 … Ctrl+6).</summary>
+    internal const int TabCount = 6;
+
+    /// <summary>Ctrl+1 … Ctrl+6: go to a tab (0-based). Called by the view's key handler.</summary>
+    internal void GoToTab(int index)
+    {
+        if (IsReady && index is >= 0 and < TabCount)
+        {
+            SelectedTab = index;
+        }
+    }
+
+    // ------------------------------------------------------------------ network route
+
+    /// <summary>The SOCKS proxy this wallet's backend was started with (null = direct). Fixed for
+    /// the backend's life: the app's own probes take the same route, never another.</summary>
+    private string? _route;
+
+    /// <summary>"Tor", "SOCKS proxy", "Direct" or "Local node": how this wallet reaches its node.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RouteText))]
+    [NotifyPropertyChangedFor(nameof(RouteIsTor))]
+    [NotifyPropertyChangedFor(nameof(RouteIsPrivate))]
+    [NotifyPropertyChangedFor(nameof(RouteIsPublic))]
+    [NotifyPropertyChangedFor(nameof(RouteDown))]
+    [NotifyPropertyChangedFor(nameof(RouteTip))]
+    private string _routeName = string.Empty;
+
+    public bool RouteIsTor => RouteName == "Tor";
+
+    /// <summary>Direct, or a node on this computer: shown as a plain badge.</summary>
+    public bool RouteIsPublic => RouteName is "Direct" or "Local node";
+
+    /// <summary>UI previews: whether the (absent) built-in Tor counts as connected.</summary>
+    private bool? _torUpForPreview;
+
+    /// <summary>A route for a wallet screen with no backend (UI snapshots and tests only).</summary>
+    internal void ShowRouteForPreview(string routeName, bool torUp = true)
+    {
+        _torUpForPreview = torUp;
+        RouteName = routeName;
+    }
+
+    /// <summary>The node can't see this computer's IP address (Tor or the user's proxy).</summary>
+    public bool RouteIsPrivate => RouteName is "Tor" or "SOCKS proxy";
+
+    /// <summary>Through the built-in Tor, which isn't connected right now: node traffic is held back.</summary>
+    public bool RouteDown => RouteIsTor && !(_torUpForPreview ?? AppServices.Instance.Tor.IsReady);
+
+    public string RouteText => RouteName switch
+    {
+        "" => string.Empty,
+        "Tor" => RouteDown ? "TOR · RECONNECTING" : "TOR",
+        "SOCKS proxy" => "PROXY",
+        "Local node" => "LOCAL NODE",
+        _ => "DIRECT",
+    };
+
+    public string RouteTip => RouteName switch
+    {
+        "Tor" => RouteDown
+            ? "This wallet reaches its node through the built-in Tor, which isn't connected: nothing is sent until it is."
+            : "This wallet reaches its node through the built-in Tor: the node never sees your IP address.",
+        "SOCKS proxy" => "This wallet reaches its node through your SOCKS proxy.",
+        "Local node" => "This wallet's node runs on this computer: its traffic never leaves the machine.",
+        _ => "This wallet reaches its node directly: the node sees your IP address. Turn on Tor in Settings to hide it.",
+    };
+
+    private void OnTorChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(TorController.State))
+        {
+            OnPropertyChanged(nameof(RouteDown));
+            OnPropertyChanged(nameof(RouteText));
+            OnPropertyChanged(nameof(RouteTip));
+        }
+    }
 
     // ------------------------------------------------------------------ accounts
 
@@ -269,6 +350,9 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         // Everything shown is per account: start over from the new one.
         _entries = Array.Empty<TransferEntry>();
         History.Clear();
+        _outputs = Array.Empty<OwnedOutput>();
+        Coins.Clear();
+        HasCoins = false;
         HasHistory = false;
         Addresses.Clear();
         ReceiveAddress = string.Empty;
@@ -310,6 +394,18 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         IsReady = false;
         try
         {
+            // Decide the route first (waiting for the built-in Tor when it is on), and start the
+            // backend with it: nothing may reach the node by another way meanwhile.
+            RouteName = AppServices.Instance.DescribeRoute(_secrets.DaemonAddress);
+            if (RouteIsTor && !AppServices.Instance.Tor.IsReady)
+            {
+                Status = "Connecting to Tor…";
+            }
+
+            _route = await AppServices.Instance.GetNetworkProxyAsync(_secrets.DaemonAddress, _cts.Token);
+            try { await _wallet.DisposeAsync(); } catch { /* the placeholder never opened */ }
+            _wallet = AppServices.Instance.CreateWalletService(_route);
+
             Status = _secrets.Kind == WalletKind.Seed ? "Restoring wallet from seed…" : "Restoring wallet from its keys…";
             await _wallet.OpenAsync(_secrets, _cts.Token);
             IsLocalTestChain = _wallet.IsLocalTestChain;
@@ -345,10 +441,9 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        // Rebuild the wallet service so a monero-wallet-rpc path (or default node) just changed in
-        // Settings actually takes effect — the service captures the binary path at construction.
+        // InitializeAsync rebuilds the wallet service, so a monero-wallet-rpc path, node or route
+        // just changed in Settings actually takes effect (the service captures them at construction).
         try { await _wallet.DisposeAsync(); } catch { /* best effort */ }
-        _wallet = AppServices.Instance.CreateWalletService();
 
         await InitializeAsync();
     }
@@ -420,7 +515,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             // Node sync tracker: compare the wallet's scanned height against the daemon's tip.
             try
             {
-                DaemonHeight = await MoneroDiagnostics.ProbeDaemonAsync(_secrets.DaemonAddress, AppServices.Instance.Settings.ProxyAddress, _cts.Token);
+                DaemonHeight = await MoneroDiagnostics.ProbeDaemonAsync(_secrets.DaemonAddress, _route, _cts.Token);
             }
             catch
             {
@@ -433,6 +528,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             {
                 await RefreshAccountsAsync(_cts.Token);
                 await RefreshAddressesAsync(_cts.Token);
+                await RefreshCoinsAsync(_cts.Token);
             }
             catch (OperationCanceledException) { }
             catch (Exception ex)
@@ -515,10 +611,42 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
             double done = wallet > start ? wallet - start : 0;
             SyncProgress = Math.Clamp(100.0 * done / Math.Max(1, node - start), 0, 99.9);
             ulong behind = node - wallet;
-            SyncText = $"Syncing · {SyncProgress.ToString("0.0", Inv)}%  ·  {wallet.ToString("N0", Inv)} / {node.ToString("N0", Inv)}  ({behind.ToString("N0", Inv)} behind)";
+            string eta = EstimateTimeLeft(wallet, behind) is { } left ? $"  ·  {left}" : string.Empty;
+            SyncText = $"Syncing · {SyncProgress.ToString("0.0", Inv)}%  ·  {wallet.ToString("N0", Inv)} / {node.ToString("N0", Inv)}  ({behind.ToString("N0", Inv)} behind){eta}";
         }
 
         Status = SyncText;
+    }
+
+    // Scan speed, smoothed: (when, wallet height) at the first sample of the current stretch.
+    private (DateTime at, ulong height)? _scanStart;
+
+    /// <summary>"about 4 min left", from how fast the wallet has been scanning; null until there
+    /// is enough to go on (the first half minute, or no progress).</summary>
+    internal string? EstimateTimeLeft(ulong walletHeight, ulong behind, DateTime? now = null)
+    {
+        DateTime t = now ?? DateTime.UtcNow;
+        if (_scanStart is not { } start || walletHeight < start.height)
+        {
+            _scanStart = (t, walletHeight);
+            return null;
+        }
+
+        double seconds = (t - start.at).TotalSeconds;
+        ulong scanned = walletHeight - start.height;
+        if (seconds < 30 || scanned == 0)
+        {
+            return null;
+        }
+
+        double left = behind / (scanned / seconds);
+        return left switch
+        {
+            < 60 => "less than a minute left",
+            < 3600 => $"about {Math.Ceiling(left / 60).ToString(Inv)} min left",
+            < 86400 => $"about {(left / 3600).ToString("0.#", Inv)} h left",
+            _ => "more than a day left",
+        };
     }
 
     [RelayCommand]
@@ -634,6 +762,7 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
         }
 
         _disposed = true;
+        AppServices.Instance.Tor.PropertyChanged -= OnTorChanged;
 
         try { await _cts.CancelAsync(); } catch { }
 

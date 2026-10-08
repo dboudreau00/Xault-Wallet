@@ -160,5 +160,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         await _closing; // a lock still finishing
         await AppServices.Instance.TemporaryBackends.StopAllAsync(); // e.g. a seed being generated
+        await AppServices.Instance.Tor.StopAsync(); // last: wallets above may still be routed through it
     }
 }

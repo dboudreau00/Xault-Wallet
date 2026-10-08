@@ -41,6 +41,107 @@ public sealed partial class SettingsViewModel : ViewModelBase
     // Optional SOCKS proxy (e.g. Tor) for the wallet backend's daemon traffic.
     [ObservableProperty] private string _proxyAddress;
 
+    // ---- How the app reaches the network: 1 built-in Tor, 2 the user's own SOCKS proxy, 0 direct ----
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TorSelected))]
+    [NotifyPropertyChangedFor(nameof(ProxySelected))]
+    private int _networkMode;
+
+    public bool TorSelected => NetworkMode == 1;
+
+    public bool ProxySelected => NetworkMode == 2;
+
+    partial void OnNetworkModeChanged(int value)
+    {
+        SavedMessage = string.Empty;
+        DaemonTestResult = string.Empty;
+    }
+
+    /// <summary>The app's own Tor: its live status, start and stop.</summary>
+    public TorController Tor => AppServices.Instance.Tor;
+
+    /// <summary>"Download &amp; install Tor".</summary>
+    public TorSetupViewModel TorSetup { get; } = new();
+
+    /// <summary>Explicit tor binary (blank = the installed one, else tor on PATH).</summary>
+    [ObservableProperty] private string _torBinaryPath;
+
+    [ObservableProperty] private string _torBinaryHint = string.Empty;
+
+    [ObservableProperty] private string _torTestResult = string.Empty;
+
+    [ObservableProperty] private bool _torTestOk;
+
+    /// <summary>Set by the View: file picker for the tor binary.</summary>
+    public Func<Task<string?>>? BrowseTorHandler { get; set; }
+
+    private void RefreshTorHint()
+    {
+        string detected = TorInstalledOrOnPath();
+        TorBinaryHint = detected.Length > 0
+            ? "Leave blank to use: " + detected
+            : "Not installed yet: Download & install Tor below, or enter the full path to your own tor.";
+    }
+
+    private static string TorInstalledOrOnPath() =>
+        XaultWallet.Core.Tor.TorInstaller.FindInstalled(AppServices.Instance.TorInstallRoot)
+        ?? ExecutableLocator.FindOnPath(XaultWallet.Core.Tor.TorInstaller.TorFileName, Environment.GetEnvironmentVariable("PATH"))
+        ?? string.Empty;
+
+    [RelayCommand]
+    private async Task BrowseTorAsync()
+    {
+        if (BrowseTorHandler is not null && await BrowseTorHandler() is { } picked && !string.IsNullOrWhiteSpace(picked))
+        {
+            TorBinaryPath = picked;
+        }
+    }
+
+    /// <summary>Run the tor that would be used ("--version"), without starting it.</summary>
+    [RelayCommand]
+    private async Task TestTorAsync()
+    {
+        TorTestOk = false;
+        TorTestResult = "Testing…";
+        try
+        {
+            string path = string.IsNullOrWhiteSpace(TorBinaryPath)
+                ? TorInstalledOrOnPath()
+                : ExecutableLocator.ResolveConfigured(TorBinaryPath, Environment.GetEnvironmentVariable("PATH"));
+            if (path.Length == 0)
+            {
+                TorTestResult = "No tor found. Download & install it below, or enter the full path to your own.";
+                return;
+            }
+
+            string version = await XaultWallet.Core.Tor.TorDiagnostics.ProbeTorAsync(path);
+            TorTestOk = true;
+            TorTestResult = $"OK: {version.TrimEnd('.')} ({path})";
+        }
+        catch (Exception ex)
+        {
+            TorTestResult = ex.Message;
+        }
+    }
+
+    /// <summary>Start Tor now (or restart it), with what is saved.</summary>
+    [RelayCommand]
+    private async Task RestartTorAsync()
+    {
+        try
+        {
+            await Tor.RestartAsync();
+        }
+        catch (TorNotReadyException)
+        {
+            // Tor.StatusText already says why.
+        }
+    }
+
+    [RelayCommand]
+    private Task StopTorAsync() => Tor.StopAsync();
+
     // Vault backup (export / restore the encrypted vault file)
     [ObservableProperty] private string _backupResult = string.Empty;
     [ObservableProperty] private bool _backupOk;
@@ -158,6 +259,20 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _autoRefreshSeconds = s.AutoRefreshSeconds;
         _autoLockMinutes = s.AutoLockMinutes;
         _proxyAddress = s.ProxyAddress;
+        _networkMode = s.UseBuiltInTor ? 1 : s.ProxyAddress.Trim().Length > 0 ? 2 : 0;
+        _torBinaryPath = s.TorBinaryPath;
+        RefreshTorHint();
+        TorSetup.Installed += installed =>
+        {
+            TorBinaryPath = string.Empty; // the newest install is used when the path is blank
+            RefreshTorHint();
+            TorTestOk = true;
+            TorTestResult = $"OK: {installed.VersionLine.TrimEnd('.')} ({installed.Path})";
+            if (AppServices.Instance.Settings.UseBuiltInTor && string.IsNullOrWhiteSpace(AppServices.Instance.Settings.TorBinaryPath))
+            {
+                _ = RestartTorCommand.ExecuteAsync(null); // onto the new tor
+            }
+        };
         CanRestoreVault = profile is null;
         ShowFormatCard = profile?.VaultIsOldFormat == true;
         RefreshBinaryHint();
@@ -241,9 +356,15 @@ public sealed partial class SettingsViewModel : ViewModelBase
         DaemonTestResult = "Contacting daemon\u2026";
         try
         {
-            // Probe through the proxy currently typed in this screen, saved or not: the test
-            // must exercise the same route the wallet will actually use.
-            ulong height = await MoneroDiagnostics.ProbeDaemonAsync(DefaultDaemonAddress, ProxyAddress);
+            // Probe the way this screen is set, saved or not: the test must exercise the same
+            // route the wallet will actually use.
+            string? proxy = NetworkMode switch
+            {
+                1 when !DaemonAddress.IsLoopback(DefaultDaemonAddress) => await Tor.EnsureStartedAsync(),
+                2 => ProxyAddress,
+                _ => null,
+            };
+            ulong height = await MoneroDiagnostics.ProbeDaemonAsync(DefaultDaemonAddress, proxy);
             DaemonTestOk = true;
             DaemonTestResult = $"OK \u2014 node at height {height}.";
         }
@@ -271,11 +392,19 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
 
         string proxy = (ProxyAddress ?? string.Empty).Trim();
+        if (NetworkMode == 2 && proxy.Length == 0)
+        {
+            SavedMessage = "Enter your SOCKS proxy as host:port (e.g. 127.0.0.1:9050), or choose another option. Not saved.";
+            return;
+        }
+
         if (proxy.Length > 0 && !IsValidProxy(proxy))
         {
             SavedMessage = "Proxy must be host:port (e.g. 127.0.0.1:9050 for Tor) — not saved.";
             return;
         }
+
+        string torPath = (TorBinaryPath ?? string.Empty).Trim();
 
         try
         {
@@ -285,13 +414,20 @@ public sealed partial class SettingsViewModel : ViewModelBase
             s.DefaultNetworkIndex = NetworkIndex;
             s.AutoRefreshSeconds = AutoRefreshSeconds;
             s.AutoLockMinutes = AutoLockMinutes;
-            s.ProxyAddress = proxy;
+            s.ProxyAddress = NetworkMode == 0 ? string.Empty : proxy;
+            bool torWasOn = s.UseBuiltInTor;
+            string torPathBefore = s.TorBinaryPath;
+            s.UseBuiltInTor = NetworkMode == 1;
+            s.TorBinaryPath = torPath;
             AppServices.Instance.SaveSettings();
+            ApplyTorSetting(torWasOn, torPathBefore != torPath);
 
             // Reflect any clamping back into the fields.
             AutoRefreshSeconds = s.AutoRefreshSeconds;
             AutoLockMinutes = s.AutoLockMinutes;
-            SavedMessage = "Settings saved.";
+            SavedMessage = NetworkMode == 1 && TorInstalledOrOnPath().Length == 0 && torPath.Length == 0
+                ? "Saved. Tor isn't installed yet: Download & install it under Network & privacy."
+                : "Settings saved.";
             Log.Info("Settings saved.");
         }
         catch (Exception ex)
@@ -584,6 +720,22 @@ public sealed partial class SettingsViewModel : ViewModelBase
         catch (Exception ex)
         {
             SavedMessage = "Couldn't open the folder: " + ex.Message;
+        }
+    }
+
+    /// <summary>Start, restart or stop the built-in Tor to match what was just saved.</summary>
+    private void ApplyTorSetting(bool wasOn, bool binaryChanged)
+    {
+        if (NetworkMode == 1)
+        {
+            if (!wasOn || binaryChanged || Tor.State is TorState.Off or TorState.Failed)
+            {
+                _ = RestartTorCommand.ExecuteAsync(null);
+            }
+        }
+        else if (Tor.State != TorState.Off)
+        {
+            _ = Tor.StopAsync();
         }
     }
 

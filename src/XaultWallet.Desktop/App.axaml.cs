@@ -35,6 +35,14 @@ public partial class App : Application
         {
             var mainVm = new MainWindowViewModel();
             var window = new MainWindow { DataContext = mainVm };
+            window.RestorePlacement(AppServices.Instance.Settings);
+
+            // Built-in Tor starts with the app, Wasabi-style, so it is usually connected by the
+            // time a password has been typed. Its status shows in Settings; wallets wait for it.
+            if (AppServices.Instance.Settings.UseBuiltInTor)
+            {
+                Dispatcher.UIThread.Post(() => _ = StartTorAsync(), DispatcherPriority.Background);
+            }
 
             bool cleaned = false;
 
@@ -51,6 +59,7 @@ public partial class App : Application
                 e.Cancel = true;
                 try
                 {
+                    window.RememberPlacement(AppServices.Instance.Settings);
                     await SensitiveClipboard.ClearIfStillOursAsync();
                     await mainVm.ShutdownAsync();
                 }
@@ -71,6 +80,18 @@ public partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private static async Task StartTorAsync()
+    {
+        try
+        {
+            await AppServices.Instance.Tor.EnsureStartedAsync();
+        }
+        catch (TorNotReadyException)
+        {
+            // Shown in Settings and on any wallet that waits for it; logged by the controller.
+        }
     }
 
     /// <summary>A second launch signals this instance (see Program.Main): un-minimise and focus the

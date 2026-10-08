@@ -159,6 +159,42 @@ jobs:
           for ($i = 0; $i -lt 30 -and (Test-Path "$dir\XaultWallet.exe"); $i++) { Start-Sleep 1 }
           if (Test-Path "$dir\XaultWallet.exe") { throw 'Uninstalling left XaultWallet.exe behind' }
           Write-Host "Installer OK: $($setup.Name) installs the published exe and uninstalls cleanly."
+      - name: MSI package (Windows; WiX Toolset 3, unsigned)
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          # WiX 3.14 is on the Windows runner image (its installer sets WIX); install it only if it isn't.
+          $wix = $env:WIX
+          if (-not $wix -or -not (Test-Path (Join-Path $wix 'bin\candle.exe'))) {
+            $wix = @(Get-ChildItem ${env:ProgramFiles(x86)} -Directory -Filter 'WiX Toolset v3*' -ErrorAction SilentlyContinue | Sort-Object Name -Descending)[0].FullName
+          }
+          if (-not $wix) {
+            choco install wixtoolset --version 3.14.1 -y --no-progress
+            $wix = @(Get-ChildItem ${env:ProgramFiles(x86)} -Directory -Filter 'WiX Toolset v3*' | Sort-Object Name -Descending)[0].FullName
+          }
+          $bin = Join-Path $wix 'bin'
+          $version = @(([xml](Get-Content src/XaultWallet.Desktop/XaultWallet.Desktop.csproj)).Project.PropertyGroup.Version | Where-Object { $_ })[0]
+          $numeric = ($version -split '-')[0]
+          $tag = if ($env:TAG) { $env:TAG } else { "dev-$($env:GITHUB_SHA.Substring(0, 7))" }
+          & "$bin\candle.exe" -nologo -arch x64 "-dVersion=$numeric" "-dSourceDir=$PWD\out" "-dRepoDir=$PWD" -out "$PWD\obj-msi\XaultWallet.wixobj" installer\XaultWallet.wxs
+          if ($LASTEXITCODE -ne 0) { throw "candle failed ($LASTEXITCODE)" }
+          & "$bin\light.exe" -nologo -ext WixUIExtension -cultures:en-us -out "dist\XaultWallet-$tag-win-x64.msi" "obj-msi\XaultWallet.wixobj"
+          if ($LASTEXITCODE -ne 0) { throw "light failed ($LASTEXITCODE)" }
+      - name: The MSI installs the published exe and uninstalls cleanly (silent, current user)
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          $msi = @(Get-ChildItem dist -Filter '*.msi')[0].FullName
+          $log = Join-Path $env:RUNNER_TEMP 'msi-install.log'
+          $p = Start-Process msiexec.exe -ArgumentList '/i', "`"$msi`"", '/qn', '/norestart', '/l*v', "`"$log`"" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content $log -Tail 80; throw "msiexec /i exited with $($p.ExitCode)" }
+          $exe = Join-Path $env:LOCALAPPDATA 'Programs\XaultWallet\XaultWallet.exe'
+          if (-not (Test-Path $exe)) { throw "XaultWallet.exe was not installed at $exe" }
+          if ((Get-FileHash $exe).Hash -ne (Get-FileHash out\XaultWallet.exe).Hash) { throw 'The installed exe differs from the published one' }
+          $u = Start-Process msiexec.exe -ArgumentList '/x', "`"$msi`"", '/qn', '/norestart' -Wait -PassThru
+          if ($u.ExitCode -ne 0) { throw "msiexec /x exited with $($u.ExitCode)" }
+          if (Test-Path $exe) { throw 'Uninstalling left XaultWallet.exe behind' }
+          Write-Host "MSI OK: $(Split-Path $msi -Leaf) installs the published exe and uninstalls cleanly."
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-${{ matrix.rid }}
@@ -205,7 +241,7 @@ jobs:
             echo "::error::CHANGELOG.md has no '## ${version}' section"; exit 1
           fi
           {
-            echo "**Unaudited beta: do not use with real funds.** The binaries and the Windows installer are unsigned; verify them against \`SHA256SUMS\`. \`monero-wallet-rpc\` is not bundled: download and verify it from getmonero.org."
+            echo "**Unaudited beta: do not use with real funds.** The binaries and the Windows installers are unsigned; verify them against \`SHA256SUMS\`. \`monero-wallet-rpc\` is not bundled: download and verify it from getmonero.org."
             # Relative links (docs/…, SECURITY.md#…) would resolve against the releases page: pin them to
             # the exact commit being released, which exists even while the tag does not (a draft).
             perl -pe 's{\]\((?!https?://|#|mailto:)([^)\s]+)\)}{](https://github.com/$ENV{GITHUB_REPOSITORY}/blob/$ENV{GITHUB_SHA}/$1)}g' section.md

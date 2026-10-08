@@ -80,6 +80,7 @@ public sealed partial class WalletScenario
         await StepAsync("The decoy wallet received the payment", DecoyReceivedAsync);
         await StepAsync("Lock", LockAsync);
         await StepAsync("The main wallet reopens with its funds and history", MainAgainAsync);
+        await StepAsync("Coin control: freeze a coin on the Coins tab", FreezeCoinAsync);
         await StepAsync("Settings opens and closes", SettingsAsync);
         await StepAsync("Add a second wallet to the open vault (new seed, backup checked)", AddSecondWalletAsync);
         await StepAsync("Switch back to the first wallet", () => SwitchToAsync(FirstWalletName, MainAddress));
@@ -88,6 +89,7 @@ public sealed partial class WalletScenario
         await StepAsync("The second wallet received its share", SecondReceivedAsync);
         await StepAsync("Lock", LockAsync);
         await StepAsync("The vault reopens on the wallet shown last, with both wallets in it", ReopenBothAsync);
+        await StepAsync("The frozen coin is still frozen after the lock", CoinStillFrozenAsync);
         await StepAsync("Lock", LockAsync);
         await StepAsync("The duress password still opens only the decoy, which got paid again", DecoyStillAloneAsync);
         await StepAsync("Lock", LockAsync);
@@ -317,6 +319,33 @@ public sealed partial class WalletScenario
             t => t.Contains("Sent") && t.Any(x => x.Contains("12.5 XMR", StringComparison.Ordinal)),
             Seconds(180), "the payment in the main wallet's history after reopening", nudge: RefreshAsync);
         await ShotAsync("main-history-again");
+    }
+
+/// <summary>Freeze the largest coin: the Coins tab, the backend's freeze and the vault, through the UI.</summary>
+    private async Task FreezeCoinAsync()
+    {
+        await _app.ClickAsync("Wallet.Tab.Coins");
+        await EventuallyAsync(() => _app.ReadTextAsync("Coins.Summary"), t => t.Contains("coins", StringComparison.Ordinal),
+            Seconds(120), "the wallet's coins", nudge: RefreshAsync);
+        Check(!(await _app.ReadTextAsync("Coins.Summary")).Contains("frozen", StringComparison.Ordinal), "a coin was frozen before any was");
+        await _app.ClickAsync("Coins.ToggleFreeze"); // the first row: the largest coin
+        await EventuallyAsync(() => _app.ReadTextAsync("Coins.Summary"), t => t.Contains("1 frozen", StringComparison.Ordinal),
+            Seconds(60), "the coin to show as frozen", failWhenVisible: "Coins.Notice");
+        string frozen = await EventuallyAsync(() => _app.ReadTextAsync("Wallet.Frozen"), t => t.StartsWith("Frozen ", StringComparison.Ordinal),
+            Seconds(20), "the frozen amount on the balance card");
+        Check(Xmr(frozen) > 0m, $"the balance card says \"{frozen}\"");
+        await ShotAsync("coin-frozen");
+        await _app.ClickAsync("Wallet.Tab.Receive");
+    }
+
+    /// <summary>After a lock, the frozen list comes back from the vault (the wallet file was shredded).</summary>
+    private async Task CoinStillFrozenAsync()
+    {
+        await _app.ClickAsync("Wallet.Tab.Coins");
+        await EventuallyAsync(() => _app.ReadTextAsync("Coins.Summary"), t => t.Contains("1 frozen", StringComparison.Ordinal),
+            Seconds(180), "the frozen coin after reopening the vault", nudge: RefreshAsync);
+        await ShotAsync("coin-still-frozen");
+        await _app.ClickAsync("Wallet.Tab.Receive");
     }
 
     private async Task SettingsAsync()

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  XaultWallet Windows Installer package (.msi), WiX Toolset 3.14. Built by .github/workflows/release.yml
+  from the published single-file XaultWallet.exe; unsigned, like the zip and the setup .exe.
+
+  Per-user, no administrator rights: installs into %LOCALAPPDATA%\Programs\XaultWallet with a Start
+  menu entry, and appears in Apps & features for the current user. The vault and settings live in
+  %APPDATA%\XaultWallet and are never written, moved or deleted by the package.
+
+  Local build (repository root, after publishing win-x64 into .\out with the docs copied next to it):
+    candle -arch x64 -dVersion=0.6.0 -dSourceDir=%CD%\out -dRepoDir=%CD% -out obj\XaultWallet.wixobj installer\XaultWallet.wxs
+    light -ext WixUIExtension -out dist\XaultWallet.msi obj\XaultWallet.wixobj
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <!-- Never change UpgradeCode: it is how a later package finds and replaces this one. -->
+  <Product Id="*" Name="XaultWallet" Language="1033" Version="$(var.Version)" Manufacturer="dboudreau"
+           UpgradeCode="{7642704A-6D76-460A-9D91-3C6D045F5597}">
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perUser" InstallPrivileges="limited"
+             Description="XaultWallet, a privacy-first Monero wallet" Comments="Unsigned. Verify it against SHA256SUMS." />
+
+    <!-- A beta and its final release share the numeric version (0.6.0): a same-version package replaces the old one. -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of XaultWallet is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="XaultIcon" SourceFile="$(var.RepoDir)\src\XaultWallet.Desktop\Assets\xault.ico" />
+    <Property Id="ARPPRODUCTICON" Value="XaultIcon" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/dboudreau00/Xault-Wallet" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/dboudreau00/Xault-Wallet/issues" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.RepoDir)\installer\License.rtf" />
+    <UIRef Id="WixUI_Minimal" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="LocalAppDataFolder">
+        <Directory Id="UserProgramsFolder" Name="Programs">
+          <Directory Id="INSTALLFOLDER" Name="XaultWallet" />
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder" />
+    </Directory>
+
+    <!-- Per-user files need a per-user key path (ICE38): a value under HKCU stands in for each. -->
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="Program" Guid="{8492C543-1DB4-4793-B5D9-9118F0D8A4C2}">
+        <RegistryValue Root="HKCU" Key="Software\XaultWallet\Installer" Name="Program" Type="integer" Value="1" KeyPath="yes" />
+        <File Id="XaultWalletExe" Source="$(var.SourceDir)\XaultWallet.exe" />
+        <File Id="ReadmeMd" Source="$(var.SourceDir)\README.md" />
+        <File Id="SecurityMd" Source="$(var.SourceDir)\SECURITY.md" />
+        <File Id="ChangelogMd" Source="$(var.SourceDir)\CHANGELOG.md" />
+        <File Id="LicenseTxt" Source="$(var.SourceDir)\LICENSE" />
+        <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
+        <RemoveFolder Id="RemoveUserProgramsFolder" Directory="UserProgramsFolder" On="uninstall" />
+      </Component>
+    </DirectoryRef>
+
+    <DirectoryRef Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut" Guid="{F068FE8D-3539-46C9-8D52-3237233BF438}">
+        <Shortcut Id="XaultWalletShortcut" Name="XaultWallet" Description="Privacy-first Monero wallet"
+                  Target="[INSTALLFOLDER]XaultWallet.exe" WorkingDirectory="INSTALLFOLDER" Icon="XaultIcon" />
+        <RegistryValue Root="HKCU" Key="Software\XaultWallet\Installer" Name="Shortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <Feature Id="Main" Title="XaultWallet" Level="1">
+      <ComponentRef Id="Program" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+  </Product>
+</Wix>

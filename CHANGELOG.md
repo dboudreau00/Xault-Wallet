@@ -41,10 +41,15 @@ has saved it (it ignores the new frozen-coins field). Screenshots of everything 
 - **Time left while syncing**: the sync line estimates how long until the wallet catches up.
 - **The window opens at the size you left it** (maximised too).
 
-### Windows installer
+### Windows installers
 - Releases now include **`XaultWallet-<version>-win-x64-setup.exe`**: installs for the current user
   without administrator rights (or for everyone, if chosen), adds a Start menu entry and an
-  uninstaller, and never touches your vault. Unsigned, like the zip, which is still there.
+  uninstaller, and never touches your vault.
+- And **`XaultWallet-<version>-win-x64.msi`**, the same as a Windows Installer package (per user, no
+  administrator rights), for those who deploy MSIs. Pick one of the two: both install into
+  `%LOCALAPPDATA%\Programs\XaultWallet`.
+- Both are unsigned, like the zip, which is still there. The release workflow test-installs and
+  uninstalls each before anything is published.
 
 ## 0.5.1-beta - 2026-10-07 - hardening fixes, .NET 10
 

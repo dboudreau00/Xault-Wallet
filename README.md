@@ -27,8 +27,8 @@ installed, and fail-closed while it runs) and coin control come built in.
 - **Coin control.** A Coins tab lists every unspent coin with the label of the address it arrived
   at. Freeze the ones you don't want to spend, so a payment can't combine them with others; frozen
   stays frozen across locks. [How-to #11](#11-coin-control-freeze-coins)
-- **A Windows installer** (`…-win-x64-setup.exe`): per-user, no administrator rights, Start menu entry
-  and uninstaller, never touches your vault.
+- **Windows installers**: `…-win-x64-setup.exe` or `…-win-x64.msi`, per-user, no administrator
+  rights, Start menu entry and uninstaller, never touching your vault.
 - **Keyboard shortcuts** (Ctrl+1 to 6, R, L, H), a time-left estimate while syncing, and a window that
   reopens at the size you left it. [Shortcuts](#12-keyboard-shortcuts)
 
@@ -76,7 +76,7 @@ installed, and fail-closed while it runs) and coin control come built in.
 | **Verified one-click backend** | Bring your own `monero-wallet-rpc` (recommended), or press **Download & install**: the app checks getmonero.org's `hashes.txt` against **binaryFate's signature** (key pinned in the app) and the download against its signed SHA-256 before installing anything. |
 | **Built-in Tor** | Choose *Tor, built in* and the app runs its own `tor`: node traffic, node checks and downloads go through it, and **nothing goes out directly while it connects** (fail closed). *Download & install Tor* checks Tor Project's signature (Tor Browser Developers key, pinned in the app) and the download's signed SHA-256 first. A badge on every wallet says how it reaches its node. |
 | **Coin control** | The **Coins** tab lists unspent coins with the address label they arrived at. **Freeze** one and no transaction spends it (Send max included) until you unfreeze it; the frozen list is sealed in the vault and survives a lock. |
-| **Windows installer** | A per-user `setup.exe` (no admin rights), Start menu entry and uninstaller; the vault in `%APPDATA%` is never touched. Or keep using the zip. |
+| **Windows installers** | A per-user `setup.exe` or `.msi` (no admin rights), Start menu entry and uninstaller; the vault in `%APPDATA%` is never touched. Or keep using the zip. |
 | **Locked-down backend** | wallet-rpc runs on loopback with **per-session random credentials**, its files (wallet, log, ring database) live in one folder **shredded on lock**, and the app checks the port belongs to the process it started before sending it anything. |
 | **Hygiene by default** | Copied addresses/keys **auto-clear from the clipboard after 30 s**. Logs **redact seeds, passwords and keys** and record nothing that tells your two wallets apart. Auto-lock on inactivity. |
 | **No hand-rolled crypto** | All key derivation, signing, proofs and address logic is done by the **official `monero-wallet-rpc`**. |
@@ -114,10 +114,10 @@ the node never sees your IP address.
 Download the latest `XaultWallet-<version>-<platform>` archive from the releases page, check it
 against `SHA256SUMS`, and extract it. It is one self-contained executable — **no .NET install
 required** (Windows 10/11 x64, Linux x64, macOS Apple Silicon). On Windows you can run
-`XaultWallet-<version>-win-x64-setup.exe` instead: it installs for your user without administrator
-rights, adds a Start menu entry and an uninstaller, and never touches your vault. Binaries and the
-installer are currently **unsigned**, so Windows SmartScreen / macOS Gatekeeper will ask before the
-first run.
+`XaultWallet-<version>-win-x64-setup.exe` (or the `.msi`, if you deploy MSIs) instead: it installs
+for your user without administrator rights, adds a Start menu entry and an uninstaller, and never
+touches your vault. Binaries and installers are currently **unsigned**, so Windows SmartScreen /
+macOS Gatekeeper will ask before the first run.
 
 ### Step 2 — Get monero-wallet-rpc
 
@@ -511,7 +511,7 @@ XaultWallet.Desktop             ← Avalonia 11, MVVM (CommunityToolkit.Mvvm)
 
 tests/   XaultWallet.Core.Tests        unit tests (vault, deniability, crypto, parsing, hardening)
          XaultWallet.IntegrationTests  real monero-wallet-rpc on a private regtest chain
-installer/ XaultWallet.iss             the Windows installer (Inno Setup), built by the release workflow
+installer/ XaultWallet.iss, .wxs       the Windows installers (Inno Setup, WiX), built by the release workflow
 tools/   TestRunner                    reflection test runner (fails on zero discovered tests)
          UiSnapshots                   renders every screen headlessly; fails on binding errors / QR mismatch
 ```
@@ -528,9 +528,10 @@ dotnet run --project src/XaultWallet.Desktop    # run the app
 - **Visual Studio 2022** (17.8+): open `XaultWallet.sln`, F5. Windows: `./build.ps1`.
 - **Single-file release** for your platform: `./publish-windows.ps1` / `./publish-linux.sh`, or
   `dotnet publish src/XaultWallet.Desktop -c Release -r <win-x64|linux-x64|osx-arm64>`.
-- **Windows installer**: publish `win-x64` into `out/`, copy the docs next to the exe, then
+- **Windows installers**: publish `win-x64` into `out/`, copy the docs next to the exe, then
   `iscc /DAppVersion=0.6.0-beta /DAppNumericVersion=0.6.0 /DSourceDir=%CD%\out installer\XaultWallet.iss`
-  (Inno Setup 6). The release workflow does exactly this and test-installs the result.
+  (Inno Setup 6) for the setup exe, and see the header of `installer/XaultWallet.wxs` for the MSI
+  (WiX Toolset 3). The release workflow builds both and test-installs each.
 - **UI snapshots** (every screen, zero-binding-error check, QR round-trip with `zbarimg`):
   `dotnet run -c Release --project tools/UiSnapshots -- ui-snapshots`
 - **Integration tests** against a real `monero-wallet-rpc` — a private regtest chain is the quickest:

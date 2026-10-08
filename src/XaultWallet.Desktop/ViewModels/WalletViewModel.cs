@@ -49,8 +49,8 @@ public sealed partial class AccountChoice : ObservableObject
 }
 
 /// <summary>
-/// One open wallet: its own monero-wallet-rpc backend, balance, sync state and the five tabs
-/// (receive, send, history, contacts, tools), plus its management sheet. The parts live in
+/// One open wallet: its own monero-wallet-rpc backend, balance, sync state and the six tabs
+/// (receive, send, history, contacts, tools, coins), plus its management sheet. The parts live in
 /// WalletViewModel.*.cs. It belongs to a <see cref="ProfileViewModel"/>, which owns the vault
 /// session (saving), the contacts and the inactivity lock.
 /// </summary>

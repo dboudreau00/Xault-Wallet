@@ -4,7 +4,6 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using FlaUI.Core;
 using FlaUI.Core.AutomationElements;
-using FlaUI.Core.Definitions;
 using FlaUI.Core.Input;
 using FlaUI.UIA3;
 
@@ -197,13 +196,15 @@ internal static class Program
     /// <summary>
     /// The app's own title bar is the system's title bar (Avalonia's TitleBar role), checked with the
     /// real mouse rather than UI Automation: dragging it moves the window, a double-click maximizes and
-    /// restores, and a button on it still takes a click. The window ends where it started.
+    /// restores, and the buttons on it take clicks (Maximize twice, Minimize; Settings and Close get
+    /// theirs in the scenario). The window ends where it started.
     /// </summary>
     private static async Task<List<string>> CheckTitleBarAsync(Window window, Action<string> log)
     {
-        log("> The title bar with the mouse: drag, double-click, its Maximize button");
+        log("> The title bar with the mouse: drag, double-click, Maximize and Minimize");
         var problems = new List<string>();
-        if (IsMaximized(window))
+        IntPtr hwnd = window.Properties.NativeWindowHandle.ValueOrDefault;
+        if (IsZoomed(hwnd))
         {
             log("  maximized to fit the screen: drag and double-click not checked");
         }
@@ -224,36 +225,57 @@ internal static class Program
 
             Mouse.DoubleClick(TitleBarPoint(window));
             await Task.Delay(1000);
-            bool maximized = IsMaximized(window);
+            bool maximized = IsZoomed(hwnd);
             Mouse.DoubleClick(TitleBarPoint(window));
             await Task.Delay(1000);
-            bool restored = !IsMaximized(window);
+            bool restored = !IsZoomed(hwnd);
             if (!maximized || !restored)
             {
                 problems.Add($"double-clicking the title bar: maximized {maximized}, then restored {restored}");
             }
         }
 
-        bool wasMaximized = IsMaximized(window);
+        bool wasMaximized = IsZoomed(hwnd);
         for (int click = 1; click <= 2; click++)
         {
-            Rectangle button = window.FindFirstDescendant(cf => cf.ByAutomationId("Shell.Maximize"))?.BoundingRectangle ?? Rectangle.Empty;
-            Mouse.Click(new Point(button.Left + (button.Width / 2), button.Top + (button.Height / 2)));
-            await Task.Delay(1000);
+            string? missed = await ClickTitleBarButtonAsync(window, "Shell.Maximize");
             bool expected = click == 1 ? !wasMaximized : wasMaximized;
-            if (button.IsEmpty || IsMaximized(window) != expected)
+            if (missed is not null || IsZoomed(hwnd) != expected)
             {
-                problems.Add($"mouse click {click} on the title bar's Maximize button left the window {(IsMaximized(window) ? "maximized" : "not maximized")}");
+                problems.Add(missed ?? $"mouse click {click} on the title bar's Maximize button left the window {(IsZoomed(hwnd) ? "maximized" : "not maximized")}");
                 break;
             }
         }
 
+        string? notFound = await ClickTitleBarButtonAsync(window, "Shell.Minimize");
+        bool minimized = IsIconic(hwnd);
+        ShowWindow(hwnd, 9); // SW_RESTORE
+        await Task.Delay(1000);
+        if (notFound is not null || !minimized || IsIconic(hwnd))
+        {
+            problems.Add(notFound ?? $"a mouse click on the title bar's Minimize button: minimized {minimized}, restored after {!IsIconic(hwnd)}");
+        }
+
         if (problems.Count == 0)
         {
-            log($"  dragged, maximized and restored by a double-click and by its button; back at {window.BoundingRectangle}");
+            log($"  dragged, maximized and restored by a double-click and by its button, minimized by its button; back at {window.BoundingRectangle}");
         }
 
         return problems;
+    }
+
+    /// <summary>A real click in the middle of a title bar button; a message when there is no such button.</summary>
+    private static async Task<string?> ClickTitleBarButtonAsync(Window window, string id)
+    {
+        Rectangle button = window.FindFirstDescendant(cf => cf.ByAutomationId(id))?.BoundingRectangle ?? Rectangle.Empty;
+        if (button.IsEmpty)
+        {
+            return $"no {id} button on screen";
+        }
+
+        Mouse.Click(new Point(button.Left + (button.Width / 2), button.Top + (button.Height / 2)));
+        await Task.Delay(1000);
+        return null;
     }
 
     private static Point TitleBarPoint(Window window)
@@ -261,11 +283,6 @@ internal static class Program
         Rectangle r = window.BoundingRectangle;
         return new Point(r.Left + (r.Width / 2), r.Top + 23);
     }
-
-    private static bool IsMaximized(Window window) =>
-        window.Patterns.Window.TryGetPattern(out var pattern)
-            ? pattern.WindowVisualState.Value == WindowVisualState.Maximized
-            : window.BoundingRectangle.Width >= GetSystemMetrics(0) - 20;
 
     /// <summary>Press, move in small steps and release the left button, the way a hand does.</summary>
     private static async Task DragAsync(Point from, Point to)
@@ -307,4 +324,13 @@ internal static class Program
 
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int index);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsZoomed(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsIconic(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr window, int command);
 }

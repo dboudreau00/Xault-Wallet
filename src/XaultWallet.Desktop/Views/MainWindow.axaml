@@ -18,8 +18,8 @@
 
     <Grid RowDefinitions="Auto,*">
         <!-- Custom title bar: our own chrome extended to the top edge. The TitleBar role gives it the
-             system's own dragging, double-click to maximise and snapping; the buttons in it still
-             work as buttons. -->
+             system's own dragging, double-click to maximise and snapping. Every button on it carries the
+             User role: without one, the system takes a click on the button for a click on the bar. -->
         <Border Grid.Row="0" Background="{StaticResource TitleBarBg}" BorderBrush="{StaticResource BorderSubtle}"
                 BorderThickness="0,0,0,1" WindowDecorationProperties.ElementRole="TitleBar">
             <Grid ColumnDefinitions="Auto,*,Auto,Auto" Height="46">
@@ -37,6 +37,7 @@
                 </StackPanel>
 
                 <Button Grid.Column="1" Classes="ghost" AutomationProperties.AutomationId="Shell.Settings" AutomationProperties.Name="Settings" Command="{Binding OpenSettingsCommand}"
+                        WindowDecorationProperties.ElementRole="User"
                         IsVisible="{Binding !SettingsOpen}" VerticalAlignment="Center"
                         HorizontalAlignment="Right" Margin="0,0,10,0" Padding="12,7">
                     <StackPanel Orientation="Horizontal" Spacing="8">
@@ -47,13 +48,16 @@
 
                 <!-- Window controls -->
                 <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Stretch">
-                    <Button Classes="chrome" AutomationProperties.AutomationId="Shell.Minimize" AutomationProperties.Name="Minimize" Click="Minimize_Click" ToolTip.Tip="Minimize">
+                    <Button Classes="chrome" AutomationProperties.AutomationId="Shell.Minimize" AutomationProperties.Name="Minimize" Click="Minimize_Click" ToolTip.Tip="Minimize"
+                            WindowDecorationProperties.ElementRole="User">
                         <Rectangle Width="11" Height="1.5" Fill="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
                     </Button>
-                    <Button Classes="chrome" AutomationProperties.AutomationId="Shell.Maximize" AutomationProperties.Name="Maximize" Click="MaxRestore_Click" ToolTip.Tip="Maximize">
+                    <Button Classes="chrome" AutomationProperties.AutomationId="Shell.Maximize" AutomationProperties.Name="Maximize" Click="MaxRestore_Click" ToolTip.Tip="Maximize"
+                            WindowDecorationProperties.ElementRole="User">
                         <Border Width="10" Height="10" BorderBrush="{StaticResource TextSecondary}" BorderThickness="1.5" CornerRadius="2"/>
                     </Button>
-                    <Button Classes="chrome chromeClose" AutomationProperties.AutomationId="Shell.Close" AutomationProperties.Name="Close" Click="Close_Click" ToolTip.Tip="Close">
+                    <Button Classes="chrome chromeClose" AutomationProperties.AutomationId="Shell.Close" AutomationProperties.Name="Close" Click="Close_Click" ToolTip.Tip="Close"
+                            WindowDecorationProperties.ElementRole="User">
                         <Canvas Width="12" Height="12">
                             <Line StartPoint="1,1" EndPoint="11,11" Stroke="{StaticResource TextSecondary}" StrokeThickness="1.5"/>
                             <Line StartPoint="11,1" EndPoint="1,11" Stroke="{StaticResource TextSecondary}" StrokeThickness="1.5"/>

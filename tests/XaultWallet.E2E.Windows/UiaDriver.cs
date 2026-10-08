@@ -20,7 +20,8 @@ namespace XaultWallet.E2E;
 /// "control" elements. Actions go through each control's automation pattern (Invoke, Value, Toggle,
 /// SelectionItem, ExpandCollapse), which Avalonia implements by performing the control's own click
 /// or text update; the real mouse pointer is moved onto every control first, so hover states show in
-/// the screenshots and the app's inactivity auto-lock sees a person at work.
+/// the screenshots and the app's inactivity auto-lock sees a person at work. The title bar's buttons
+/// (ids "Shell.*") get a real click instead: there the system decides whether a click reaches them.
 /// </summary>
 /// <remarks>
 /// FlaUI keeps the active cache request in thread-static state: no <c>await</c> inside an
@@ -75,6 +76,15 @@ internal sealed class UiaDriver : IAppDriver
         string how = Act(id, () =>
         {
             AutomationElement e = hit.Element;
+
+            // On the title bar the system decides what a click is for (moving the window, or the
+            // button under the pointer): only a real click shows that it reaches the button.
+            if (id.StartsWith("Shell.", StringComparison.Ordinal))
+            {
+                Mouse.Click(Center(e.BoundingRectangle));
+                return "mouse";
+            }
+
             if (e.Patterns.Invoke.TryGetPattern(out var invoke))
             {
                 invoke.Invoke();

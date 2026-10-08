@@ -8,3 +8,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Avalonia's packages only build at one version: one pull request for all of them, rather than
+    # one per project that can't pass on its own.
+    groups:
+      avalonia:
+        patterns:
+          - "Avalonia*"

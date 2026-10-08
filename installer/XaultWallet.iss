@@ -7,7 +7,7 @@
 ; never written, moved or deleted by Setup or by the uninstaller.
 ;
 ; Local build (from the repository root, after publishing win-x64 into .\out):
-;   iscc /DAppVersion=0.6.0-beta /DAppNumericVersion=0.6.0 /DSourceDir=%CD%\out /DOutputDir=%CD%\dist installer\XaultWallet.iss
+;   iscc /DAppVersion=0.6.0a-beta /DAppNumericVersion=0.6.0.1 /DSourceDir=%CD%\out /DOutputDir=%CD%\dist installer\XaultWallet.iss
 
 #ifndef AppVersion
   #define AppVersion "0.0.0-dev"

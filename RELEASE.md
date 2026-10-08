@@ -98,8 +98,12 @@ A packaged `.exe` looks finished, but packaging changes nothing about the code's
   first. The wallet never ships someone else's key-handling binary.
 - **Back up your seed** independently of the app.
 
-Version is stamped as `0.6.0-beta` in the project file — bump `<Version>` there for future
-builds (Settings → About reads it from the assembly).
+Version is stamped as `0.6.0a-beta` in the project file's `<ReleaseVersion>`, the name the tag,
+the archives and Settings → About use. Beside it, `<Version>` (`0.6.0-beta.a`, SemVer) and
+`<FileVersion>` (`0.6.0.1`, numeric, also the MSI's version) carry the same release in the forms
+.NET and Windows need: bump all three together. A lower-case letter after the patch number marks a
+revision of that release (0.6.0a, 0.6.0b, …); without one, `<ReleaseVersion>` and `<Version>` are
+the same.
 
 ## Automated releases (GitHub Actions)
 
@@ -112,9 +116,9 @@ uninstalling must remove it again. Each archive holds the executable plus
 `README.md`, `SECURITY.md`, `CHANGELOG.md` and `LICENSE`. They are attached with a `SHA256SUMS` file
 to a **draft** release for you to review and publish. There are two ways to start it:
 
-- **Push a tag** such as `v0.6.0-beta`.
+- **Push a tag** such as `v0.6.0a-beta`.
 - **Run it by hand** (no git needed): GitHub → Actions → Release → *Run workflow*, with `version` set
-  to `v0.6.0-beta`. The draft targets the commit the run started from (normally `main`). GitHub
+  to `v0.6.0a-beta`. The draft targets the commit the run started from (normally `main`). GitHub
   creates the tag only when you press **Publish** on the draft: the workflow never creates or moves a
   tag. Run without a version, it only builds (a dry run) and publishes nothing.
 

@@ -10,7 +10,14 @@
     <ApplicationIcon>Assets\xault.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
 
-    <Version>0.6.0-beta</Version>
+    <!-- The release's name: what the tag, the archives and Settings say. A letter after the patch
+         number marks a revision of that release (0.6.0a is the first after 0.6.0). -->
+    <ReleaseVersion>0.6.0a-beta</ReleaseVersion>
+    <!-- What .NET needs: a SemVer version (the letter joins the pre-release label, so 0.6.0-beta.a
+         sorts after 0.6.0-beta) and a numeric file version (a = 1). -->
+    <Version>0.6.0-beta.a</Version>
+    <FileVersion>0.6.0.1</FileVersion>
+    <InformationalVersion>$(ReleaseVersion)</InformationalVersion>
     <AssemblyName>XaultWallet</AssemblyName>
     <Product>XaultWallet</Product>
     <RuntimeIdentifiers>win-x64;linux-x64;osx-x64;osx-arm64</RuntimeIdentifiers>

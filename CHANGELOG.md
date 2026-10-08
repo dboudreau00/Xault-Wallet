@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.6.0a-beta - 2026-10-08 - Avalonia 12
+
+A revision of 0.6.0 (the letter marks it): the UI framework moves to Avalonia 12, and nothing else
+about how the wallet works changes. **Your vault and settings are unchanged**; 0.6.0 and 0.6.0a open
+the same files.
+
+### Under the hood
+- **Avalonia 12.1.3** (from 11.1.3), with SkiaSharp 3 and HarfBuzz 8 for drawing and text. Every
+  screen renders as before: the headless UI checks, the screenshot run and the Windows end-to-end
+  test of the released exe all pass on it.
+- **The title bar** is now marked as one for the system, so dragging, double-click to maximise and
+  snapping are the operating system's own rather than the app's imitation of them. The window keeps
+  its own look and buttons.
+- **Copying an address or key** works as before, Windows clipboard-history exclusion included,
+  rewritten for Avalonia 12's clipboard API.
+- **The screenshot tool and the in-process end-to-end test** keep the vault, settings and downloads
+  in a throwaway folder on Windows too. They redirected HOME and APPDATA, which Windows ignores for
+  these folders, so on a developer's machine they read that person's settings and saved Hide amounts
+  back. The app now takes the throwaway folder directly, and both refuse to run if any folder lands
+  outside it. The README screenshots are re-rendered from that clean profile.
+
+### Dependencies
+- Two packages the app no longer used are gone: Avalonia.Controls.DataGrid (History stopped using a
+  grid in 0.5) and Avalonia.Diagnostics (developer tools, never wired up). The download is a little
+  smaller.
+- Tmds.DBus.Protocol no longer needs a pin: Avalonia 12 brings 0.94.1, which has the fix for
+  GHSA-xrw6-gwf8-vvr9.
+- With no package depending on the build configuration any more, CI now checks Release builds
+  against the committed lock files too, not only Debug ones.
+- CI builds opt out of Avalonia's build-time usage statistics, as they already did for .NET's.
+- Replaces Dependabot's five separate Avalonia bumps (#13, #15 to #18), which could not pass on
+  their own: each moved one package to 12 and left the rest on 11.
+
 ## 0.6.0-beta - 2026-10-08 - built-in Tor, coin control, a Windows installer
 
 **Your vault keeps its format**: 0.5 vaults open as they are. 0.5 can still open a vault after 0.6

@@ -529,7 +529,7 @@ dotnet run --project src/XaultWallet.Desktop    # run the app
 - **Single-file release** for your platform: `./publish-windows.ps1` / `./publish-linux.sh`, or
   `dotnet publish src/XaultWallet.Desktop -c Release -r <win-x64|linux-x64|osx-arm64>`.
 - **Windows installers**: publish `win-x64` into `out/`, copy the docs next to the exe, then
-  `iscc /DAppVersion=0.6.0-beta /DAppNumericVersion=0.6.0 /DSourceDir=%CD%\out installer\XaultWallet.iss`
+  `iscc /DAppVersion=0.6.0a-beta /DAppNumericVersion=0.6.0.1 /DSourceDir=%CD%\out installer\XaultWallet.iss`
   (Inno Setup 6) for the setup exe, and see the header of `installer/XaultWallet.wxs` for the MSI
   (WiX Toolset 3). The release workflow builds both and test-installs each.
 - **UI snapshots** (every screen, zero-binding-error check, QR round-trip with `zbarimg`):

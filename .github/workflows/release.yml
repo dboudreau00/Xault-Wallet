@@ -67,14 +67,17 @@ jobs:
           publish=false
           if [ -n "$tag" ]; then
             # The tag ends up in file names and a command line: accept nothing but a version.
-            if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-              echo "::error::'$tag' is not a version tag such as v1.2.3 or v1.2.3-beta"; exit 1
+            # A lower-case letter after the patch number is a revision of that release (v0.6.0a-beta).
+            if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+[a-z]?(-[0-9A-Za-z.-]+)?$ ]]; then
+              echo "::error::'$tag' is not a version tag such as v1.2.3, v1.2.3-beta or v1.2.3a-beta"; exit 1
             fi
             version="${tag#v}"
 
-            project=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' src/XaultWallet.Desktop/XaultWallet.Desktop.csproj | head -n 1)
+            # <ReleaseVersion> names the release when the plain <Version> can't (a revision letter).
+            project=$(sed -n 's:.*<ReleaseVersion>\(.*\)</ReleaseVersion>.*:\1:p' src/XaultWallet.Desktop/XaultWallet.Desktop.csproj | head -n 1)
+            [ -n "$project" ] || project=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' src/XaultWallet.Desktop/XaultWallet.Desktop.csproj | head -n 1)
             if [ "$version" != "$project" ]; then
-              echo "::error::$tag does not match <Version>$project</Version> in XaultWallet.Desktop.csproj"; exit 1
+              echo "::error::$tag does not match the version ($project) in XaultWallet.Desktop.csproj"; exit 1
             fi
             if ! awk -v v="$version" '$0 == "## " v || index($0, "## " v " ") == 1 { found = 1 } END { exit !found }' CHANGELOG.md; then
               echo "::error::CHANGELOG.md has no '## $version' section"; exit 1
@@ -140,8 +143,11 @@ jobs:
             choco install innosetup --version 6.7.1 -y --no-progress
             $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
           }
-          $version = @(([xml](Get-Content src/XaultWallet.Desktop/XaultWallet.Desktop.csproj)).Project.PropertyGroup.Version | Where-Object { $_ })[0]
-          $numeric = ($version -split '-')[0]
+          $props = ([xml](Get-Content src/XaultWallet.Desktop/XaultWallet.Desktop.csproj)).Project.PropertyGroup
+          $version = @($props.ReleaseVersion | Where-Object { $_ })[0]
+          if (-not $version) { $version = @($props.Version | Where-Object { $_ })[0] }
+          $numeric = @($props.FileVersion | Where-Object { $_ })[0]
+          if (-not $numeric) { $numeric = ($version -split '-')[0] }
           $tag = if ($env:TAG) { $env:TAG } else { "dev-$($env:GITHUB_SHA.Substring(0, 7))" }
           & $iscc /Q "/DAppVersion=$version" "/DAppNumericVersion=$numeric" "/DSourceDir=$PWD\out" "/DOutputDir=$PWD\dist" "/DOutputBaseName=XaultWallet-$tag-win-x64-setup" installer\XaultWallet.iss
           if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)" }
@@ -174,8 +180,11 @@ jobs:
             $wix = @(Get-ChildItem ${env:ProgramFiles(x86)} -Directory -Filter 'WiX Toolset v3*' | Sort-Object Name -Descending)[0].FullName
           }
           $bin = Join-Path $wix 'bin'
-          $version = @(([xml](Get-Content src/XaultWallet.Desktop/XaultWallet.Desktop.csproj)).Project.PropertyGroup.Version | Where-Object { $_ })[0]
-          $numeric = ($version -split '-')[0]
+          $props = ([xml](Get-Content src/XaultWallet.Desktop/XaultWallet.Desktop.csproj)).Project.PropertyGroup
+          $version = @($props.ReleaseVersion | Where-Object { $_ })[0]
+          if (-not $version) { $version = @($props.Version | Where-Object { $_ })[0] }
+          $numeric = @($props.FileVersion | Where-Object { $_ })[0]
+          if (-not $numeric) { $numeric = ($version -split '-')[0] }
           $tag = if ($env:TAG) { $env:TAG } else { "dev-$($env:GITHUB_SHA.Substring(0, 7))" }
           & "$bin\candle.exe" -nologo -arch x64 "-dVersion=$numeric" "-dSourceDir=$PWD\out" "-dRepoDir=$PWD" -out "$PWD\obj-msi\XaultWallet.wixobj" installer\XaultWallet.wxs
           if ($LASTEXITCODE -ne 0) { throw "candle failed ($LASTEXITCODE)" }

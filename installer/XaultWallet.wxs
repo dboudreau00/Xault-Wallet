@@ -8,7 +8,7 @@
   %APPDATA%\XaultWallet and are never written, moved or deleted by the package.
 
   Local build (repository root, after publishing win-x64 into .\out with the docs copied next to it):
-    candle -arch x64 -dVersion=0.6.0 -dSourceDir=%CD%\out -dRepoDir=%CD% -out obj\XaultWallet.wixobj installer\XaultWallet.wxs
+    candle -arch x64 -dVersion=0.6.0.1 -dSourceDir=%CD%\out -dRepoDir=%CD% -out obj\XaultWallet.wixobj installer\XaultWallet.wxs
     light -ext WixUIExtension -out dist\XaultWallet.msi obj\XaultWallet.wixobj
 -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
@@ -18,7 +18,8 @@
     <Package InstallerVersion="500" Compressed="yes" InstallScope="perUser" InstallPrivileges="limited"
              Description="XaultWallet, a privacy-first Monero wallet" Comments="Unsigned. Verify it against SHA256SUMS." />
 
-    <!-- A beta and its final release share the numeric version (0.6.0): a same-version package replaces the old one. -->
+    <!-- Windows Installer compares only the first three fields, so a beta, its lettered revisions (0.6.0a is
+         0.6.0.1) and its final release are one version (0.6.0): a same-version package replaces the old one. -->
     <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of XaultWallet is already installed." />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 

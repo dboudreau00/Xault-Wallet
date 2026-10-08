@@ -4,23 +4,22 @@
     "net10.0": {
       "Avalonia": {
         "type": "Direct",
-        "requested": "[11.1.3, )",
-        "resolved": "11.1.3",
-        "contentHash": "kpVAnKTbg/ZVnWyYLGPYXR0Ce4uiHLT1y6BcgJYpdFfn3b0TmvbxFZV37lpc1wEjUyaU28V+DoNnRbYSLsv0nw==",
+        "requested": "[12.1.3, )",
+        "resolved": "12.1.3",
+        "contentHash": "l0VGyGn1OwqFrhmIhIHivvrQP0DtBD4Vn2F1vLYgGA2X2qHg0DMVRAln/6xOTLBUYoTopiVAujN0jtH8MpVSeA==",
         "dependencies": {
-          "Avalonia.BuildServices": "0.0.29",
-          "Avalonia.Remote.Protocol": "11.1.3",
-          "MicroCom.Runtime": "0.11.0"
+          "Avalonia.BuildServices": "11.3.2",
+          "Avalonia.Remote.Protocol": "12.1.3",
+          "MicroCom.Runtime": "0.11.6"
         }
       },
       "Avalonia.Controls.DataGrid": {
         "type": "Direct",
-        "requested": "[11.1.3, )",
-        "resolved": "11.1.3",
-        "contentHash": "Ypqjb74jzhxAYGW6DumBvJaxOsB1IB5XcXHL5KfhgkvMZ5aW3ol3q7IBwScBvkffo2wgYaVvxkwyaDEuyjlrmQ==",
+        "requested": "[12.1.2, )",
+        "resolved": "12.1.2",
+        "contentHash": "Tw02SZd/B42Gq6/l9IBPfuM+VsHPq7c6LXb9mT0xVjZB2UPeynfKlBgQDcrhu/SOfYUGk7tQSRmLFM2kaAjdrw==",
         "dependencies": {
-          "Avalonia": "11.1.3",
-          "Avalonia.Remote.Protocol": "11.1.3"
+          "Avalonia": "12.1.0"
         }
       },
       "Avalonia.Desktop": {
@@ -91,8 +90,8 @@
       },
       "Avalonia.BuildServices": {
         "type": "Transitive",
-        "resolved": "0.0.29",
-        "contentHash": "U4eJLQdoDNHXtEba7MZUCwrBErBTxFp6sUewXBOdAhU0Kwzwaa/EKFcYm8kpcysjzKtfB4S0S9n0uxKZFz/ikw=="
+        "resolved": "11.3.2",
+        "contentHash": "qHDToxto1e3hci5YqbG9n0Ty8mlp3zBUN5wT66wKqaDVzXyQ0do3EnRILd4Ke9jpvsktaPpgE0YjEk7hornryQ=="
       },
       "Avalonia.Controls.ColorPicker": {
         "type": "Transitive",
@@ -122,8 +121,8 @@
       },
       "Avalonia.Remote.Protocol": {
         "type": "Transitive",
-        "resolved": "11.1.3",
-        "contentHash": "ByXwboJC1jg13Qdxfs3/aX/yY4wi9n1XKT+a6+ckLnpSeesjQ0J6N1+wix7ISuGwFo0cyT0nXpvI4s2Zo+rkSA=="
+        "resolved": "12.1.3",
+        "contentHash": "HcF69DKyihgg5coLOSp7GTqxQvWAy58LMKauwcHA28uSBJVwu0h5+gTNdJA8Sn/nqJVTRDU98zYsk6i1QSwDVQ=="
       },
       "Avalonia.Skia": {
         "type": "Transitive",
@@ -213,8 +212,8 @@
       },
       "MicroCom.Runtime": {
         "type": "Transitive",
-        "resolved": "0.11.0",
-        "contentHash": "MEnrZ3UIiH40hjzMDsxrTyi8dtqB5ziv3iBeeU4bXsL/7NLSal9F1lZKpK+tfBRnUoDSdtcW3KufE4yhATOMCA=="
+        "resolved": "0.11.6",
+        "contentHash": "NdNWGDiZ6eS/Mf/9+QHR91cj1K7Hy+PX9yrHI/zM7xFYuj9IWT2uxtB6sCHjrnxAeLV9fut1R6zHDUGKX6f9lQ=="
       },
       "SharpZipLib": {
         "type": "Transitive",

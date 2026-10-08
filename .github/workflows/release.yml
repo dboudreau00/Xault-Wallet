@@ -178,8 +178,12 @@ jobs:
           $tag = if ($env:TAG) { $env:TAG } else { "dev-$($env:GITHUB_SHA.Substring(0, 7))" }
           & "$bin\candle.exe" -nologo -arch x64 "-dVersion=$numeric" "-dSourceDir=$PWD\out" "-dRepoDir=$PWD" -out "$PWD\obj-msi\XaultWallet.wixobj" installer\XaultWallet.wxs
           if ($LASTEXITCODE -ne 0) { throw "candle failed ($LASTEXITCODE)" }
-          & "$bin\light.exe" -nologo -ext WixUIExtension -cultures:en-us -out "dist\XaultWallet-$tag-win-x64.msi" "obj-msi\XaultWallet.wixobj"
+          # -spdb: no .wixpdb (WiX's debug database) next to the MSI; dist/ holds only what ships.
+          & "$bin\light.exe" -nologo -spdb -ext WixUIExtension -cultures:en-us -out "dist\XaultWallet-$tag-win-x64.msi" "obj-msi\XaultWallet.wixobj"
           if ($LASTEXITCODE -ne 0) { throw "light failed ($LASTEXITCODE)" }
+          Remove-Item dist\*.wixpdb -ErrorAction SilentlyContinue
+          $unexpected = @(Get-ChildItem dist | Where-Object { $_.Name -notmatch '\.(zip|exe|msi)$' })
+          if ($unexpected.Count -gt 0) { throw "Unexpected files in dist: $($unexpected.Name -join ', ')" }
       - name: The MSI installs the published exe and uninstalls cleanly (silent, current user)
         if: matrix.rid == 'win-x64'
         shell: pwsh

@@ -70,6 +70,11 @@ public sealed class AppServices
     /// following the user between machines), ~/.local/share on Linux; null if it can't be determined.</summary>
     private static string? LocalDataRoot()
     {
+        if (TestProfile.Root is { } testRoot)
+        {
+            return Path.Combine(testRoot, "local");
+        }
+
         string root = Environment.GetFolderPath(
             Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify);
         return Path.IsPathFullyQualified(root) ? root : null;
@@ -86,6 +91,11 @@ public sealed class AppServices
     /// </summary>
     internal static string UserConfigRoot()
     {
+        if (TestProfile.Root is { } testRoot)
+        {
+            return Path.Combine(testRoot, "config");
+        }
+
         string root = Environment.GetFolderPath(
             Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.DoNotVerify);
         if (!Path.IsPathFullyQualified(root))
@@ -151,5 +161,29 @@ public sealed class AppServices
         return ExecutableLocator.FindOnPath(exe, Environment.GetEnvironmentVariable("PATH"))
                ?? XaultWallet.Core.Installer.WalletRpcInstaller.FindInstalled(WalletRpcInstallRoot)
                ?? string.Empty;
+    }
+
+    /// <summary>
+    /// A throwaway folder standing in for the user's profile, for the screenshot tool and the
+    /// in-process end-to-end test. Set <see cref="Root"/> before anything touches
+    /// <see cref="Instance"/>: Windows takes the profile folders from the shell, so setting APPDATA
+    /// or HOME doesn't move them. A class of its own, because setting a static of AppServices would
+    /// create the instance, with the real folders, first.
+    /// </summary>
+    internal static class TestProfile
+    {
+        internal static string? Root { get; set; }
+
+        /// <summary>The app's folders and files (vault, settings) that are not inside
+        /// <paramref name="root"/>. A run that is meant to stay in a throwaway profile stops when
+        /// there is any.</summary>
+        internal static string[] PathsOutside(string root)
+        {
+            AppServices app = Instance;
+            string prefix = Path.TrimEndingDirectorySeparator(root) + Path.DirectorySeparatorChar;
+            return new[] { app.DataDirectory, app.VaultPath, app.SettingsPath, app.WalletRpcInstallRoot, app.TorInstallRoot, app.TorDataDirectory }
+                .Where(path => !path.StartsWith(prefix, StringComparison.Ordinal))
+                .ToArray();
+        }
     }
 }

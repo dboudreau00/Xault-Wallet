@@ -47,6 +47,8 @@
   <ItemGroup>
     <!-- Headless UI snapshots + view smoke tests drive the preview constructors. -->
     <InternalsVisibleTo Include="UiSnapshots" />
+    <!-- The in-process end-to-end test keeps its profile in a throwaway folder (AppServices.TestProfile). -->
+    <InternalsVisibleTo Include="XaultWallet.E2E.Headless" />
   </ItemGroup>
 
 </Project>

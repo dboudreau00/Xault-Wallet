@@ -26,14 +26,19 @@ internal static partial class Program
         string outDir = Path.GetFullPath(args.Length > 0 ? args[0] : "ui-snapshots");
         Directory.CreateDirectory(outDir);
 
-        // Never touch the real user profile: settings/vault paths resolve under a throwaway HOME.
+        // Never touch the real user profile: every folder the app uses resolves under a throwaway HOME.
         string home = Directory.CreateTempSubdirectory("xw-ui-").FullName;
         Environment.SetEnvironmentVariable("HOME", home);
-        Environment.SetEnvironmentVariable("APPDATA", home);
+        Environment.SetEnvironmentVariable("XDG_DATA_HOME", Path.Combine(home, ".local", "share"));
         // Deliberately a config folder that does NOT exist yet (a fresh Linux account, a minimal
         // install, a container): the data folder must still land inside it, never in the CWD.
         string configRoot = Path.Combine(home, "config-not-created-yet");
         Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", configRoot);
+        if (OperatingSystem.IsWindows())
+        {
+            // Windows takes the profile folders from the shell, not from these variables.
+            AppServices.TestProfile.Root = home;
+        }
 
         AppBuilder.Configure<App>()
             .UseSkia()
@@ -41,6 +46,14 @@ internal static partial class Program
             .WithInterFont()
             .SetupWithoutStarting();
         Logger.Sink = new BindingErrorSink();
+
+        // The checks below save settings: stop before the first screen if any folder is a real one.
+        string[] outside = AppServices.TestProfile.PathsOutside(home);
+        if (outside.Length > 0)
+        {
+            Console.WriteLine($"FAIL: not inside the throwaway profile {home}: {string.Join(", ", outside)}");
+            return 1;
+        }
 
         var shots = new (string name, Func<ViewModelBase> screen, Action<Window>? arrange)[]
         {

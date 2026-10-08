@@ -23,6 +23,12 @@ internal static class Program
         string home = Directory.CreateTempSubdirectory("xw-e2e-").FullName;
         Environment.SetEnvironmentVariable("HOME", home);
         Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", Path.Combine(home, ".config"));
+        Environment.SetEnvironmentVariable("XDG_DATA_HOME", Path.Combine(home, ".local", "share"));
+        if (OperatingSystem.IsWindows())
+        {
+            // Windows takes the profile folders from the shell, not from these variables.
+            AppServices.TestProfile.Root = home;
+        }
 
         AppBuilder.Configure<App>()
             .UseSkia()
@@ -30,6 +36,14 @@ internal static class Program
             .WithInterFont()
             .SetupWithoutStarting();
         AvaloniaSynchronizationContext.InstallIfNeeded();
+
+        // The scenario creates a vault: refuse to run if any folder of the app is a real one.
+        string[] outside = AppServices.TestProfile.PathsOutside(home);
+        if (outside.Length > 0)
+        {
+            Console.WriteLine($"E2E REFUSED: not inside the throwaway profile {home}: {string.Join(", ", outside)}");
+            return 2;
+        }
 
         var shell = new MainWindowViewModel();
         var window = new MainWindow { DataContext = shell, Width = 1180, Height = 820 };

@@ -15,6 +15,7 @@ dotnet publish src/XaultWallet.Desktop/XaultWallet.Desktop.csproj `
     -p:PublishSingleFile=true `
     -p:SelfContained=true `
     -o $out
+if ($LASTEXITCODE -ne 0) { throw "Publish failed." }
 
 Write-Host ""
 Write-Host "Done. Your app is here:"

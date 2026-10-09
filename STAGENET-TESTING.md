@@ -6,8 +6,8 @@ exercise a wallet end to end without risking anything. **Do not test with mainne
 ## 1. Get the Monero tools
 
 Download an official Monero CLI release from getmonero.org, verify it, and note the path to
-`monero-wallet-rpc` (or `monero-wallet-rpc.exe` on Windows) — or let the app's **Download &
-install** fetch and verify it for you. You do not need to build anything — XaultWallet drives this
+`monero-wallet-rpc` (or `monero-wallet-rpc.exe` on Windows), or let the app's **Download &
+install** fetch and verify it for you. You do not need to build anything: XaultWallet drives this
 binary directly. (For a local stagenet node you need `monerod` from the same archive.)
 
 ## 2. Run a stagenet daemon
@@ -24,16 +24,16 @@ You can point at a remote stagenet node instead, but a local one is simplest and
 Launch the app, click **Settings**, and:
 
 1. Under **Wallet backend**, set the **monero-wallet-rpc** path (or leave it blank if it's on your
-   PATH) and click **Test** — you should see the version string.
+   PATH) and click **Test**; you should see the version string.
 2. Under **Network & privacy**, choose **Stagenet** with `http://127.0.0.1:38081` (or a stagenet
-   preset) and click **Test** — you should see the daemon's current height.
+   preset) and click **Test**; you should see the daemon's current height.
 3. **Save changes**.
 
 ## 4. Create a wallet
 
 1. On the create screen, keep **Create a new wallet** selected and click **Generate my seed**.
 2. Write the 25 words down, then either pass the three-word **verification** or **save the backup
-   file**. (The file is plaintext by design — treat it like cash.)
+   file**. (The file is plaintext by design: treat it like cash.)
 3. Set a strong main password. Optionally set a duress password + decoy seed.
 4. **Create vault**, then unlock with your password.
 
@@ -46,10 +46,12 @@ Launch the app, click **Settings**, and:
   and fee are reported and the balance updates.
 - **History:** confirm incoming/outgoing transfers show in the History tab.
 - **Restart:** lock, close the app, reopen, unlock. The wallet should restore from seed and
-  resync. Nothing but the encrypted vault should exist on disk between runs.
+  resync. No wallet data but the encrypted vault should exist on disk between runs: no
+  `xaultwallet_*` folder in your temp directory (`settings.json` and the logs persist, and hold no
+  secrets).
 - **Duress (if set):** unlock with the duress password and confirm you get the decoy wallet.
   If you enabled "wipe real on duress", verify (with a *throwaway* vault) that the real slot
-  is destroyed — this is irreversible, so test it only on a disposable vault.
+  is destroyed; this is irreversible, so test it only on a disposable vault.
 - **Several wallets:** add a second wallet (**+** next to the wallet's name), switch between them,
   lock and unlock (the vault reopens on the wallet you used last), and check the duress password's
   profile shows none of them.
@@ -64,7 +66,7 @@ Launch the app, click **Settings**, and:
 - **Coin control:** receive two payments, freeze one on the Coins tab, and try to send more than the
   other: it is refused. Send max sends only the unfrozen coin. Lock and unlock: the coin is still
   frozen. Unfreeze it and it can be spent again.
-- **A vault from 0.3** (a copy — keep the original): it opens in 0.5 unchanged, and Settings shows
+- **A vault from 0.3** (a copy; keep the original): it opens in 0.5 unchanged, and Settings shows
   *Vault format*. Following [Coming from 0.3](README.md#9-coming-from-03), unlock with the duress
   password first, upgrade from there, then unlock with the main password; both open their wallets,
   and the file is now 256 KiB per password. 0.3 should refuse the upgraded copy.
@@ -72,7 +74,7 @@ Launch the app, click **Settings**, and:
 ## Automated integration tests (regtest)
 
 The `XaultWallet.IntegrationTests` project drives the real `monero-wallet-rpc`. The quickest
-setup is a **private regtest chain** — no download, no network, blocks mined on demand — which is
+setup is a **private regtest chain** (no download, no network, blocks mined on demand), which is
 exactly what CI runs on every push:
 
 ```bash
@@ -85,8 +87,8 @@ export XW_NETWORK=regtest
 dotnet test tests/XaultWallet.IntegrationTests -c Release
 ```
 
-On regtest the suite mines coins to a fresh wallet and runs a full money flow — prepare a send,
-check the exact fee, relay it, prove it with the tx key, check history, sweep everything back — plus
+On regtest the suite mines coins to a fresh wallet and runs a full money flow (prepare a send,
+check the exact fee, relay it, prove it with the tx key, check history, sweep everything back) plus
 coin control (two coins, one frozen: a send that would need it is refused, Send max leaves it out,
 and after a lock the vault's list freezes it again), and the security checks: the backend refuses
 unauthenticated and cross-origin requests, keeps its files
@@ -141,4 +143,4 @@ branch.
 ## What still stands between this and mainnet
 
 Even after stagenet passes cleanly, this is **beta**. Before trusting real funds it needs a
-**professional third-party security audit** and broader real-world testing. See `SECURITY.md`.
+**professional third-party security audit** and broader real-world testing. See [SECURITY.md](SECURITY.md#before-trusting-this-with-real-funds).

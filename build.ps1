@@ -7,6 +7,7 @@ dotnet --version
 
 Write-Host "==> Restoring packages"
 dotnet restore XaultWallet.sln
+if ($LASTEXITCODE -ne 0) { throw "Restore failed." }
 
 Write-Host "==> Building (Release, warnings are errors)"
 dotnet build XaultWallet.sln -c Release --no-restore
@@ -23,5 +24,10 @@ Write-Host ""
 Write-Host "Build OK. Launch the app with:"
 Write-Host "  dotnet run --project src/XaultWallet.Desktop -c Release"
 Write-Host ""
-Write-Host "Optional: render every screen headlessly (fails on binding errors):"
+Write-Host "Optional checks:"
+Write-Host "  # Every screen renders with zero binding errors; the Receive QR decodes to the shown address"
+Write-Host "  # (needs zbarimg for the QR check):"
 Write-Host "  dotnet run -c Release --project tools/UiSnapshots -- ui-snapshots"
+Write-Host "  # Real monero-wallet-rpc against a private regtest chain (see STAGENET-TESTING.md):"
+Write-Host "  `$env:XW_WALLET_RPC = 'C:\path\to\monero-wallet-rpc.exe'; `$env:XW_DAEMON = 'http://127.0.0.1:18081'; `$env:XW_NETWORK = 'regtest'"
+Write-Host "  dotnet test tests/XaultWallet.IntegrationTests -c Release"

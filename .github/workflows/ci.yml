@@ -1,7 +1,7 @@
 name: CI
 
 on:
-  push:            # every branch: the Windows leg is the only place the Windows-only code runs
+  push:            # every branch: the Windows leg gives the Windows-only code its unit tests (e2e-windows.yml runs the real exe)
   pull_request:
   workflow_dispatch:
 

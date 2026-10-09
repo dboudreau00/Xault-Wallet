@@ -2,13 +2,13 @@
 
 XaultWallet drives the official `monero-wallet-rpc` binary; it does **not** bundle it, and you
 should not trust a copy from anyone (including this project) without verifying it yourself. The
-binary handles your keys — a tampered copy can steal every seed you generate. Verifying the
+binary handles your keys: a tampered copy can steal every seed you generate. Verifying the
 maintainers' signature is the one step that protects you, so it is not optional for real funds.
 
 **The recommended way is below: download and verify it yourself.** If you'd rather not, the app's
 **Download & install** (startup screen, or Settings → *Wallet backend*) performs the same checks for
-you — `hashes.txt` must carry a good signature by binaryFate's key (pinned inside XaultWallet by
-fingerprint), and the archive must match its signed SHA-256 — and installs nothing if either fails.
+you (`hashes.txt` must carry a good signature by binaryFate's key, pinned inside XaultWallet by
+fingerprint, and the archive must match its signed SHA-256) and installs nothing if either fails.
 That trusts the copy of the key inside the XaultWallet release you run; see
 [SECURITY.md → The monero-wallet-rpc installer](SECURITY.md#the-monero-wallet-rpc-installer).
 
@@ -17,8 +17,8 @@ That trusts the copy of the key inside the XaultWallet release you run; see
 Get the CLI archive for your OS from **one** of these (identical binaries; GitHub is preferred
 because you don't have to trust the website too):
 
-- GitHub: https://github.com/monero-project/monero/releases
-- Website: https://www.getmonero.org/downloads/
+- GitHub: <https://github.com/monero-project/monero/releases>
+- Website: <https://www.getmonero.org/downloads/>
 
 The archive contains both `monerod` (the node) and `monero-wallet-rpc` (what XaultWallet needs).
 
@@ -26,15 +26,15 @@ The archive contains both `monerod` (the node) and `monero-wallet-rpc` (what Xau
 
 Monero publishes a signed `hashes.txt`. Verify the archive's hash matches, and verify the
 signature on `hashes.txt` was made by the Monero maintainer key (fingerprint published at
-https://www.getmonero.org/downloads/#pgp and in the `binaryFate` key).
+<https://www.getmonero.org/downloads/#pgp> and in the `binaryFate` key).
 
 Monero's own step-by-step guides:
-- Windows (beginner): https://www.getmonero.org/resources/user-guides/verification-windows-beginner.html
-- Command line (all platforms): https://www.getmonero.org/resources/user-guides/verification-allos-advanced.html
+- Windows (beginner): <https://www.getmonero.org/resources/user-guides/verification-windows-beginner.html>
+- Command line (all platforms): <https://www.getmonero.org/resources/user-guides/verification-allos-advanced.html>
 
 Short version once you have the maintainer key imported and `hashes.txt` + its `.sig`:
 
-```
+```bash
 gpg --verify hashes.txt.sig hashes.txt      # must say "Good signature" from the Monero key
 # then confirm your archive's hash is listed:
 #   Windows PowerShell:  Get-FileHash .\monero-win-x64-*.zip -Algorithm SHA256
@@ -54,12 +54,12 @@ version) → **Save changes**.
 
 XaultWallet launches its own short-lived `monero-wallet-rpc`; you only need to run the node:
 
-```
-# testnet  (fast, no value — start here)
-monerod --testnet
-# stagenet (mainnet-like, no value)
+```bash
+# stagenet (mainnet-like, no value: start here)
 monerod --stagenet
-# mainnet  (real funds — only after you've tested the above)
+# testnet  (fast, no value)
+monerod --testnet
+# mainnet  (real funds: only after you've tested the above)
 monerod
 ```
 
@@ -79,7 +79,7 @@ permanently destroys the real seed on the device. Before mainnet:
 - Complete the full flow on **stagenet** at least once (receive, send, restart, restore).
 - Keep an **independent** written backup of any seed you generate.
 - Start with a **small** amount you can afford to lose.
-- Get a **professional security audit** before trusting meaningful funds — see `SECURITY.md`.
+- Get a **professional security audit** before trusting meaningful funds; see [SECURITY.md](SECURITY.md).
 
 Remote nodes are convenient but leak your IP/transaction origin to the node operator. For
-mainnet privacy, run your own node (optionally over Tor). See `SECURITY.md`.
+mainnet privacy, run your own node (optionally over Tor). See [SECURITY.md](SECURITY.md#choosing-a-daemon).

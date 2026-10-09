@@ -2,7 +2,7 @@
 
 **A privacy-first desktop Monero (XMR) wallet with a duress password that opens a decoy wallet.**
 Built on .NET 10 + Avalonia. Encrypted at rest with AES-256-GCM (Argon2id KDF). Drives the official
-`monero-wallet-rpc` — it never reimplements Monero's cryptography. Its own Tor (verified when it is
+`monero-wallet-rpc`; it never reimplements Monero's cryptography. Its own Tor (verified when it is
 installed, and fail-closed while it runs) and coin control come built in.
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
@@ -63,21 +63,21 @@ installed, and fail-closed while it runs) and coin control come built in.
 
 | | |
 |---|---|
-| **Encrypted vault** | Your seeds are sealed with **AES-256-GCM**, key derived by **Argon2id** (256 MiB, 4 iterations). The only file that persists is `vault.xv`. |
+| **Encrypted vault** | Your seeds are sealed with **AES-256-GCM**, key derived by **Argon2id** (256 MiB, 4 iterations). The only wallet data that persists is the encrypted `vault.xv` (and any copy Settings → Restore keeps beside it). |
 | **Several wallets, one password** | Keep as many wallets as you like behind one password and switch between them from the top of the screen: new ones, restored from a seed or from keys, or **watch-only** (address + view key). Each runs its own backend and keeps syncing in the background. |
-| **Duress password** | A second password opens a **decoy profile** that looks completely normal. Both slots are equal-size whatever they hold (256 KiB each in 0.5's vault format) and position-randomised, and **their decrypted contents have exactly the same shape** — even someone holding the vault file *and* the duress password finds no marker of a second profile. Optional: using the decoy can **wipe** the real profile from the device. |
-| **Contacts, labels, notes** | An address book, names for your subaddresses and accounts, and a note on any transaction — all sealed in the vault with the wallets (never in wallet files, which are shredded on lock). |
+| **Duress password** | A second password opens a **decoy profile** that looks completely normal. Both slots are equal-size whatever they hold (256 KiB each in 0.5's vault format) and position-randomised, and **their decrypted contents have exactly the same shape**: even someone holding the vault file *and* the duress password finds no marker of a second profile. Optional: using the decoy can **wipe** the real profile from the device. |
+| **Contacts, labels, notes** | An address book, names for your subaddresses and accounts, and a note on any transaction, all sealed in the vault with the wallets (never in wallet files, which are shredded on lock). |
 | **Pay several people at once** | Up to 15 recipients in one transaction, one fee. Paste a `monero:` payment link and the form fills itself; ask for a payment with your own link and QR code (amount and description included). |
 | **Exact fee before you send** | The transaction is built and signed first (unbroadcast); the confirmation shows the **exact fee and total**. Confirm broadcasts that same signed transaction. |
-| **Amounts you can trust** | Typed amounts are parsed the same way on every system — `0,25` is 0.25 XMR everywhere, never 25 — and read back to you before anything is built. |
+| **Amounts you can trust** | Typed amounts are parsed the same way on every system (`0,25` is 0.25 XMR everywhere, never 25) and read back to you before anything is built. |
 | **Receive with QR** | Your address as a QR code (`monero:` URI) next to the full address in a monospace face. CI decodes the rendered QR and checks it matches the address shown. |
-| **Address echo on import** | Importing a seed shows the **derived primary address** to confirm before anything is saved — catching a wrong seed-offset, typo, or network. |
-| **Proofs** | The **transaction key** of any payment you sent (safe to share — it cannot spend) and a check for anyone's payment; **signed messages** (prove you own an address) and **reserve proofs** (prove a balance) — make and check both. |
+| **Address echo on import** | Importing a seed shows the **derived primary address** to confirm before anything is saved, catching a wrong seed-offset, typo, or network. |
+| **Proofs** | The **transaction key** of any payment you sent (safe to share: it cannot spend) and a check for anyone's payment; **signed messages** (prove you own an address) and **reserve proofs** (prove a balance): make and check both. |
 | **Verified one-click backend** | Bring your own `monero-wallet-rpc` (recommended), or press **Download & install**: the app checks getmonero.org's `hashes.txt` against **binaryFate's signature** (key pinned in the app) and the download against its signed SHA-256 before installing anything. |
 | **Built-in Tor** | Choose *Tor, built in* and the app runs its own `tor`: node traffic, node checks and downloads go through it, and **nothing goes out directly while it connects** (fail closed). *Download & install Tor* checks Tor Project's signature (Tor Browser Developers key, pinned in the app) and the download's signed SHA-256 first. A badge on every wallet says how it reaches its node. |
 | **Coin control** | The **Coins** tab lists unspent coins with the address label they arrived at. **Freeze** one and no transaction spends it (Send max included) until you unfreeze it; the frozen list is sealed in the vault and survives a lock. |
 | **Windows installers** | A per-user `setup.exe` or `.msi` (no admin rights), Start menu entry and uninstaller; the vault in `%APPDATA%` is never touched. Or keep using the zip. |
-| **Locked-down backend** | wallet-rpc runs on loopback with **per-session random credentials**, its files (wallet, log, ring database) live in one folder **shredded on lock**, and the app checks the port belongs to the process it started before sending it anything. |
+| **Locked-down backend** | wallet-rpc runs on loopback with **per-session random credentials**, its files (wallet, log, ring database) live in one folder **shredded on lock**, and the app checks the port belongs to the process it started before sending it a seed or keys. |
 | **Hygiene by default** | Copied addresses/keys **auto-clear from the clipboard after 30 s**. Logs **redact seeds, passwords and keys** and record nothing that tells your two wallets apart. Auto-lock on inactivity. |
 | **No hand-rolled crypto** | All key derivation, signing, proofs and address logic is done by the **official `monero-wallet-rpc`**. |
 
@@ -86,9 +86,9 @@ installed, and fail-closed while it runs) and coin control come built in.
 The most dangerous thing a wallet author can do is reimplement Monero's cryptography. XaultWallet
 deliberately does not. It launches the **official `monero-wallet-rpc`** binary (which you download
 from [getmonero.org](https://www.getmonero.org/downloads/) and verify yourself, or let the app fetch
-and verify — see [Step 2](#step-2--get-monero-wallet-rpc)) as a **loopback-only,
+and verify; see [Step 2](#step-2-get-monero-wallet-rpc)) as a **loopback-only,
 password-protected child process** on a random local port, restores your wallet from seed into a
-**private temporary folder**, and talks JSON-RPC to it. That child syncs against a `monerod` node —
+**private temporary folder**, and talks JSON-RPC to it. That child syncs against a `monerod` node:
 yours, or a public one.
 
 ```
@@ -97,7 +97,7 @@ yours, or a public one.
 │  (this project)  │                                       │  (official, yours)  │   own proxy)    │ (a node)│
 └────────┬────────┘                                       └────────────────────┘                 └─────────┘
          │ owns: encrypted vault (seed at rest), duress logic, UI
-         │ never: keys, signing, address derivation — that's Monero's official code
+         │ never: keys, signing, address derivation (that's Monero's official code)
 ```
 
 XaultWallet's own code is responsible for exactly three things: the **encrypted vault format**, the
@@ -109,40 +109,43 @@ the node never sees your IP address.
 
 **You need three things:** this release, the official Monero CLI tools, and a node to sync against.
 
-### Step 1 — Get the release
+### Step 1: Get the release
 
 Download the latest `XaultWallet-<version>-<platform>` archive from the releases page, check it
-against `SHA256SUMS`, and extract it. It is one self-contained executable — **no .NET install
-required** (Windows 10/11 x64, Linux x64, macOS Apple Silicon). On Windows you can run
+against `SHA256SUMS`, and extract it. It is one self-contained executable: **no .NET install
+required** (Windows 10/11 x64, Linux x64, macOS Apple Silicon). On macOS the app starts but can't
+open any wallet yet: the check that the wallet backend's port really is the app's own doesn't exist
+there, and the app fails closed ([SECURITY.md](SECURITY.md#what-is-not-protected-read-this)); use
+Windows or Linux for now. On Windows you can run
 `XaultWallet-<version>-win-x64-setup.exe` (or the `.msi`, if you deploy MSIs) instead: it installs
 for your user without administrator rights, adds a Start menu entry and an uninstaller, and never
 touches your vault. Binaries and installers are currently **unsigned**, so Windows SmartScreen /
 macOS Gatekeeper will ask before the first run.
 
-### Step 2 — Get monero-wallet-rpc
+### Step 2: Get monero-wallet-rpc
 
 This wallet's whole trust model rests on that binary being genuine. Two ways:
 
-- **Recommended — your own, verified by you.** Download the **Monero CLI** (not GUI) from
+- **Recommended: your own, verified by you.** Download the **Monero CLI** (not GUI) from
   <https://www.getmonero.org/downloads/>, verify it (import the signing key, check your archive's hash
   against the signed `hashes.txt`; details: [SETUP-MONERO-RPC.md](SETUP-MONERO-RPC.md)), extract it,
-  and note the full path of **`monero-wallet-rpc`** — or put it on your PATH.
-- **Convenient — let the app do it.** On first launch, if no `monero-wallet-rpc` is found, the startup
+  and note the full path of **`monero-wallet-rpc`**, or put it on your PATH.
+- **Convenient: let the app do it.** On first launch, if no `monero-wallet-rpc` is found, the startup
   screen offers **Download & install** (also in Settings → *Wallet backend*). It downloads the official
   CLI for your system from getmonero.org, checks `hashes.txt` against **binaryFate's signature** (his
   key ships inside XaultWallet, pinned by fingerprint) and the archive against its **signed SHA-256**,
   then installs only `monero-wallet-rpc` in your user profile. If any check fails, nothing is
   installed. What this trusts, exactly: [SECURITY.md](SECURITY.md#the-monero-wallet-rpc-installer).
 
-<p align="center"><img src="docs/screenshots/startup-setup.png" width="60%" alt="Startup: monero-wallet-rpc not found — Download &amp; install, or choose your own copy" /></p>
+<p align="center"><img src="docs/screenshots/startup-setup.png" width="60%" alt="Startup: monero-wallet-rpc not found. Download &amp; install, or choose your own copy" /></p>
 
-### Step 3 — First launch & settings
+### Step 3: First launch & settings
 
 1. Run XaultWallet. The splash checks for the binary and a node. Without a binary it stops and offers
    *Download & install* or *I have it: choose my copy…*; without a reachable node it offers
    **Continue anyway** (expected on a fresh machine).
 2. To use your own copy: **Settings** (top-right) → **Wallet backend**: *Browse…* to
-   `monero-wallet-rpc` (or leave it blank if it's on your PATH — the resolved path is shown) → **Test**.
+   `monero-wallet-rpc` (or leave it blank if it's on your PATH; the resolved path is shown) → **Test**.
    A typed path must be a full path; a bare `monero-wallet-rpc` is looked up on PATH, and relative
    paths are refused.
 3. **Network & privacy**: pick a **stagenet** public node from the list (or your own `monerod
@@ -150,12 +153,12 @@ This wallet's whole trust model rests on that binary being genuine. Two ways:
    and *Download & install Tor* if you want nodes never to see your IP address
    ([How-to #10](#10-route-everything-through-tor)). **Save changes**, then **Close**.
 
-### Step 4 — Create a wallet on stagenet
+### Step 4: Create a wallet on stagenet
 
-Follow [How-to #1](#1-create-your-first-wallet). Stagenet coins are worthless by design — exactly
+Follow [How-to #1](#1-create-your-first-wallet). Stagenet coins are worthless by design: exactly
 what you want while learning.
 
-### Step 5 — Get stagenet coins and play
+### Step 5: Get stagenet coins and play
 
 Grab coins from a community faucet (search "monero stagenet faucet"), then exercise the full loop:
 receive, watch it confirm, send some back, lock, unlock. Walkthrough: [STAGENET-TESTING.md](STAGENET-TESTING.md).
@@ -164,39 +167,39 @@ receive, watch it confirm, send some back, lock, unlock. Walkthrough: [STAGENET-
 
 ## How-to guides
 
-### 1) Create your first wallet
+### 1. Create your first wallet
 
 <img src="docs/screenshots/create-vault-seed.png" width="60%" align="right" alt="Writing down the recovery seed" />
 
-1. **Network & node** — keep **Stagenet**, enter a node or pick a preset.
-2. **Recovery seed** — keep *Create a new wallet* and click **Generate my seed**. The seed is generated
+1. **Network & node**: keep **Stagenet**, enter a node or pick a preset.
+2. **Recovery seed**: keep *Create a new wallet* and click **Generate my seed**. The seed is generated
    by `monero-wallet-rpc` itself. **Write the 25 words down, in order, on paper**, then either
-   **verify** three of them or **save a backup file** (plaintext — store it offline).
-3. **Vault password** — the meter refuses passwords that are trivially guessable (common words,
+   **verify** three of them or **save a backup file** (plaintext: store it offline).
+3. **Vault password**: the meter refuses passwords that are trivially guessable (common words,
    sequences, repeats). A long passphrase of unrelated words is both strong and memorable.
-4. (Optional) **Duress password** — see [How-to #3](#3-set-up-the-duress-decoy-password).
+4. (Optional) **Duress password**: see [How-to #3](#3-set-up-the-duress-decoy-password).
 5. **Create vault**, unlock, and the wallet opens while it scans in the background.
 
-A freshly generated wallet scans only from the moment it was created (minus a day's safety margin) —
+A freshly generated wallet scans only from the moment it was created (minus a day's safety margin):
 there is nothing older to find, so its first sync is fast.
 
 <br clear="right"/>
 
-### 2) Import an existing wallet (with optional seed-offset passphrase)
+### 2. Import an existing wallet (with optional seed-offset passphrase)
 
 1. Under **Recovery seed**, choose *Import an existing seed* and paste your 25 words.
-2. **Seed offset passphrase** — leave **blank** unless the wallet was created elsewhere *with* one.
+2. **Seed offset passphrase**: leave **blank** unless the wallet was created elsewhere *with* one.
    It is case- and space-sensitive, a **separate secret** the 25 words cannot recover, and a wrong or
    missing offset silently opens a different, **empty** wallet.
-3. **Scan from** — *Full history* (default, safest), *a specific block height* (your wallet's
+3. **Scan from**: *Full history* (default, safest), *a specific block height* (your wallet's
    creation height if you know it; `3,150,000` and `3.150.000` both work), or *Now* (only for a
    brand-new seed with no history).
 4. Set your password(s) and **Create vault**.
-5. **Is this your wallet?** — XaultWallet opens the seed once and shows the **address it derives**.
-   Compare it with the wallet you meant to import. If it doesn't match, go back and fix it — nothing
+5. **Is this your wallet?** XaultWallet opens the seed once and shows the **address it derives**.
+   Compare it with the wallet you meant to import. If it doesn't match, go back and fix it; nothing
    is saved until you confirm.
 
-### 3) Set up the duress (decoy) password
+### 3. Set up the duress (decoy) password
 
 The duress password opens a second, fully functional wallet that looks identical in the app. Under
 coercion you type the duress password instead of the real one.
@@ -204,27 +207,27 @@ coercion you type the duress password instead of the real one.
 1. On the create screen, switch on **Duress password**.
 2. Choose a duress password (different from the main one; it should look like a real password).
 3. Give the decoy a seed: **Generate a decoy** (fresh) or **Import a decoy seed** (one you control
-   with a plausible small balance — an imported decoy always scans full history).
-4. Save the decoy's backup too, and consider keeping a little XMR on it — an empty decoy is less convincing.
-5. **Wipe the real wallet when the duress password is used** — read twice before ticking. Any use of
-   the duress password (unlocking, changing its password or node) overwrites the real wallet's slot
+   with a plausible small balance; an imported decoy always scans full history).
+4. Save the decoy's backup too, and consider keeping a little XMR on it; an empty decoy is less convincing.
+5. **Wipe the real wallet when the duress password is used**: read twice before ticking. Any use of
+   the duress password (unlocking, or changing its password) overwrites the real wallet's slot
    with random data **permanently, on that device**, and destroys vault copies kept by Settings →
    Restore. Only enable it if your real seed is backed up elsewhere, and never use the duress
    password yourself.
 
 **Deniability, honestly stated:** the vault always contains two equal-size slots; without a duress
 password the second slot is random filler, cryptographically indistinguishable from an encrypted
-profile. Both slots' decrypted contents have the same fields — there is no "real"/"decoy" marker,
+profile. Both slots' decrypted contents have the same fields: there is no "real"/"decoy" marker,
 label, or password list anywhere. Each password's profile has its own wallets and contacts: the
 decoy can hold several wallets too, and nothing in it mentions the other. Every action in the app
-behaves the same for both. The limits — what an examiner *can* learn — are spelled out in
+behaves the same for both. The limits (what an examiner *can* learn) are spelled out in
 [SECURITY.md](SECURITY.md).
 
-### 4) Receive and send
+### 4. Receive and send
 
-**Receive** — the Receive tab shows an address as text and as a QR code; **Copy address** puts it on
+**Receive**: the Receive tab shows an address as text and as a QR code; **Copy address** puts it on
 the clipboard (auto-clears after 30 s). **New subaddress** (with an optional label, e.g. "Alice")
-gives a fresh, unlinkable address for the same wallet — good practice is a new one per payer. The
+gives a fresh, unlinkable address for the same wallet; good practice is a new one per payer. The
 **Addresses** list shows them all with their labels, marks the ones that have been paid (*used*), and
 shows any one's QR code. To **request a payment**, type an amount and what it's for: the QR code and
 **Copy payment link** then carry a standard `monero:` link that wallets fill in for the payer.
@@ -232,13 +235,13 @@ Subaddresses you've handed out are remembered in the vault, so after a lock the 
 
 <p align="center"><img src="docs/screenshots/wallet-receive-addresses.png" width="60%" alt="Receive: labelled subaddresses, used ones marked" /></p>
 
-**Send** —
-1. Paste the destination address — or a `monero:` payment link, which fills in the amount and shows
-   what it's for — or pick someone from **Contacts**, and type the amount. The line under the amount
+**Send**:
+1. Paste the destination address (or a `monero:` payment link, which fills in the amount and shows
+   what it's for), or pick someone from **Contacts**, and type the amount. The line under the amount
    shows exactly how it was read (e.g. `= 0.25 XMR`). **Add another recipient** to pay several people
    in one transaction (up to 15, one fee). Pick a priority and click **Review & send**.
 2. The transaction is **built and signed but not broadcast**. The confirmation shows every recipient
-   (by contact name when it is one), the amount, **exact network fee** and **total** — locked into the
+   (by contact name when it is one), the amount, **exact network fee** and **total**, locked into the
    signed transaction.
 3. **Send now** broadcasts exactly that transaction. **Cancel** discards it; nothing touched the network.
 4. After a send, the **payment proof** panel shows the txid and transaction key, and a new recipient
@@ -247,14 +250,14 @@ Subaddresses you've handed out are remembered in the vault, so after a lock the 
 **Send max** sweeps the entire spendable balance through the same review → confirm flow.
 
 If a broadcast fails or is interrupted, the message includes the txid and tells you to check History
-before retrying — retrying a transaction that actually went through would pay **twice**.
+before retrying: retrying a transaction that actually went through would pay **twice**.
 
 <p align="center">
   <img src="docs/screenshots/wallet-send-multi.png" width="49%" alt="Send: a payment link pasted, a second recipient from Contacts" />
   <img src="docs/screenshots/wallet-send-confirm-multi.png" width="49%" alt="Confirmation of a two-recipient send with the exact fee" />
 </p>
 
-### 5) Prove a payment, sign a message, prove a balance (Tools)
+### 5. Prove a payment, sign a message, prove a balance (Tools)
 
 <img src="docs/screenshots/wallet-tools.png" width="50%" align="right" alt="Tools: prove or check a payment, sign and check messages" />
 
@@ -267,73 +270,73 @@ was paid: the wallet reports exactly how much that address received and how many
 Also in **Tools**:
 - **Sign a message** with your main address (proves you control it, moves nothing), and **check**
   someone else's signed message.
-- **Prove your balance** with a reserve proof — at least an amount, or the whole account — and check
-  someone else's. Whoever checks it learns the total proven.
+- **Prove your balance** with a reserve proof (at least an amount, or everything the wallet holds) and
+  check someone else's. Whoever checks it learns the total proven.
 - **Re-check spent outputs**, if a misbehaving node left your balance wrong.
 
 <br clear="right"/>
 
-### 6) Several wallets: add, switch, manage
+### 6. Several wallets: add, switch, manage
 
 <p align="center">
   <img src="docs/screenshots/add-wallet.png" width="49%" alt="Add a wallet: new, from seed, from keys, or watch-only" />
   <img src="docs/screenshots/wallet-manage.png" width="49%" alt="Manage a wallet: name, node, accounts, backup, remove" />
 </p>
 
-- **Add** — the **+** next to the wallet's name: a **new wallet** (seed generated by
+- **Add**: the **+** next to the wallet's name: a **new wallet** (seed generated by
   `monero-wallet-rpc`, written down and checked like the first), **restore from seed**, **restore from
   keys** (address + private view and spend keys), or **watch-only** (address + private view key: sees
   incoming payments, can't spend, and can't see what was spent, so its balance reads as *received*).
-  Before an import is saved, `monero-wallet-rpc` opens it — refusing keys that don't belong to the
-  address — and you confirm the address it opens.
-- **Switch** — pick a wallet from the list under its name. Each wallet you open keeps running (and
+  Before an import is saved, `monero-wallet-rpc` opens it (refusing keys that don't belong to the
+  address) and you confirm the address it opens.
+- **Switch**: pick a wallet from the list under its name. Each wallet you open keeps running (and
   syncing, once a minute) until you lock, so switching back is instant. The vault reopens on the
   wallet you used last. **Lock** locks them all.
-- **Manage** — rename the wallet; change its **node** (applies at once, no rescan); create and name
+- **Manage**: rename the wallet; change its **node** (applies at once, no rescan); create and name
   **accounts** (separate balances inside one wallet; pick one next to the balance); show its **seed and
   keys** (after your password); or **remove** it from the vault (your password and its name; the last
-  wallet can't be removed — its money stays on the blockchain, reachable only with the seed).
+  wallet can't be removed; its money stays on the blockchain, reachable only with the seed).
 
-### 7) Contacts, history, notes
+### 7. Contacts, history, notes
 
 <p align="center">
   <img src="docs/screenshots/wallet-contacts.png" width="49%" alt="Contacts" />
   <img src="docs/screenshots/wallet-history-details.png" width="49%" alt="A transaction's details and note in History" />
 </p>
 
-- **Contacts** — save the addresses you pay: Send shows who you're paying, History who you paid, and
+- **Contacts**: save the addresses you pay: Send shows who you're paying, History who you paid, and
   *Pay* fills the send form. Contacts belong to the password's profile: every wallet in it shares them.
-- **History** — filter (received / sent / pending), search (notes, txids, names, amounts), and click a
+- **History**: filter (received / sent / pending), search (notes, txids, names, amounts), and click a
   transaction for its details: confirmations, which of your addresses received it, where it went, the
   fee, and **a note** only you see (sealed in the vault). **Export CSV** includes the notes.
 
-### 8) Change a password
+### 8. Change a password
 
-Settings → **Vault password**. With a wallet open, it changes the password of the profile that's open —
+Settings → **Vault password**. With a wallet open, it changes the password of the profile that's open,
 only that one, whichever it is. From the unlock screen, it changes whichever profile the current
 password opens. Your seeds don't change. It works the same for the main and the duress password (an
 asymmetric rule would reveal which is which). A new password that would also open the *other* profile
 is refused.
 
-### 9) Coming from 0.3
+### 9. Coming from 0.3
 
 <img src="docs/screenshots/settings-vault-format.png" width="50%" align="right" alt="Settings: the vault format card, asking before it upgrades" />
 
-Your vault opens in 0.5 as it is and keeps 0.3's format — about 4 KB per password, enough for a
-wallet or two with some labels and contacts — until you upgrade it in Settings → **Vault format**
-(256 KB per password, the size of every vault 0.5 creates). Before you start:
+Your vault opens in 0.5 as it is and keeps 0.3's format (about 4 KiB per password, enough for a
+wallet or two with some labels and contacts) until you upgrade it in Settings → **Vault format**
+(256 KiB per password, the size of every vault 0.5 creates). Before you start:
 
 1. **Export a backup** (Settings → *Export backup*) if you might go back to 0.3. 0.3 can't open an
    upgraded vault, nor a password's part once 0.5 has saved it.
 2. **If you have a duress password** (without wipe-on-duress), unlock with it first and wait until its
    wallet is ready; upgrade from there if you want the room. Then use your main password as usual.
    Until a password has been used in 0.5, someone holding it and the vault file could tell that the
-   other one was — [Upgrading to 0.5](SECURITY.md#upgrading-to-05-vault-format-2) explains why, and
+   other one was; [Upgrading to 0.5](SECURITY.md#upgrading-to-05-vault-format-2) explains why, and
    what to do if wipe-on-duress is on.
 
 <br clear="right"/>
 
-### 10) Route everything through Tor
+### 10. Route everything through Tor
 
 <img src="docs/screenshots/settings-tor-connecting.png" width="50%" align="right" alt="Settings: the built-in Tor connecting, 45%" />
 
@@ -341,8 +344,8 @@ wallet or two with some labels and contacts — until you upgrade it in Settings
    **Tor, built in**.
 2. **Download & install Tor**. XaultWallet asks torproject.org for the current release, checks Tor
    Project's signature on its checksum list against the Tor Browser Developers key built into the
-   app, checks the download against the signed checksum, and installs only `tor` in your user
-   profile. If any check fails, nothing is installed. (Already have tor? Put its path in the box
+   app, checks the download against the signed checksum, and installs only `tor` (with its GeoIP
+   files, and its libraries where it needs them) in your user profile. If any check fails, nothing is installed. (Already have tor? Put its path in the box
    instead, and **Test**.)
 3. **Save changes**. Tor starts (the status line shows its progress) and from then on starts with the
    app. Wallets you open now reach their node through it: the badge next to the wallet's name says
@@ -359,7 +362,7 @@ proxy** instead. What Tor does and doesn't hide: [SECURITY.md](SECURITY.md#built
 
 <br clear="right"/>
 
-### 11) Coin control: freeze coins
+### 11. Coin control: freeze coins
 
 <img src="docs/screenshots/wallet-coins.png" width="50%" align="right" alt="Coins: four coins, the freelance one frozen" />
 
@@ -380,7 +383,7 @@ its confirmations, and whether it is still maturing.
 
 <br clear="right"/>
 
-### 12) Keyboard shortcuts
+### 12. Keyboard shortcuts
 
 | Keys (Cmd on macOS) | Does |
 |---|---|
@@ -402,15 +405,18 @@ on stagenet; the same run fails on any binding error), so what you see is what s
 | | |
 |---|---|
 | <img src="docs/screenshots/startup.png" alt="Startup checks" /><br/>**Startup** checks for monero-wallet-rpc and your node. | <img src="docs/screenshots/startup-installing.png" alt="Installing monero-wallet-rpc" /><br/>**Download & install** monero-wallet-rpc, verified against binaryFate's key. |
-| <img src="docs/screenshots/create-vault-seed.png" alt="Writing down the seed" /><br/>**Create a vault**: the seed comes from monero-wallet-rpc itself. | <img src="docs/screenshots/create-vault-duress.png" alt="The duress password" /><br/>**Duress password**: a decoy that looks like the real thing. |
-| <img src="docs/screenshots/unlock.png" alt="Unlock" /><br/>**Unlock**: either password, same screen, same timing. | <img src="docs/screenshots/wallet-receive.png" alt="Receive" /><br/>**Receive**: QR code, full address, the route badge (TOR). |
-| <img src="docs/screenshots/wallet-receive-request.png" alt="Payment request" /><br/>**Request a payment**: amount and description in the QR code. | <img src="docs/screenshots/wallet-receive-addresses.png" alt="Subaddresses" /><br/>**Subaddresses**, labelled, used ones marked. |
-| <img src="docs/screenshots/wallet-send-multi.png" alt="Send to two recipients" /><br/>**Send** to several people in one transaction. | <img src="docs/screenshots/wallet-send-confirm-multi.png" alt="Confirm a send" /><br/>**Confirm** with the exact fee, before anything is broadcast. |
-| <img src="docs/screenshots/wallet-sent.png" alt="Sent" /><br/>**Sent**, with the payment proof ready to share. | <img src="docs/screenshots/wallet-history-details.png" alt="History" /><br/>**History**: filters, search, details and private notes. |
+| <img src="docs/screenshots/create-vault.png" alt="Create a vault" /><br/>**Create a vault**: network, node, seed and passwords on one screen. | <img src="docs/screenshots/create-vault-seed.png" alt="Writing down the seed" /><br/>**Write down the seed**: it comes from monero-wallet-rpc itself. |
+| <img src="docs/screenshots/create-vault-duress.png" alt="The duress password" /><br/>**Duress password**: a decoy that looks like the real thing. | <img src="docs/screenshots/unlock.png" alt="Unlock" /><br/>**Unlock**: either password, same screen, same timing. |
+| <img src="docs/screenshots/wallet-receive.png" alt="Receive" /><br/>**Receive**: QR code, full address, the route badge (TOR). | <img src="docs/screenshots/wallet-receive-request.png" alt="Payment request" /><br/>**Request a payment**: amount and description in the QR code. |
+| <img src="docs/screenshots/wallet-receive-addresses.png" alt="Subaddresses" /><br/>**Subaddresses**, labelled, used ones marked. | <img src="docs/screenshots/wallet-send.png" alt="Send" /><br/>**Send**: the amount read back exactly as it was understood. |
+| <img src="docs/screenshots/wallet-send-confirm.png" alt="Confirm a send" /><br/>**Confirm** with the exact fee, before anything is broadcast. | <img src="docs/screenshots/wallet-send-multi.png" alt="Send to two recipients" /><br/>**Send** to several people in one transaction. |
+| <img src="docs/screenshots/wallet-send-confirm-multi.png" alt="Confirm a two-recipient send" /><br/>**Confirm** a two-recipient send: each by name, one fee. | <img src="docs/screenshots/wallet-sent.png" alt="Sent" /><br/>**Sent**, with the payment proof ready to share. |
+| <img src="docs/screenshots/wallet-history.png" alt="History" /><br/>**History**: received, sent and pending, searchable. | <img src="docs/screenshots/wallet-history-details.png" alt="Transaction details" /><br/>**Details** of a transaction, with a private note. |
 | <img src="docs/screenshots/wallet-coins.png" alt="Coins" /><br/>**Coins**: freeze the ones you don't want spent. | <img src="docs/screenshots/wallet-contacts.png" alt="Contacts" /><br/>**Contacts**, shared by the wallets of a password. |
 | <img src="docs/screenshots/wallet-tools.png" alt="Tools" /><br/>**Tools**: prove a payment, sign and check messages. | <img src="docs/screenshots/wallet-tools-proofs.png" alt="Reserve proofs" /><br/>**Reserve proofs**: prove a balance, check someone's. |
 | <img src="docs/screenshots/wallet-manage.png" alt="Manage" /><br/>**Manage**: name, node, accounts, backup, remove. | <img src="docs/screenshots/wallet-accounts.png" alt="Accounts" /><br/>**Accounts**: separate balances inside one wallet. |
 | <img src="docs/screenshots/add-wallet.png" alt="Add a wallet" /><br/>**Add a wallet**: new, from seed, from keys, watch-only. | <img src="docs/screenshots/wallet-watch-only.png" alt="Watch-only" /><br/>**Watch-only**: sees what arrives, can't spend. |
+| <img src="docs/screenshots/settings.png" alt="Settings" /><br/>**Settings**: wallet backend, network and privacy, security. | <img src="docs/screenshots/settings-vault-format.png" alt="Vault format" /><br/>**Vault format**: a vault from 0.3 asks before it upgrades. |
 | <img src="docs/screenshots/settings-tor.png" alt="Built-in Tor" /><br/>**Built-in Tor**, connected. | <img src="docs/screenshots/settings-tor-installing.png" alt="Installing Tor" /><br/>**Download & install Tor**, verified against Tor Project's key. |
 | <img src="docs/screenshots/settings-tor-blocked.png" alt="Tor blocked" /><br/>**Blocked by a firewall?** It says which file to allow. | <img src="docs/screenshots/wallet-tor-connecting.png" alt="Waiting for Tor" /><br/>**Fail closed**: a wallet waits for Tor rather than go direct. |
 
@@ -433,34 +439,34 @@ syncs in seconds; one restored from full history takes as long as the node needs
 
 | Path | What | Secret? |
 |---|---|---|
-| `%APPDATA%\XaultWallet\vault.xv` (Linux: `~/.config/XaultWallet/`; macOS: `~/Library/Application Support/XaultWallet/`) | Your encrypted vault — the **only** persistent wallet data | Encrypted (AES-256-GCM, Argon2id) |
-| `…\XaultWallet\settings.json` | Binary path, default node, refresh/auto-lock intervals, Tor/proxy choice, window size | No secrets, plain JSON |
+| `%APPDATA%\XaultWallet\vault.xv` (Linux: `~/.config/XaultWallet/`; macOS: `~/Library/Application Support/XaultWallet/`) | Your encrypted vault: the **only** persistent wallet data. Settings → Restore keeps the vault it replaced beside it as `vault.xv.replaced-<date>` (a duress wipe shreds those too) | Encrypted (AES-256-GCM, Argon2id) |
+| `…\XaultWallet\settings.json` | Binary and tor paths, default node and network, refresh/auto-lock intervals, Tor/proxy choice, hide amounts, window size | No secrets, plain JSON |
 | `…\XaultWallet\logs\` | Diagnostic log | Seeds/passwords/keys redacted; nothing per-wallet (no heights, nodes or send events) |
 | `%TEMP%\xaultwallet_*` (per open wallet) | wallet-rpc's restored wallet files, its log, its ring database | **Shredded** (overwritten + deleted) on lock/exit; private to your user |
 | `%LOCALAPPDATA%\XaultWallet\monero-cli\` (Linux: `~/.local/share/XaultWallet/monero-cli/`) | `monero-wallet-rpc`, only if *Download & install* put it there | Not secret (an official, signature-checked binary) |
 | `%LOCALAPPDATA%\XaultWallet\tor\` (Linux: `~/.local/share/XaultWallet/tor/`) | `tor` and its GeoIP files, only if *Download & install Tor* put them there | Not secret (Tor Project's signature-checked build) |
-| `%LOCALAPPDATA%\XaultWallet\tor-data\` | Tor's own state (consensus cache, guard choice), while built-in Tor is used | Not secret; shows that Tor is used on this computer |
+| `%LOCALAPPDATA%\XaultWallet\tor-data\` (Linux: `~/.local/share/XaultWallet/tor-data/`) | Tor's own state (consensus cache, guard choice), while built-in Tor is used | Not secret; shows that Tor is used on this computer |
 
 On Linux/macOS the `XaultWallet` folder is `0700` and its files `0600` regardless of your umask (older
 installs are tightened at startup); exports and seed backups you save are written `0600` too.
 
 **Privacy notes:** a public node's operator can see your IP and the transactions you broadcast (not
-your balance or history) — and, with several wallets open, that the same computer is syncing all of
+your balance or history), and, with several wallets open, that the same computer is syncing all of
 them. For privacy, run your own node, or turn on the built-in Tor (or your own SOCKS proxy) in
 Settings: the node then sees a Tor exit, not your IP address.
-Deleting `vault.xv` without a seed backup means the funds are gone — the seed *is* the wallet.
+Deleting `vault.xv` without a seed backup means the funds are gone: the seed *is* the wallet.
 
 ## Security model in one page
 
 - **At rest:** seeds and keys sealed with AES-256-GCM; key derived by Argon2id (256 MiB / 4
-  iterations). A wrong password is detected only by an authentication-tag failure — **no plaintext
+  iterations). A wrong password is detected only by an authentication-tag failure: **no plaintext
   password comparison**.
 - **Deniability:** two equal slots of 256 KiB each (whatever they hold; 4 KiB in a vault from 0.2/0.3
   until you upgrade it), order randomised, unused slot random. Both slots' plaintexts have the same
   fields; every operation is symmetric; a duress unlock takes the same time as a normal one. Limits
   (snapshots over time, a wipe flag examined before it fires, a vault from 0.3 used with only one of
   its passwords since, several wallets on one remote node): [SECURITY.md](SECURITY.md).
-- **In memory:** passwords/keys pass through pinned, zero-on-dispose buffers — best-effort in a managed runtime.
+- **In memory:** passwords/keys pass through pinned, zero-on-dispose buffers, best-effort in a managed runtime.
 - **On the wire:** wallet-rpc binds `127.0.0.1` on a random port, exists only while unlocked, and
   requires **per-session random digest credentials** (never on its command line). Before a seed is sent,
   the app checks the port belongs to the process it started (Linux, Windows). Browser-based attacks on
@@ -496,7 +502,7 @@ XaultWallet.Core                ← class library, no UI deps, unit-tested
     ├── LoopbackPortOwnership "is that port really our child?" (Linux /proc, Windows GetExtendedTcpTable)
     ├── MoneroRpcClient       hand-built JSON-RPC envelope; digest-only credentials; no proxy
     ├── XmrAmount / BlockHeight  culture-independent parsing of what users type
-    ├── MoneroAddress         sanity checks only (length/charset/prefix) — never checksum crypto
+    ├── MoneroAddress         sanity checks only (length/charset/prefix), never checksum crypto
     ├── MoneroUri             monero: payment links (build, and parse strictly)
     ├── DaemonAddress         the one definition of a valid node URL
     └── SecretRedactor        structural redaction of secrets in RPC JSON
@@ -507,10 +513,13 @@ XaultWallet.Desktop             ← Avalonia 12, MVVM (CommunityToolkit.Mvvm)
 ├── Views/Wallet/             Receive, Send, History, Contacts, Tools, Coins tabs; the Manage sheet
 ├── TorController             the app's own Tor: start with the app, the one route while on (fail closed)
 ├── Controls/                 Icon (line icons), QrCodeView (QRCoder)
-└── The UI is IDENTICAL for the real and duress profiles — by construction
+└── The UI is IDENTICAL for the real and duress profiles, by construction
 
 tests/   XaultWallet.Core.Tests        unit tests (vault, deniability, crypto, parsing, hardening)
          XaultWallet.IntegrationTests  real monero-wallet-rpc on a private regtest chain
+         E2E.Shared                    the one end-to-end scenario (WalletScenario), shared by both drivers below
+         XaultWallet.E2E.Headless      runs it in process on Linux (CI): real input, headless rendering
+         XaultWallet.E2E.Windows       runs it against the released XaultWallet.exe through UI Automation
 installer/ XaultWallet.iss, .wxs       the Windows installers (Inno Setup, WiX), built by the release workflow
 tools/   TestRunner                    reflection test runner (fails on zero discovered tests)
          UiSnapshots                   renders every screen headlessly; fails on binding errors / QR mismatch
@@ -525,23 +534,23 @@ Requires the **.NET 10 SDK**.
 dotnet run --project src/XaultWallet.Desktop    # run the app
 ```
 
-- **Visual Studio 2022** (17.8+): open `XaultWallet.sln`, F5. Windows: `./build.ps1`.
+- **Visual Studio 2026**: open `XaultWallet.sln`, F5. Windows: `./build.ps1`.
 - **Single-file release** for your platform: `./publish-windows.ps1` / `./publish-linux.sh`, or
-  `dotnet publish src/XaultWallet.Desktop -c Release -r <win-x64|linux-x64|osx-arm64>`.
+  `dotnet publish src/XaultWallet.Desktop -c Release -r <win-x64|linux-x64|osx-x64|osx-arm64>`.
 - **Windows installers**: publish `win-x64` into `out/`, copy the docs next to the exe, then
   `iscc /DAppVersion=0.6.0a-beta /DAppNumericVersion=0.6.0.1 /DSourceDir=%CD%\out installer\XaultWallet.iss`
   (Inno Setup 6) for the setup exe, and see the header of `installer/XaultWallet.wxs` for the MSI
   (WiX Toolset 3). The release workflow builds both and test-installs each.
 - **UI snapshots** (every screen, zero-binding-error check, QR round-trip with `zbarimg`):
   `dotnet run -c Release --project tools/UiSnapshots -- ui-snapshots`
-- **Integration tests** against a real `monero-wallet-rpc` — a private regtest chain is the quickest:
+- **Integration tests** against a real `monero-wallet-rpc` (a private regtest chain is the quickest):
   see [STAGENET-TESTING.md](STAGENET-TESTING.md#automated-integration-tests-regtest).
 - **End-to-end tests** of the whole app through its UI (create, duress, receive, send, history, a
   second wallet, contacts, a two-recipient send), on Linux in process and on Windows against the
   released exe: see
   [STAGENET-TESTING.md](STAGENET-TESTING.md#end-to-end-tests-the-whole-app-through-its-ui).
 
-CI (GitHub Actions) runs all of the above on every push: unit tests on Linux and Windows, the regtest
+CI (GitHub Actions) runs all of the above on every push: unit tests on Linux, Windows and macOS, the regtest
 integration and end-to-end tests on Linux, the UI smoke test, and the Windows end-to-end test of the
 published exe. A release is drafted only after that Windows test passes on the exact zip being
 released; see [RELEASE.md](RELEASE.md#automated-releases-github-actions).
@@ -551,20 +560,20 @@ released; see [RELEASE.md](RELEASE.md#automated-releases-github-actions).
 | Symptom | Cause & fix |
 |---|---|
 | **"Couldn't start the wallet"** banner | XaultWallet can't find/launch `monero-wallet-rpc`. **Open Settings**, set the binary path (or *Download & install*), **Test**, then **Retry**. |
-| **"Another program is answering on the wallet backend's port"** | Something else grabbed the random port before wallet-rpc could. Close other wallet software and **Retry** — a fresh port is chosen each time. |
+| **"Another program is answering on the wallet backend's port"** | Something else grabbed the random port before wallet-rpc could. Close other wallet software and **Retry**; a fresh port is chosen each time. |
 | Stuck on **"Connecting to node…"** | The node is down, syncing, or on the wrong network. **Manage** → *Node*: *Test*, or switch this wallet to another node ([How-to #6](#6-several-wallets-add-switch-manage)). A node that doesn't answer at all holds that wallet's monero-wallet-rpc for each connection attempt (about 20 s on Windows, up to 2 min on Linux) before anything else it's asked gets an answer: *Test* a node before you apply it. |
 | **"The vault is full"** | One password's profile has to fit in 256 KiB: hundreds of wallets, contacts and notes do, but not without limit. Remove some (long notes first), then try again. Nothing was written. |
-| **"This vault still has the format of XaultWallet 0.3…"** | That format holds about 4 KB per password. Settings → **Vault format** → *Upgrade* makes room; if you have a duress password, read [Coming from 0.3](#9-coming-from-03) first. Nothing was written. |
+| **"This vault still has the format of XaultWallet 0.3…"** | That format holds about 4 KiB per password. Settings → **Vault format** → *Upgrade* makes room; if you have a duress password, read [Coming from 0.3](#9-coming-from-03) first. Nothing was written. |
 | **"Your firewall or security software is blocking tor"** | Allow the `tor` file named in the message to make outgoing connections (Windows Defender Firewall, or your security product), then **Start / restart** in Settings. |
 | **"Connecting to Tor…" never finishes** | Settings → Network & privacy shows Tor's own progress. A network that blocks Tor can't be helped by this release (no bridges yet): use **My own SOCKS proxy** with a Tor that has bridges, or **Direct**. |
 | **A local node stops working with Tor on** | It shouldn't: a node at `127.0.0.1` is reached directly. A node elsewhere on your LAN goes through Tor, which can't reach private addresses: use its public address, or choose **Direct** for it. |
 | **Watch-only balance looks too high** | A watch-only wallet sees what it receives but not what was spent (that needs the spend key). Its figure is labelled *received*. |
 | **Imported wallet shows 0 balance** | Wrong **seed offset**, wrong **network**, or a too-recent **scan from** choice. Re-import with *Full history* and compare the derived address at the confirmation step. |
-| **Balance says maturing** | Fresh coins need 10 confirmations (~20 min) to unlock; change and mining rewards too. |
+| **Balance says maturing** | Fresh coins and change need 10 confirmations (~20 min) to unlock; mining rewards need 60 (~2 h). |
 | **Send fails: "Not enough spendable balance…"** | Amount + exact fee exceeds what's unlocked. Lower the amount or wait for funds to mature. |
-| **Broadcast failed / interrupted** | The message shows the txid — check **History** (or an explorer) before retrying, so you don't pay twice. |
+| **Broadcast failed / interrupted** | The message shows the txid: check **History** (or an explorer) before retrying, so you don't pay twice. |
 | **Forgot the vault password** | Unrecoverable by design. Restore from your 25-word seed into a fresh vault. |
-| **Forgot a seed-offset passphrase** | Unrecoverable — the 25 words alone open a different wallet. Monero's design, not the app's. |
+| **Forgot a seed-offset passphrase** | Unrecoverable: the 25 words alone open a different wallet. Monero's design, not the app's. |
 | Log files (`…/XaultWallet/logs`) | Safe to share when reporting bugs: no seeds, passwords, keys, nodes or per-wallet details. Still, skim before posting. |
 
 ## FAQ
@@ -580,7 +589,7 @@ Not from the vault file, and not from the decoy's own contents: the slots are eq
 position-randomised, and decrypt to the same shape; the unused slot is random noise. That holds however
 many wallets and contacts each password's profile has. What remains is
 opsec (a bank statement showing 10 XMR bought while the decoy holds 0.1 is the giveaway) plus the
-limits in [SECURITY.md](SECURITY.md) — notably copies of the vault taken at different times.
+limits in [SECURITY.md](SECURITY.md), notably copies of the vault taken at different times.
 
 **Why isn't Tor bundled in the release?**
 For the same reason monero-wallet-rpc isn't: you shouldn't have to trust a wallet's copy of someone
@@ -610,22 +619,22 @@ the spend key (or, for privacy, the view key).
 - Key-image import for watch-only wallets (so they can see spends), and offline signing
 - Hardware wallets (Ledger / Trezor through monero-wallet-rpc)
 - Screen-capture protection while the seed is shown
-- Opt-in fiat display (off by default — it would call a price API, which is a privacy trade-off)
+- Opt-in fiat display (off by default: it would call a price API, which is a privacy trade-off)
 - The big one: a **professional third-party security audit** before any mainnet story exists
 
 ## Contributing, license, acknowledgements
 
-This is a personal, educational project shared in the open. Review, issues, and PRs are welcome —
+This is a personal, educational project shared in the open. Review, issues, and PRs are welcome:
 extra eyes on a self-custody wallet are exactly the point of open-sourcing it. For anything
 security-sensitive, use the private reporting process in [SECURITY.md](SECURITY.md) instead of a
 public issue. Release notes: [CHANGELOG.md](CHANGELOG.md).
 
-**License:** [MIT](LICENSE) — provided as-is, no warranty.
+**License:** [MIT](LICENSE), provided as-is, no warranty.
 
-Built on the official Monero tools (`monerod`, `monero-wallet-rpc`) — this project drives them rather
+Built on the official Monero tools (`monerod`, `monero-wallet-rpc`): this project drives them rather
 than reimplementing Monero's cryptography. UI built with [Avalonia](https://avaloniaui.net/); QR codes
 by [QRCoder](https://github.com/codebude/QRCoder). Screenshots are rendered from the app's real views
-with demo data on stagenet. Brought to life in harmony — <https://dboudreau.dev>
+with demo data on stagenet. Brought to life in harmony: <https://dboudreau.dev>
 
 XaultWallet is client-only: no service, no fee, no churning or mixing. It drives the official Monero
 binary and nothing more.

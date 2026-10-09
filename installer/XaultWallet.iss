@@ -6,7 +6,8 @@
 ; It installs the program only: the vault and settings live in %APPDATA%\XaultWallet and are
 ; never written, moved or deleted by Setup or by the uninstaller.
 ;
-; Local build (from the repository root, after publishing win-x64 into .\out):
+; Local build (from the repository root, after publishing win-x64 into .\out with README.md, SECURITY.md,
+; CHANGELOG.md and LICENSE copied next to the exe):
 ;   iscc /DAppVersion=0.6.0a-beta /DAppNumericVersion=0.6.0.1 /DSourceDir=%CD%\out /DOutputDir=%CD%\dist installer\XaultWallet.iss
 
 #ifndef AppVersion

@@ -1,6 +1,6 @@
 # Building an installable XaultWallet release
 
-This produces a **single self-contained `.exe`** — one file that runs on any Windows 10/11
+This produces a **single self-contained `.exe`**: one file that runs on any Windows 10/11
 (64-bit) machine with **no .NET installed**. It bundles the .NET runtime and all libraries.
 
 You build this yourself on your own machine; it can't be produced without the .NET SDK.
@@ -39,27 +39,15 @@ and double-click. It carries the X icon and needs nothing else installed.
 
 ---
 
-## Making it feel "installed"
+## The Windows installers
 
-A single `.exe` is the simplest distribution. To make it feel like an installed app:
-
-- **Start Menu / Desktop shortcut:** right-click `XaultWallet.exe` → *Send to → Desktop
-  (create shortcut)*, or drop a shortcut in
-  `%APPDATA%\Microsoft\Windows\Start Menu\Programs`.
-- **Pin to taskbar:** run it, then right-click the taskbar icon → *Pin*.
-
-### A real installer (optional)
-If you want a double-click **Setup.exe** that installs, adds Start Menu entries, and provides
-uninstall, use one of these (each is its own tool, run after the publish step above):
-
-- **Inno Setup** (free, simplest): point its script at `release/win-x64/XaultWallet.exe` and it
-  builds a `Setup.exe`. Good default choice.
-- **WiX Toolset**: produces a proper `.msi` (better for managed/enterprise deployment, steeper
-  learning curve).
-- **Velopack** (`vpk`): modern .NET app installer + auto-update, designed for exactly this.
-
-For a personal/beta build, the shortcut approach is plenty; reach for an installer only when
-you're distributing to other people.
+Both installers are in the repository: `installer/XaultWallet.iss` (Inno Setup 6, the
+`setup.exe`) and `installer/XaultWallet.wxs` (WiX Toolset 3, the `.msi`). Each takes the published
+exe and the four docs from `out/`: publish `win-x64` there, copy `README.md`, `SECURITY.md`,
+`CHANGELOG.md` and `LICENSE` next to the exe, then run the command in the header of the installer
+file (the `iscc` line is also in README's Build section). The release workflow builds and
+test-installs both: a silent per-user install must put the exact published exe in place, and
+uninstalling must remove it again.
 
 ---
 
@@ -86,14 +74,15 @@ matters more for a wallet than for most apps, because users are trusting the bin
 
 ---
 
-## IMPORTANT — this is still beta
+## IMPORTANT: this is still beta
 
 A packaged `.exe` looks finished, but packaging changes nothing about the code's maturity:
 
 - **Unaudited.** Get a professional security audit before this holds real mainnet funds.
-- **Test networks first.** Exercise the full flow on testnet/stagenet before mainnet.
-- **The bundled app does not include `monero-wallet-rpc`** — by design. Whoever runs it points
-  Settings at their own verified `monero-wallet-rpc` (see `SETUP-MONERO-RPC.md`), or uses the in-app
+- **Test networks first.** Exercise the full flow on stagenet before mainnet
+  ([STAGENET-TESTING.md](STAGENET-TESTING.md)).
+- **The bundled app does not include `monero-wallet-rpc`**, by design. Whoever runs it points
+  Settings at their own verified `monero-wallet-rpc` (see [SETUP-MONERO-RPC.md](SETUP-MONERO-RPC.md)), or uses the in-app
   *Download & install*, which fetches the official build and checks Monero's signature and checksum
   first. The wallet never ships someone else's key-handling binary.
 - **Back up your seed** independently of the app.
@@ -122,8 +111,9 @@ to a **draft** release for you to review and publish. There are two ways to star
   creates the tag only when you press **Publish** on the draft: the workflow never creates or moves a
   tag. Run without a version, it only builds (a dry run) and publishes nothing.
 
-Before building, the workflow stops if the version isn't `vX.Y.Z` or `vX.Y.Z-suffix`, doesn't match
-`<Version>` in `XaultWallet.Desktop.csproj`, has no `## <version>` section in `CHANGELOG.md`, or
+Before building, the workflow stops if the version isn't `vX.Y.Z`, `vX.Y.Za` (a revision letter) or
+either followed by `-suffix`, doesn't match `<ReleaseVersion>` in `XaultWallet.Desktop.csproj` (or
+`<Version>` when there is no `<ReleaseVersion>`), has no `## <version>` section in `CHANGELOG.md`, or
 already has a release (draft or published). After building, it runs the Windows end-to-end test
 (`e2e-windows.yml`) on the very `win-x64` zip it built, and drafts nothing if that fails. The release
 notes are a warning header plus that CHANGELOG section. A hyphenated version (`-beta`, `-rc.1`) is marked as a pre-release, so it never

@@ -61,7 +61,7 @@ jobs:
         with:
           name: ${{ inputs.artifact }}
           path: dist
-      - name: Or build it exactly as the release workflow does
+      - name: Or publish the exe the way the release workflow does (the zip holds only the exe here)
         if: inputs.artifact == ''
         shell: bash
         run: |

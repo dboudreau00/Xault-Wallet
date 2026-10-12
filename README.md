@@ -5,7 +5,7 @@ Built on .NET 10 + Avalonia. Encrypted at rest with AES-256-GCM (Argon2id KDF). 
 `monero-wallet-rpc`; it never reimplements Monero's cryptography. Its own Tor (verified when it is
 installed, and fail-closed while it runs) and coin control come built in.
 
-![License: MIT](https://img.shields.io/badge/license-MIT-green)
+![License: BSD 3-Clause](https://img.shields.io/badge/license-BSD%203--Clause-green)
 ![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4)
 ![Avalonia 12](https://img.shields.io/badge/Avalonia-12-8B44AC)
 ![Status](https://img.shields.io/badge/status-unaudited%20beta-red)
@@ -629,7 +629,8 @@ extra eyes on a self-custody wallet are exactly the point of open-sourcing it. F
 security-sensitive, use the private reporting process in [SECURITY.md](SECURITY.md) instead of a
 public issue. Release notes: [CHANGELOG.md](CHANGELOG.md).
 
-**License:** [MIT](LICENSE), provided as-is, no warranty.
+**License:** [BSD 3-Clause](LICENSE), provided as-is, no warranty: the license Monero's own wallets use.
+Releases up to 0.6.0b-beta were published under the MIT license and remain available under it.
 
 Built on the official Monero tools (`monerod`, `monero-wallet-rpc`): this project drives them rather
 than reimplementing Monero's cryptography. UI built with [Avalonia](https://avaloniaui.net/); QR codes

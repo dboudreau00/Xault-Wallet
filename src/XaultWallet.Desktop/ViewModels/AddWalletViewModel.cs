@@ -288,6 +288,12 @@ public sealed partial class AddWalletViewModel : ViewModelBase
 
     [ObservableProperty] private string _restoreHeightText = string.Empty;
 
+    /// <summary>The user has been told the node couldn't confirm the typed height and pressed Add again.</summary>
+    private bool _unverifiedHeightAccepted;
+
+    partial void OnRestoreHeightTextChanged(string value) => _unverifiedHeightAccepted = false;
+    partial void OnRestoreModeChanged(int value) => _unverifiedHeightAccepted = false;
+
     [GeneratedRegex("^[0-9a-fA-F]{64}$")]
     private static partial Regex HexKey();
 
@@ -366,6 +372,24 @@ public sealed partial class AddWalletViewModel : ViewModelBase
             {
                 Error = $"Restore height {wallet.RestoreHeight:N0} is beyond the current chain tip ({tip:N0}). Check for a typo.";
                 return;
+            }
+
+            // No tip from the node: fall back on the clock-based estimate for an impossible height, and
+            // make the user acknowledge that the typed height could not be checked against the chain.
+            if (fromHeight && tip == 0)
+            {
+                if (RestoreHeights.IsBeyondPlausibleTip(wallet.RestoreHeight, wallet.Network, DateTimeOffset.UtcNow))
+                {
+                    Error = $"Restore height {wallet.RestoreHeight:N0} is higher than the chain can be by now. Check for a typo or the network.";
+                    return;
+                }
+
+                if (!_unverifiedHeightAccepted)
+                {
+                    _unverifiedHeightAccepted = true;
+                    Error = "The node couldn't be reached, so this restore height can't be checked. A height above the real tip would show an empty wallet. Press Add again to continue, or scan the full history.";
+                    return;
+                }
             }
 
             // Open it in monero-wallet-rpc first: a bad seed or keys must never reach the vault.

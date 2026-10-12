@@ -181,4 +181,16 @@ public class RestoreHeightTests
         Assert.Equal(1_000UL - RestoreHeights.SafetyMargin, RestoreHeights.ForNewSeed(1_000, MoneroNetwork.Mainnet, Jan2024));
         Assert.Equal(0UL, RestoreHeights.ForNewSeed(300, MoneroNetwork.Mainnet, Jan2024));
     }
+
+    [Fact]
+    public void An_Impossible_Height_Is_Caught_Without_A_Node_And_A_Recent_One_Is_Not()
+    {
+        ulong estimate = RestoreHeights.ApproximateTip(MoneroNetwork.Mainnet, Jan2024);
+        Assert.False(RestoreHeights.IsBeyondPlausibleTip(estimate, MoneroNetwork.Mainnet, Jan2024));
+        Assert.False(RestoreHeights.IsBeyondPlausibleTip(estimate + 50_000, MoneroNetwork.Mainnet, Jan2024));
+        Assert.True(RestoreHeights.IsBeyondPlausibleTip(estimate + RestoreHeights.UnverifiedTipSlack + RestoreHeights.SafetyMargin + 1, MoneroNetwork.Mainnet, Jan2024));
+        Assert.True(RestoreHeights.IsBeyondPlausibleTip(99_999_999, MoneroNetwork.Mainnet, Jan2024));
+        // A clock before genesis gives no estimate: nothing to compare with, nothing refused.
+        Assert.False(RestoreHeights.IsBeyondPlausibleTip(99_999_999, MoneroNetwork.Mainnet, DateTimeOffset.UnixEpoch));
+    }
 }

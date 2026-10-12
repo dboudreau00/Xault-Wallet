@@ -165,6 +165,12 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
 
     public bool IsSpecificHeight => RestoreMode == 1;
 
+    /// <summary>The user has been told the node couldn't confirm the typed height and pressed Create again.</summary>
+    private bool _unverifiedHeightAccepted;
+
+    partial void OnRestoreHeightTextChanged(string value) => _unverifiedHeightAccepted = false;
+    partial void OnRestoreModeChanged(int value) => _unverifiedHeightAccepted = false;
+
     // --- verification quiz ---
     [ObservableProperty] private string _verifyPrompt1 = string.Empty;
     [ObservableProperty] private string _verifyPrompt2 = string.Empty;
@@ -630,6 +636,24 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
                 if (RestoreMode == 1 && tipNow > 0 && typedHeight > tipNow)
                 {
                     Error = $"Restore height {typedHeight:N0} is beyond the current chain tip ({tipNow:N0}). Check for a typo.";
+                    return;
+                }
+            }
+
+            // No tip from the node: an impossible typed height is refused by the clock-based estimate, and
+            // any other must be acknowledged, since it could not be checked against the chain.
+            if (!CreateNewReal && RestoreMode == 1 && tipNow == 0)
+            {
+                if (RestoreHeights.IsBeyondPlausibleTip(typedHeight, Network, DateTimeOffset.UtcNow))
+                {
+                    Error = $"Restore height {typedHeight:N0} is higher than the chain can be by now. Check for a typo or the network.";
+                    return;
+                }
+
+                if (!_unverifiedHeightAccepted)
+                {
+                    _unverifiedHeightAccepted = true;
+                    Error = "The node couldn't be reached, so this restore height can't be checked. A height above the real tip would show an empty wallet. Press Create again to continue, or scan the full history.";
                     return;
                 }
             }

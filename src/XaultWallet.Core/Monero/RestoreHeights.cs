@@ -65,4 +65,24 @@ public static class RestoreHeights
         ulong trusted = Math.Min(reportedTip, ApproximateTip(network, now));
         return trusted > SafetyMargin ? trusted - SafetyMargin : 0;
     }
+
+    /// <summary>
+    /// How far above <see cref="ApproximateTip"/> a typed restore height may sit before it is refused
+    /// while no node can be asked for the real tip (~139 days of blocks). The estimate runs
+    /// deliberately low, so this only catches heights no chain could have reached (typos, a height
+    /// from the wrong network), never a merely recent one.
+    /// </summary>
+    public const ulong UnverifiedTipSlack = 100_000;
+
+    /// <summary>
+    /// True when <paramref name="height"/> is beyond anything the clock says the chain can have
+    /// reached (<see cref="ApproximateTip"/> + <see cref="UnverifiedTipSlack"/> + <see cref="SafetyMargin"/>).
+    /// Used when the node's own tip is unknown: such a height would scan nothing and look like an
+    /// empty wallet.
+    /// </summary>
+    public static bool IsBeyondPlausibleTip(ulong height, MoneroNetwork network, DateTimeOffset now)
+    {
+        ulong estimate = ApproximateTip(network, now);
+        return estimate > 0 && height > estimate + UnverifiedTipSlack + SafetyMargin;
+    }
 }

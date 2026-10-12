@@ -26,6 +26,10 @@ public static class SecretRedactor
     {
         "seed", "seed_offset", "password", "key", "spend_key", "view_key", "tx_key", "mnemonic",
         "spendkey", "viewkey", "tx_key_list",
+        // camelCase spellings used by our own models (WalletSecrets) — matched case-insensitively,
+        // so these also cover PascalCase; the snake_case RPC names above don't match them.
+        "seedOffset", "ephemeralWalletPassword", "txKey", "txKeyList", "txMetadata", "txMetadataList",
+        "txBlob", "txBlobList", "mnemonicSeed",
         // Signed-tx blobs: anyone holding them can broadcast the transaction, and they are huge —
         // keep them out of error messages and logs entirely. sweep_all returns the *_list forms.
         "tx_metadata", "hex", "tx_blob", "tx_metadata_list", "tx_blob_list",

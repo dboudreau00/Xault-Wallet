@@ -93,4 +93,17 @@ public class SecretRedactorTests
         Assert.DoesNotContain("pw", red);
         Assert.Contains("keep", red);
     }
+
+    [Fact]
+    public void Redacts_CamelCase_Keys_From_Our_Own_Models()
+    {
+        string json = "{\"seedOffset\":\"my passphrase\",\"ephemeralWalletPassword\":\"pw-ephemeral\"," +
+                      "\"txKey\":\"k1\",\"txMetadataList\":[\"m1\"],\"restoreHeight\":42}";
+        string red = SecretRedactor.Redact(json);
+        Assert.DoesNotContain("my passphrase", red);
+        Assert.DoesNotContain("pw-ephemeral", red);
+        Assert.DoesNotContain("k1", red);
+        Assert.DoesNotContain("m1", red);
+        Assert.Contains("42", red);
+    }
 }

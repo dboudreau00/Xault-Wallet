@@ -632,6 +632,9 @@ public issue. Release notes: [CHANGELOG.md](CHANGELOG.md).
 **License:** [BSD 3-Clause](LICENSE), provided as-is, no warranty: the license Monero's own wallets use.
 Releases up to 0.6.0b-beta were published under the MIT license and remain available under it.
 
+The libraries built into XaultWallet, and the Monero code it adapts, keep their own licenses: see
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
 Built on the official Monero tools (`monerod`, `monero-wallet-rpc`): this project drives them rather
 than reimplementing Monero's cryptography. UI built with [Avalonia](https://avaloniaui.net/); QR codes
 by [QRCoder](https://github.com/codebude/QRCoder). Screenshots are rendered from the app's real views

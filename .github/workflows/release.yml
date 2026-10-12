@@ -117,6 +117,8 @@ jobs:
           dotnet-version: 10.0.x
       - name: Unit tests must pass before anything ships
         run: dotnet run -c Release --project tools/TestRunner
+      - name: Package graph matches the committed lock files
+        run: dotnet restore XaultWallet.sln --locked-mode
       - name: Publish (single file, self-contained)
         run: dotnet publish src/XaultWallet.Desktop/XaultWallet.Desktop.csproj -c Release -r ${{ matrix.rid }} -o out
       - name: Package

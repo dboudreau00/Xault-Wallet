@@ -48,6 +48,7 @@ public sealed class MoneroProcessManager : IAsyncDisposable
     private Process? _process;
     private int _port;
     private string? _tempDir;
+    private ManualResetEventSlim? _parentThreadRelease; // see StartChildAsync
     private readonly ConcurrentQueue<string> _stderrTail = new();
     private const int StderrTailMax = 60;
 
@@ -262,7 +263,12 @@ public sealed class MoneroProcessManager : IAsyncDisposable
                 Arg("--allow-mismatched-daemon-version");
             }
 
-            _process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start monero-wallet-rpc.");
+            _process = await StartChildAsync(psi).ConfigureAwait(false);
+
+            // Record who owns this folder, so a later startup sweep can tell a live second instance
+            // from a crash orphan (and stop an orphaned wallet-rpc) instead of guessing from mtimes.
+            WritePrivateFile(Path.Combine(_tempDir, SessionHygiene.PidFileName),
+                $"app={Environment.ProcessId.ToString(CultureInfo.InvariantCulture)} child={_process.Id.ToString(CultureInfo.InvariantCulture)}\n");
 
             // Tie the child to OUR lifetime: if XaultWallet crashes or is killed, the OS closes
             // the job handle and takes wallet-rpc (and the open wallet) down with it.
@@ -304,6 +310,54 @@ public sealed class MoneroProcessManager : IAsyncDisposable
             await StopAsync().ConfigureAwait(false); // no leaked process / session dir
             throw;
         }
+    }
+
+    /// <summary>
+    /// Start the child. On Linux with a working <c>setpriv</c> it is started as
+    /// <c>setpriv --pdeathsig SIGKILL -- monero-wallet-rpc …</c>, so the kernel kills it when this
+    /// process dies however it dies (crash, SIGKILL): no unlocked wallet-rpc is left running. The
+    /// kernel ties that signal to the THREAD that forked the child, and thread-pool threads come and
+    /// go, so the child is started from a dedicated thread that stays alive until <see cref="StopAsync"/>.
+    /// Without setpriv (or off Linux) it is the plain start, as before.
+    /// </summary>
+    private async Task<Process> StartChildAsync(ProcessStartInfo psi)
+    {
+        string? setpriv = SessionHygiene.SetprivPath;
+        if (setpriv is null)
+        {
+            return Process.Start(psi) ?? throw new InvalidOperationException("Failed to start monero-wallet-rpc.");
+        }
+
+        string binary = psi.FileName;
+        psi.FileName = setpriv;
+        psi.ArgumentList.Insert(0, binary);
+        psi.ArgumentList.Insert(0, "--");
+        psi.ArgumentList.Insert(0, "SIGKILL");
+        psi.ArgumentList.Insert(0, "--pdeathsig");
+
+        var started = new TaskCompletionSource<Process>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new ManualResetEventSlim(false);
+        _parentThreadRelease = release;
+        var parent = new Thread(() =>
+        {
+            try
+            {
+                started.SetResult(Process.Start(psi) ?? throw new InvalidOperationException("Failed to start monero-wallet-rpc."));
+            }
+            catch (Exception ex)
+            {
+                started.SetException(ex);
+                return;
+            }
+
+            release.Wait(); // keep the forking thread (and so the death signal's anchor) alive
+        })
+        {
+            IsBackground = true,
+            Name = "wallet-rpc-parent",
+        };
+        parent.Start();
+        return await started.Task.ConfigureAwait(false);
     }
 
     /// <summary>True when the child was started but has since died (crash, external kill).
@@ -476,6 +530,9 @@ public sealed class MoneroProcessManager : IAsyncDisposable
             }
         }
 
+        _parentThreadRelease?.Set(); // the child is gone: let its forking thread end
+        _parentThreadRelease = null;
+
         string? dir = _tempDir;
         _tempDir = null;
         if (dir is not null && Directory.Exists(dir) && !SecureDelete.Directory(dir))
@@ -495,36 +552,40 @@ public sealed class MoneroProcessManager : IAsyncDisposable
     {
         try
         {
-            foreach (string dir in Directory.EnumerateDirectories(Path.GetTempPath(), "xaultwallet_*"))
+            // Never follow links or enter folders that aren't ours: the shared temp folder is writable
+            // by every local user, and what is found here gets overwritten and deleted.
+            var listing = new EnumerationOptions { AttributesToSkip = FileAttributes.ReparsePoint, IgnoreInaccessible = true };
+            foreach (string root in SessionHygiene.SweepRoots())
             {
-                // Age guard: an instance of an OLDER build (which predates the single-instance
-                // mutex) could still be running with a LIVE wallet in one of these dirs. A live
-                // dir is written constantly while syncing; a crash orphan goes quiet. Only
-                // shred dirs that have been untouched for a while.
-                DateTime newestWriteUtc = Directory.GetLastWriteTimeUtc(dir);
-                try
-                {
-                    foreach (string file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
-                    {
-                        DateTime w = File.GetLastWriteTimeUtc(file);
-                        if (w > newestWriteUtc)
-                        {
-                            newestWriteUtc = w;
-                        }
-                    }
-                }
-                catch
-                {
-                    continue; // unreadable (likely in use) — leave it alone
-                }
-
-                if (DateTime.UtcNow - newestWriteUtc < TimeSpan.FromMinutes(15))
+                if (!Directory.Exists(root))
                 {
                     continue;
                 }
 
-                Log.WarnOnce("orphan-sweep", "Shredding orphaned wallet session folders from a previous session."); // not one line per wallet
-                SecureDelete.Directory(dir);
+                foreach (string dir in Directory.EnumerateDirectories(root, "xaultwallet_*", listing))
+                {
+                    if (!SessionHygiene.IsSafeSessionDir(dir))
+                    {
+                        continue; // a link, someone else's folder, or open to others: not ours to shred
+                    }
+
+                    // A folder that records its owner is judged by liveness: the app that made it is
+                    // running (leave it) or gone (shred it, after stopping a wallet-rpc left behind).
+                    // Only a folder without that record (an older build) falls back to the age guard.
+                    SessionHygiene.SessionState state = SessionHygiene.Inspect(dir);
+                    if (state == SessionHygiene.SessionState.OwnerAlive)
+                    {
+                        continue;
+                    }
+
+                    if (state == SessionHygiene.SessionState.Unknown && !IsQuietFor(dir, TimeSpan.FromMinutes(15), listing))
+                    {
+                        continue;
+                    }
+
+                    Log.WarnOnce("orphan-sweep", "Shredding orphaned wallet session folders from a previous session."); // not one line per wallet
+                    SecureDelete.Directory(dir);
+                }
             }
         }
         catch (Exception ex)
@@ -533,10 +594,53 @@ public sealed class MoneroProcessManager : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Age guard for folders with no PID record: an instance of an OLDER build (which predates the
+    /// single-instance mutex) could still be running with a LIVE wallet in one of these. A live dir is
+    /// written constantly while syncing; a crash orphan goes quiet. False when anything in it was written
+    /// within <paramref name="quiet"/>, or it can't be read (likely in use).
+    /// </summary>
+    private static bool IsQuietFor(string dir, TimeSpan quiet, EnumerationOptions listing)
+    {
+        DateTime newestWriteUtc = Directory.GetLastWriteTimeUtc(dir);
+        try
+        {
+            var all = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = listing.AttributesToSkip, IgnoreInaccessible = true };
+            foreach (string file in Directory.EnumerateFiles(dir, "*", all))
+            {
+                DateTime w = File.GetLastWriteTimeUtc(file);
+                if (w > newestWriteUtc)
+                {
+                    newestWriteUtc = w;
+                }
+            }
+        }
+        catch
+        {
+            return false;
+        }
+
+        return DateTime.UtcNow - newestWriteUtc >= quiet;
+    }
+
     /// <summary>A fresh xaultwallet_* directory readable by this user only.</summary>
     private static string CreatePrivateDirectory()
     {
-        string dir = Directory.CreateTempSubdirectory("xaultwallet_").FullName;
+        // The per-user runtime folder when there is one (Linux: private to the user, and the wallet's
+        // files stay in memory); else the temp folder.
+        string root = SessionHygiene.SessionRoot();
+        string dir;
+        if (OperatingSystem.IsWindows() || string.Equals(root, Path.GetTempPath(), StringComparison.Ordinal))
+        {
+            dir = Directory.CreateTempSubdirectory("xaultwallet_").FullName;
+        }
+        else
+        {
+            dir = Directory.CreateDirectory(
+                Path.Combine(root, "xaultwallet_" + RandomHex(6)),
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute).FullName;
+        }
+
         if (!OperatingSystem.IsWindows())
         {
             // CreateTempSubdirectory already uses 0700 on Unix; state the requirement explicitly.

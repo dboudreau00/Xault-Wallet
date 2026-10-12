@@ -1,10 +1,11 @@
 # Changelog
 
-## 0.6.0b-beta - 2026-10-11 - security hardening
+## 0.6.0b-beta - 2026-10-11 - security hardening, BSD 3-Clause license
 
 A revision of 0.6.0a (the letter marks it), from an outside security review of the wallet backend,
-its session folders and the vault's unlock. **Your vault, settings and wallets are unchanged**, with
-the one behaviour change below that you should know about: every unlock now rewrites the vault file.
+its session folders and the vault's unlock, and the move to the BSD 3-Clause License. **Your vault,
+settings and wallets are unchanged**, with the one behaviour change below that you should know
+about: every unlock now rewrites the vault file.
 
 ### Behaviour changes to know about
 - **Every unlock rewrites the vault.** A duress unlock has to write (it wipes the real slot), and a
@@ -44,8 +45,17 @@ the one behaviour change below that you should know about: every unlock now rewr
 - The repository pins the .NET SDK band (`global.json`), and the release job checks the NuGet lock
   files before it publishes.
 
+### License and notices
+- **XaultWallet is now licensed under the BSD 3-Clause License**, the license Monero's own wallets
+  use, instead of MIT. The Settings screen and the installers say so. Releases up to 0.6.0a-beta,
+  and a first build of 0.6.0b-beta that was replaced on the day it was published, were MIT, and
+  anyone who has them keeps that license.
+- **[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) now travels with the executable** (in the zip, the
+  tarballs and both installers). It credits the Monero code behind the restore-height estimate and
+  reproduces the notices of the .NET runtime, the libraries and the Inter font built into the app.
+
 ### For integrators of XaultWallet.Core
-- No signatures changed. `VaultManager.Unlock` and `OpenSession` now rewrite the vault on every
+- The license is BSD 3-Clause. No signatures changed. `VaultManager.Unlock` and `OpenSession` now rewrite the vault on every
   successful unlock (see above). New: `WalletRpcInstaller.FindInstalledVerified` and
   `EnsureMatchesManifest`, and `RestoreHeights.IsBeyondPlausibleTip`.
   `MoneroDiagnostics.ProbeWalletRpcAsync` refuses an installer-placed copy older than the minimum,

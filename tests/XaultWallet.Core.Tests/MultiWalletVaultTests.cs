@@ -240,8 +240,8 @@ public sealed class MultiWalletVaultTests : IDisposable
     public void A_Full_Vault_Is_Refused_And_Nothing_Is_Written()
     {
         CreateVault(withDecoy: false);
-        byte[] before = File.ReadAllBytes(_path);
         using VaultSession s = Open(MainPw);
+        byte[] before = File.ReadAllBytes(_path); // after the open: opening re-seals the slot, a refused save must not write
         for (int i = 0; i < 400; i++)
         {
             s.Profile.Wallets[0].TxNotes[$"tx{i:D4}"] = new string('n', 1000);
@@ -413,16 +413,29 @@ public sealed class MultiWalletVaultTests : IDisposable
     }
 
     [Fact]
-    public void Opening_A_Session_Never_Writes_A_Current_Vault()
+    public void Opening_A_Session_Reseals_Only_The_Opened_Slot()
     {
+        // Opening writes (so a duress open, which must write to wipe, is not the odd one out), but
+        // only the opened slot changes; the other is kept byte for byte.
         CreateVault(withDecoy: true);
         byte[] before = File.ReadAllBytes(_path);
         using (Open(MainPw))
-        using (Open(DuressPw))
         {
         }
 
-        Assert.Equal(before, File.ReadAllBytes(_path));
+        byte[] after = File.ReadAllBytes(_path);
+        Assert.Equal(before.Length, after.Length);
+        Assert.Equal(before.AsSpan(0, HeaderBytes).ToArray(), after.AsSpan(0, HeaderBytes).ToArray());
+        int changed = 0;
+        for (int slot = 0; slot < 2; slot++)
+        {
+            if (!before.AsSpan(HeaderBytes + (slot * SlotBytes), SlotBytes).SequenceEqual(after.AsSpan(HeaderBytes + (slot * SlotBytes), SlotBytes)))
+            {
+                changed++;
+            }
+        }
+
+        Assert.Equal(1, changed);
     }
 
     // ------------------------------------------------------------ vaults from 0.1–0.3
@@ -449,7 +462,7 @@ public sealed class MultiWalletVaultTests : IDisposable
         OpenAs03(file, 0, password) is not null ? 0 : OpenAs03(file, 1, password) is not null ? 1 : -1;
 
     [Fact]
-    public void A_0_3_Vault_Opens_With_Either_Password_And_Is_Not_Rewritten()
+    public void A_0_3_Vault_Opens_With_Either_Password_And_Keeps_Its_Layout()
     {
         byte[] legacy = LegacyFile((MainPw, V2Payload("real seed words")), (DuressPw, V2Payload("decoy seed words")));
         File.WriteAllBytes(_path, legacy);
@@ -471,8 +484,17 @@ public sealed class MultiWalletVaultTests : IDisposable
             Assert.True(s.IsOldFormat);
         }
 
-        // Opening is reading: the file is exactly what 0.3 wrote (and 0.3 can still open it).
-        Assert.Equal(legacy, File.ReadAllBytes(_path));
+        // Every unlock re-seals the opened slot (so duress and normal unlocks both write), in the file's
+        // own layout: same size and header, and both passwords still open it.
+        byte[] now = File.ReadAllBytes(_path);
+        Assert.Equal(legacy.Length, now.Length);
+        Assert.Equal(legacy.AsSpan(0, HeaderBytes).ToArray(), now.AsSpan(0, HeaderBytes).ToArray());
+        using (var mp = Pw(MainPw))
+        using (var dp = Pw(DuressPw))
+        {
+            Assert.NotNull(VaultManager.Load(_path).Unlock(mp));
+            Assert.NotNull(VaultManager.Load(_path).Unlock(dp));
+        }
     }
 
     [Fact]

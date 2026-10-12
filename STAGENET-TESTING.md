@@ -66,7 +66,7 @@ Launch the app, click **Settings**, and:
 - **Coin control:** receive two payments, freeze one on the Coins tab, and try to send more than the
   other: it is refused. Send max sends only the unfrozen coin. Lock and unlock: the coin is still
   frozen. Unfreeze it and it can be spent again.
-- **A vault from 0.3** (a copy; keep the original): it opens in 0.5 unchanged, and Settings shows
+- **A vault from 0.3** (a copy; keep the original): it opens in 0.5 in its own 4 KiB format (each unlock re-seals the part it opens), and Settings shows
   *Vault format*. Following [Coming from 0.3](README.md#9-coming-from-03), unlock with the duress
   password first, upgrade from there, then unlock with the main password; both open their wallets,
   and the file is now 256 KiB per password. 0.3 should refuse the upgraded copy.

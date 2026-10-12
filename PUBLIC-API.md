@@ -31,9 +31,13 @@ monero-wallet-rpc orchestration without the Avalonia desktop app.
     password opens, or null (`Secrets` = the profile's active wallet). A password "matches" only by
     authenticating a slot's AES-GCM tag; no plaintext comparison exists. Applies the opened slot's
     policy before returning: wipe-on-duress, and re-sealing as a v3 profile a 0.1 payload (v1) or a slot
-    carried by a format upgrade. A 0.2/0.3 payload (v2) is read as a one-wallet profile and becomes v3
-    at its first save. `UpgradedFromLegacyFormat` is true on the unlock that re-sealed a payload written
-    by 0.1, for either slot alike; show the same notice for both. Opening never writes the file otherwise.
+    carried by a format upgrade. Every successful unlock also re-seals the opened slot (fresh nonce, the
+    key already derived) and rewrites the file, so a duress unlock, which must write to wipe, and a
+    normal one leave the same trace; the write is best-effort and silent. That converts a 0.2/0.3
+    payload (v2, read as a one-wallet profile) to v3 at the first unlock too, unless its v3 form no longer
+    fits an old-format file, in which case the slot is left as it was. `UpgradedFromLegacyFormat` is true
+    on the unlock that re-sealed a payload written by 0.1, for either slot alike; show the same notice
+    for both.
   - `OpenSession(password)` → a `VaultSession` for whichever slot opens (the same policy as `Unlock`),
     or null. **This is how changes are saved.**
   - `ChangePassword(current, new)`: re-seals whichever slot `current` opens under `new`. Returns

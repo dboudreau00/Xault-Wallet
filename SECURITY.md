@@ -109,11 +109,16 @@ swap, crash dumps, file-system journals). Specifically:
   changed between two copies (e.g. you changed both passwords), both are live wallets. Hidden
   volumes share this limitation. Since 0.5 more actions change a slot: adding or editing a wallet,
   contact, label or note, handing out a subaddress, changing a wallet's node, even switching wallets
-  (the vault remembers the one you used last) re-seal that password's slot. Simply unlocking does
-  not, apart from wipe-on-duress and four one-time cases: the first unlock of a 0.1 slot, the first
-  unlock of a slot carried over by a vault-format upgrade, the first save 0.5 makes in a 0.2/0.3 slot,
-  and the first time 0.5 opens a wallet restored from a seed (it
-  records the wallet's main address, so that adding the same wallet again by its keys is caught).
+  (the vault remembers the one you used last) re-seal that password's slot. Unlocking is no longer an exception:
+  every successful unlock now re-seals the opened slot (fresh nonce, no extra key derivation) and
+  rewrites the vault, so a duress unlock (which must write to wipe) and a normal unlock leave the
+  same trace on disk. Residuals of that rewrite: the write is best-effort and silent, so when it
+  fails (locked file, read-only media, full disk) the unlock still succeeds and writes nothing,
+  which differs from the other profile's unlock on the same machine; the file's mtime, a short-lived
+  `vault.xv.tmp`, backup/sync-client activity and file-system journals show *that* you unlocked,
+  never which password; and the duress unlock additionally shreds `vault.xv.replaced-*` copies, and
+  a copy of the vault taken before and after still shows which slot changed (the opened one), now
+  on every unlock, not only on the duress one.
 - **A wipe flag examined before it fires.** If you enable wipe-on-duress, an examiner who decrypts the
   decoy *offline* (without the app ever opening it) can read `wipeOther: true` and infer a second
   wallet existed. The instruction has to be readable with the duress password; once the app opens the
@@ -191,15 +196,16 @@ did, the clean fix is to rebuild the vault:
 
 0.5 seals a whole profile in each password's part of the vault, which needs more room than 0.2 and
 0.3 gave it. A vault they wrote (format 1: 4 KiB per password) opens in 0.5 and **stays in format 1
-until you upgrade it** in Settings → *Vault format* (shown while one of its wallets is open). Nothing
-about the file changes on its own.
+until you upgrade it** in Settings → *Vault format* (shown while one of its wallets is open). Its
+format and size never change on their own, though every unlock re-seals the part that password opens.
 
 - **In the old format** each password's part holds about 4 KiB: a wallet or two with some labels,
   notes and contacts. A change that doesn't fit is refused, nothing is written, and the message
   points to the upgrade. 0.5 saves a password's part in its own layout the first time it writes it
-  (the first time it opens each of its wallets, to record the wallet's main address, and on any
-  change). 0.3 can still open the file and any part 0.5 hasn't saved; it refuses a saved one as
-  "created by a newer version of XaultWallet", and changes nothing.
+  (the first unlock with that password, unless the part no longer fits in 4 KiB, in which case it is
+  left as it was, and on any change). 0.3 can still open the file and any part no 0.5 unlock has
+  re-sealed yet; it refuses a saved one as "created by a newer version of XaultWallet", and changes
+  nothing.
 - **Upgrading** turns the file into format 2 (256 KiB per password, as every vault 0.5 creates). The
   part your password opens is re-sealed in it. The **other part is carried over byte for byte**, at
   the start of its new, larger slot (the rest is random), and is re-sealed when its own password next

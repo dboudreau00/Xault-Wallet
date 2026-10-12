@@ -327,7 +327,7 @@ wallet or two with some labels and contacts) until you upgrade it in Settings â†
 (256 KiB per password, the size of every vault 0.5 creates). Before you start:
 
 1. **Export a backup** (Settings â†’ *Export backup*) if you might go back to 0.3. 0.3 can't open an
-   upgraded vault, nor a password's part once 0.5 has saved it.
+   upgraded vault, nor a password's part once 0.5 has unlocked it (every unlock re-seals it).
 2. **If you have a duress password** (without wipe-on-duress), unlock with it first and wait until its
    wallet is ready; upgrade from there if you want the room. Then use your main password as usual.
    Until a password has been used in 0.5, someone holding it and the vault file could tell that the

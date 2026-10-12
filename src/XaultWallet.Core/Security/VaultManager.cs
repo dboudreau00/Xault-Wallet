@@ -242,18 +242,17 @@ public sealed class VaultManager
                 _pendingWipe = OtherSlot(hit.Slot.SlotIndex);
             }
 
-            if (hit.Wiped || hit.Migrated)
+            // Every successful unlock rewrites the vault (a fresh-nonce reseal of the opened slot),
+            // so a duress unlock (which must write) leaves the same file-mtime / temp-file trace as
+            // a normal one. Best-effort and SILENT. If the disk write fails (file locked by AV/backup software,
+            // read-only media, disk full) the wallet must STILL open normally: an error here would
+            // make a duress unlock visibly different from a normal one at exactly the moment
+            // indistinguishability matters most. Deliberately not logged either — a log line
+            // timestamped at the duress unlock would tell the same story to anyone reading it.
+            // A wipe that couldn't be written stays pending (see _pendingWipe).
+            if (PersistQuietly())
             {
-                // Best-effort and SILENT. If the disk write fails (file locked by AV/backup software,
-                // read-only media, disk full) the wallet must STILL open normally: an error here would
-                // make a duress unlock visibly different from a normal one at exactly the moment
-                // indistinguishability matters most. Deliberately not logged either — a log line
-                // timestamped at the duress unlock would tell the same story to anyone reading it.
-                // A wipe that couldn't be written stays pending (see _pendingWipe).
-                if (PersistQuietly())
-                {
-                    _pendingWipe = null;
-                }
+                _pendingWipe = null;
             }
 
             if (hit.Wiped)
@@ -508,22 +507,24 @@ public sealed class VaultManager
                 wiped = true;
             }
 
-            // Re-sealed at once: a 0.1 payload (its real/decoy marker must go) and a slot carried into
-            // an upgraded file. A 0.2/0.3 payload in a file that kept its old format is readable as it
-            // is and is left alone — opening a vault never writes it otherwise, and the slot is
-            // rewritten in the new payload format with the profile's first change.
+            // Re-sealed on EVERY open (fresh nonce, key already derived): a duress unlock must write
+            // the vault (wipe), so a normal unlock writes it too and the two look alike on disk. That
+            // also covers a 0.1 payload (its real/decoy marker must go) and a slot carried into an
+            // upgraded file.
             bool migrated = version == SlotPayload.Version01 || slot.IsLegacyLayout;
-            if (wiped || migrated)
+            byte[] payload = SlotPayload.Serialize(profile);
+            try
             {
-                byte[] payload = SlotPayload.Serialize(profile);
-                try
-                {
-                    _file.ResealSlot(slot, payload);
-                }
-                finally
-                {
-                    CryptographicOperations.ZeroMemory(payload);
-                }
+                _file.ResealSlot(slot, payload);
+            }
+            catch (VaultFullException) when (!wiped && !migrated)
+            {
+                // A plain unlock of a legacy-layout file whose re-serialised payload no longer fits
+                // keeps the old slot as it is: the unlock must not fail because of the extra reseal.
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(payload);
             }
 
             return new Opened(slot, profile, wiped, migrated, version == SlotPayload.Version01);

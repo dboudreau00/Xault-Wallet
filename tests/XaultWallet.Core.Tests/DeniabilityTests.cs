@@ -141,8 +141,11 @@ public class DeniabilityTests : IDisposable
     [Theory]
     [InlineData("main-password-123")]
     [InlineData("duress-password-456")]
-    public void An_Unlock_Without_A_Pending_Wipe_Never_Writes_The_Vault(string password)
+    public void An_Unlock_Without_A_Pending_Wipe_Reseals_Only_The_Opened_Slot(string password)
     {
+        // Every unlock writes (a duress unlock has to, to wipe), so normal and duress unlocks leave the
+        // same trace on disk. Only the opened slot changes — fresh nonce, same salt — and the other
+        // slot and the header are kept byte for byte.
         CreateVault(withDecoy: true);
         byte[] before = File.ReadAllBytes(_path);
         using (var pw = Pw(password))
@@ -150,7 +153,23 @@ public class DeniabilityTests : IDisposable
             Assert.NotNull(VaultManager.Load(_path).Unlock(pw));
         }
 
-        Assert.Equal(before, File.ReadAllBytes(_path));
+        byte[] after = File.ReadAllBytes(_path);
+        Assert.Equal(before.Length, after.Length);
+        Assert.Equal(before.AsSpan(0, HeaderBytes).ToArray(), after.AsSpan(0, HeaderBytes).ToArray());
+
+        int changed = 0;
+        for (int slot = 0; slot < 2; slot++)
+        {
+            byte[] b = before.AsSpan(HeaderBytes + slot * SlotBytes, SlotBytes).ToArray();
+            byte[] a = after.AsSpan(HeaderBytes + slot * SlotBytes, SlotBytes).ToArray();
+            if (!b.AsSpan().SequenceEqual(a))
+            {
+                changed++;
+                Assert.Equal(b.AsSpan(0, VaultCrypto.SaltSizeBytes).ToArray(), a.AsSpan(0, VaultCrypto.SaltSizeBytes).ToArray());
+            }
+        }
+
+        Assert.Equal(1, changed);
     }
 
     [Fact]

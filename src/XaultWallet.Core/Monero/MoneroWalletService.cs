@@ -249,6 +249,19 @@ public sealed class MoneroWalletService : IAsyncDisposable
 
     private MoneroRpcClient Rpc => _rpc ?? throw new InvalidOperationException("No wallet is open.");
 
+    /// <summary>The open wallet's client, after re-confirming the listener on its port is still our
+    /// child. Used by every call that returns secrets or spends: an impostor that took the port after
+    /// startup must never be handed a transaction, or hand us keys.</summary>
+    private MoneroRpcClient TrustedRpc
+    {
+        get
+        {
+            MoneroRpcClient rpc = Rpc;
+            _proc?.EnsureBackendIsOurs();
+            return rpc;
+        }
+    }
+
     public async Task<(decimal balance, decimal unlocked)> GetBalanceAsync(CancellationToken ct = default) =>
         await GetBalanceAsync(0, ct).ConfigureAwait(false);
 
@@ -292,7 +305,7 @@ public sealed class MoneroWalletService : IAsyncDisposable
 
     /// <summary>Sign <paramref name="message"/> with the wallet's spend key, as its main address.</summary>
     public async Task<string> SignMessageAsync(string message, CancellationToken ct = default) =>
-        (await Rpc.SignAsync(message ?? string.Empty, 0, 0, "spend", ct).ConfigureAwait(false)).Signature;
+        (await TrustedRpc.SignAsync(message ?? string.Empty, 0, 0, "spend", ct).ConfigureAwait(false)).Signature;
 
     public async Task<bool> VerifyMessageAsync(string message, string address, string signature, CancellationToken ct = default) =>
         (await Rpc.VerifyAsync(message ?? string.Empty, address.Trim(), signature.Trim(), ct).ConfigureAwait(false)).Good;
@@ -300,12 +313,12 @@ public sealed class MoneroWalletService : IAsyncDisposable
     /// <summary>A reserve proof: that this wallet holds at least <paramref name="amount"/> XMR in
     /// <paramref name="account"/>, or (null) everything it holds.</summary>
     public async Task<string> GetReserveProofAsync(decimal? amount, uint account, string message, CancellationToken ct = default) =>
-        (await Rpc.GetReserveProofAsync(amount is { } a ? MoneroRpcClient.XmrToAtomic(a) : null, account, message ?? string.Empty, ct).ConfigureAwait(false)).Signature;
+        (await TrustedRpc.GetReserveProofAsync(amount is { } a ? MoneroRpcClient.XmrToAtomic(a) : null, account, message ?? string.Empty, ct).ConfigureAwait(false)).Signature;
 
     /// <summary>Check someone's reserve proof. Returns (valid, total proven, of which spent).</summary>
     public async Task<(bool good, decimal total, decimal spent)> CheckReserveProofAsync(string address, string message, string signature, CancellationToken ct = default)
     {
-        CheckReserveProofResult r = await Rpc.CheckReserveProofAsync(address.Trim(), message ?? string.Empty, signature.Trim(), ct).ConfigureAwait(false);
+        CheckReserveProofResult r = await TrustedRpc.CheckReserveProofAsync(address.Trim(), message ?? string.Empty, signature.Trim(), ct).ConfigureAwait(false);
         return (r.Good, MoneroRpcClient.AtomicToXmr(r.Total), MoneroRpcClient.AtomicToXmr(r.Spent));
     }
 
@@ -354,7 +367,7 @@ public sealed class MoneroWalletService : IAsyncDisposable
         {
             try
             {
-                return (await Rpc.QueryKeyAsync(type, ct).ConfigureAwait(false)).Key;
+                return (await TrustedRpc.QueryKeyAsync(type, ct).ConfigureAwait(false)).Key;
             }
             catch (MoneroRpcClient.MoneroRpcException)
             {
@@ -368,7 +381,7 @@ public sealed class MoneroWalletService : IAsyncDisposable
     public async Task<TransferResult> SendAsync(string address, decimal xmr, uint priority, CancellationToken ct = default)
     {
         (string addr, ulong atomic, uint prio) = ValidateSendArgs(address, xmr, priority);
-        return await Rpc.TransferAsync(addr, atomic, prio, ct).ConfigureAwait(false);
+        return await TrustedRpc.TransferAsync(addr, atomic, prio, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -397,7 +410,7 @@ public sealed class MoneroWalletService : IAsyncDisposable
             atomic.Add((addr, amount));
         }
 
-        TransferResult r = await Rpc.PrepareTransferAsync(atomic, account, prio, ct).ConfigureAwait(false);
+        TransferResult r = await TrustedRpc.PrepareTransferAsync(atomic, account, prio, ct).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(r.TxMetadata))
         {
             throw new InvalidOperationException("The wallet backend did not return transaction metadata for the prepared send.");
@@ -418,7 +431,7 @@ public sealed class MoneroWalletService : IAsyncDisposable
             throw new ArgumentException("Transaction metadata is empty.", nameof(txMetadata));
         }
 
-        RelayTxResult r = await Rpc.RelayTxAsync(txMetadata.Trim(), ct).ConfigureAwait(false);
+        RelayTxResult r = await TrustedRpc.RelayTxAsync(txMetadata.Trim(), ct).ConfigureAwait(false);
         return r.TxHash;
     }
 
@@ -444,7 +457,7 @@ public sealed class MoneroWalletService : IAsyncDisposable
             priority = 3;
         }
 
-        SweepAllResult r = await Rpc.PrepareSweepAllAsync(address.Trim(), account, priority, ct).ConfigureAwait(false);
+        SweepAllResult r = await TrustedRpc.PrepareSweepAllAsync(address.Trim(), account, priority, ct).ConfigureAwait(false);
         if (r.TxMetadataList.Count == 0
             || r.TxMetadataList.Count != r.AmountList.Count
             || r.TxMetadataList.Count != r.FeeList.Count
@@ -493,7 +506,7 @@ public sealed class MoneroWalletService : IAsyncDisposable
     /// <exception cref="InvalidOperationException">The backend answered without a key.</exception>
     public async Task<string> GetTxKeyAsync(string txid, CancellationToken ct = default)
     {
-        string key = (await Rpc.GetTxKeyAsync(txid.Trim(), ct).ConfigureAwait(false)).TxKey;
+        string key = (await TrustedRpc.GetTxKeyAsync(txid.Trim(), ct).ConfigureAwait(false)).TxKey;
         return string.IsNullOrWhiteSpace(key)
             ? throw new InvalidOperationException("The wallet backend returned no key for that transaction.")
             : key;
@@ -503,7 +516,7 @@ public sealed class MoneroWalletService : IAsyncDisposable
     public async Task<(ulong received, ulong confirmations, bool inPool)> CheckTxKeyAsync(
         string txid, string txKey, string address, CancellationToken ct = default)
     {
-        CheckTxKeyResult r = await Rpc.CheckTxKeyAsync(txid.Trim(), txKey.Trim(), address.Trim(), ct).ConfigureAwait(false);
+        CheckTxKeyResult r = await TrustedRpc.CheckTxKeyAsync(txid.Trim(), txKey.Trim(), address.Trim(), ct).ConfigureAwait(false);
         return (r.Received, r.Confirmations, r.InPool);
     }
 

@@ -7,7 +7,7 @@
 ; never written, moved or deleted by Setup or by the uninstaller.
 ;
 ; Local build (from the repository root, after publishing win-x64 into .\out with README.md, SECURITY.md,
-; CHANGELOG.md and LICENSE copied next to the exe):
+; CHANGELOG.md, LICENSE and THIRD-PARTY-NOTICES.md copied next to the exe):
 ;   iscc /DAppVersion=0.6.0b-beta /DAppNumericVersion=0.6.0.2 /DSourceDir=%CD%\out /DOutputDir=%CD%\dist installer\XaultWallet.iss
 
 #ifndef AppVersion
@@ -76,6 +76,7 @@ Source: "{#SourceDir}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\SECURITY.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\CHANGELOG.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceDir}\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\XaultWallet"; Filename: "{app}\XaultWallet.exe"; Comment: "Privacy-first Monero wallet"

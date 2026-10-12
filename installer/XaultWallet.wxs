@@ -49,6 +49,7 @@
         <File Id="SecurityMd" Source="$(var.SourceDir)\SECURITY.md" />
         <File Id="ChangelogMd" Source="$(var.SourceDir)\CHANGELOG.md" />
         <File Id="LicenseTxt" Source="$(var.SourceDir)\LICENSE" />
+        <File Id="NoticesMd" Source="$(var.SourceDir)\THIRD-PARTY-NOTICES.md" />
         <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
         <RemoveFolder Id="RemoveUserProgramsFolder" Directory="UserProgramsFolder" On="uninstall" />
       </Component>

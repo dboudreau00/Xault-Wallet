@@ -126,8 +126,9 @@ jobs:
         run: |
           mkdir dist
           name="XaultWallet-${TAG:-dev-${GITHUB_SHA::7}}-${{ matrix.rid }}"
-          # The docs ship with the binary: the app points users at SECURITY.md (e.g. after a vault upgrade).
-          docs=(README.md SECURITY.md CHANGELOG.md LICENSE)
+          # The docs ship with the binary: the app points users at SECURITY.md (e.g. after a vault upgrade), and
+          # the licenses of what is built in require their notices (THIRD-PARTY-NOTICES.md) to travel with it.
+          docs=(README.md SECURITY.md CHANGELOG.md LICENSE THIRD-PARTY-NOTICES.md)
           cp "${docs[@]}" out/
           if [ "${{ matrix.rid }}" = "win-x64" ]; then
             (cd out && 7z a "../dist/${name}.zip" "${{ matrix.exe }}" "${docs[@]}")
@@ -162,6 +163,7 @@ jobs:
           $p = Start-Process $setup.FullName -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', "/DIR=$dir" -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "Setup exited with $($p.ExitCode)" }
           if (-not (Test-Path "$dir\XaultWallet.exe")) { throw 'XaultWallet.exe was not installed' }
+          if (-not (Test-Path "$dir\THIRD-PARTY-NOTICES.md")) { throw 'THIRD-PARTY-NOTICES.md was not installed' }
           if ((Get-FileHash "$dir\XaultWallet.exe").Hash -ne (Get-FileHash out\XaultWallet.exe).Hash) { throw 'The installed exe differs from the published one' }
           $u = Start-Process "$dir\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
           if ($u.ExitCode -ne 0) { throw "Uninstall exited with $($u.ExitCode)" }
@@ -206,6 +208,7 @@ jobs:
           if ($p.ExitCode -ne 0) { Get-Content $log -Tail 80; throw "msiexec /i exited with $($p.ExitCode)" }
           $exe = Join-Path $env:LOCALAPPDATA 'Programs\XaultWallet\XaultWallet.exe'
           if (-not (Test-Path $exe)) { throw "XaultWallet.exe was not installed at $exe" }
+          if (-not (Test-Path (Join-Path (Split-Path $exe) 'THIRD-PARTY-NOTICES.md'))) { throw 'THIRD-PARTY-NOTICES.md was not installed' }
           if ((Get-FileHash $exe).Hash -ne (Get-FileHash out\XaultWallet.exe).Hash) { throw 'The installed exe differs from the published one' }
           $u = Start-Process msiexec.exe -ArgumentList '/x', "`"$msi`"", '/qn', '/norestart' -Wait -PassThru
           if ($u.ExitCode -ne 0) { throw "msiexec /x exited with $($u.ExitCode)" }

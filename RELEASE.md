@@ -43,8 +43,8 @@ and double-click. It carries the X icon and needs nothing else installed.
 
 Both installers are in the repository: `installer/XaultWallet.iss` (Inno Setup 6, the
 `setup.exe`) and `installer/XaultWallet.wxs` (WiX Toolset 3, the `.msi`). Each takes the published
-exe and the four docs from `out/`: publish `win-x64` there, copy `README.md`, `SECURITY.md`,
-`CHANGELOG.md` and `LICENSE` next to the exe, then run the command in the header of the installer
+exe and the docs from `out/`: publish `win-x64` there, copy `README.md`, `SECURITY.md`,
+`CHANGELOG.md`, `LICENSE` and `THIRD-PARTY-NOTICES.md` next to the exe, then run the command in the header of the installer
 file (the `iscc` line is also in README's Build section). The release workflow builds and
 test-installs both: a silent per-user install must put the exact published exe in place, and
 uninstalling must remove it again.
@@ -102,7 +102,7 @@ executables for `win-x64`, `linux-x64` and `osx-arm64`, plus two Windows install
 `XaultWallet-<version>-win-x64.msi` (WiX Toolset 3, from `installer/XaultWallet.wxs`). Each is
 checked in the same job: a silent per-user install must put the exact published exe in place and
 uninstalling must remove it again. Each archive holds the executable plus
-`README.md`, `SECURITY.md`, `CHANGELOG.md` and `LICENSE`. They are attached with a `SHA256SUMS` file
+`README.md`, `SECURITY.md`, `CHANGELOG.md`, `LICENSE` and `THIRD-PARTY-NOTICES.md`. They are attached with a `SHA256SUMS` file
 to a **draft** release for you to review and publish. There are two ways to start it:
 
 - **Push a tag** such as `v0.6.0b-beta`.

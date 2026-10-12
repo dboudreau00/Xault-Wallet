@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.6.0b-beta - 2026-10-11 - security hardening
+
+A revision of 0.6.0a (the letter marks it), from an outside security review of the wallet backend,
+its session folders and the vault's unlock. **Your vault, settings and wallets are unchanged**, with
+the one behaviour change below that you should know about: every unlock now rewrites the vault file.
+
+### Behaviour changes to know about
+- **Every unlock rewrites the vault.** A duress unlock has to write (it wipes the real slot), and a
+  normal unlock used to leave the file alone, so the file's modification time and a short-lived temp
+  file told the two apart. Now every successful unlock re-seals the slot it opened (a fresh nonce, no
+  extra key derivation) and rewrites the file. The write is best-effort and silent, so a locked or
+  read-only vault still opens. The cost, spelled out in [SECURITY.md](SECURITY.md): two copies of the
+  vault taken before and after an unlock now show which slot opened, on every unlock rather than only
+  on a duress one. A vault from 0.3 has its part re-sealed in 0.5's payload layout at the first
+  unlock here (unless that no longer fits its 4 KiB slot, which is then left as it was), so 0.3
+  can't open that part afterwards.
+- **The wallet backend is checked more often.** Every call that returns secrets or spends (keys,
+  signing, proofs, and preparing, relaying or sweeping a send) first re-checks that the backend's
+  port is still held by the process the app started, not only when the wallet opens.
+- **wallet-rpc: the installed copy comes first.** With no path in Settings, the app now prefers the
+  copy it installed, and only while it still matches the checksum recorded when it was installed and
+  verified, over one next to the app or on PATH (writable by whoever can write those folders). The
+  same check runs before every launch: a copy that changed is refused, with a message to reinstall
+  it from Settings. A copy the installer placed also can't be older than the oldest release the
+  installer installs. A wallet-rpc you chose yourself is still yours and starts whatever its version.
+- **A typed restore height can be refused.** When no node can be asked for its height, a restore
+  height that no chain could have reached by now is refused (it would scan nothing and show an empty
+  wallet), and any other typed height needs a second press of Add after a message that it couldn't
+  be checked.
+- **Send starts on the Default priority** (the wallet picks the fee tier), not Low.
+
+### Fixes
+- **No wallet-rpc left behind after a crash.** On Linux, with `setpriv` installed (it ships with
+  util-linux), the kernel now kills the wallet backend when the app dies, even if it is killed
+  outright. Where it isn't, the next start stops a leftover wallet-rpc and shreds its folder.
+- **The startup sweep can't be steered.** It, and the shredder, never follow links, and the sweep
+  only touches real folders that are yours and closed to others. On Linux, session folders now live
+  in your runtime directory (`$XDG_RUNTIME_DIR`, normally held in memory) instead of the shared temp
+  folder when that directory is yours.
+- Diagnostic output also redacts the camelCase names of the app's own data (`seedOffset`,
+  `ephemeralWalletPassword`, `txKey` and the rest).
+- The repository pins the .NET SDK band (`global.json`), and the release job checks the NuGet lock
+  files before it publishes.
+
+### For integrators of XaultWallet.Core
+- No signatures changed. `VaultManager.Unlock` and `OpenSession` now rewrite the vault on every
+  successful unlock (see above). New: `WalletRpcInstaller.FindInstalledVerified` and
+  `EnsureMatchesManifest`, and `RestoreHeights.IsBeyondPlausibleTip`.
+  `MoneroDiagnostics.ProbeWalletRpcAsync` refuses an installer-placed copy older than the minimum,
+  and the secret-bearing calls of `MoneroWalletService` throw if the backend is no longer the app's
+  own child.
+
+### Not in this release
+- The OpenPGP verifier still doesn't read a signature's creation time; [SECURITY.md](SECURITY.md)
+  says what the installers trust today.
+
 ## 0.6.0a-beta - 2026-10-08 - Avalonia 12
 
 A revision of 0.6.0 (the letter marks it): the UI framework moves to Avalonia 12, and nothing else

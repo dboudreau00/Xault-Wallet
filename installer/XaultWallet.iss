@@ -8,7 +8,7 @@
 ;
 ; Local build (from the repository root, after publishing win-x64 into .\out with README.md, SECURITY.md,
 ; CHANGELOG.md and LICENSE copied next to the exe):
-;   iscc /DAppVersion=0.6.0a-beta /DAppNumericVersion=0.6.0.1 /DSourceDir=%CD%\out /DOutputDir=%CD%\dist installer\XaultWallet.iss
+;   iscc /DAppVersion=0.6.0b-beta /DAppNumericVersion=0.6.0.2 /DSourceDir=%CD%\out /DOutputDir=%CD%\dist installer\XaultWallet.iss
 
 #ifndef AppVersion
   #define AppVersion "0.0.0-dev"

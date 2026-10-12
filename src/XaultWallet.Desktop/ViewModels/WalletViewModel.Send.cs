@@ -249,7 +249,7 @@ public sealed partial class WalletViewModel
         return (error ?? "Invalid amount.", true);
     }
 
-    [ObservableProperty] private int _sendPriority = 1;
+    [ObservableProperty] private int _sendPriority = 0; // Default (index 0 in SendTab.axaml): the wallet picks the fee tier
 
     /// <summary>More recipients in the same transaction (one fee for all of them).</summary>
     public ObservableCollection<RecipientRow> ExtraRecipients { get; } = new();

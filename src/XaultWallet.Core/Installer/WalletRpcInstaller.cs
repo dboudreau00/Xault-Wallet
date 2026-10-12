@@ -276,6 +276,77 @@ public sealed class WalletRpcInstaller
         }
     }
 
+    /// <summary>Like <see cref="FindInstalled"/>, but only a copy whose bytes still match the
+    /// <c>binarySha256</c> recorded in its <c>install.json</c> when it was installed (and verified
+    /// against the signed hash list). A tampered or half-written copy is skipped.</summary>
+    public static string? FindInstalledVerified(string installRoot)
+    {
+        try
+        {
+            if (!Directory.Exists(installRoot))
+            {
+                return null;
+            }
+
+            string fileName = ExecutableLocator.WalletRpcFileName;
+            return Directory.EnumerateDirectories(installRoot, "v*")
+                .Select(dir => (dir, version: Version.TryParse(System.IO.Path.GetFileName(dir)[1..], out Version? v) ? v : null))
+                .Where(x => x.version is not null)
+                .OrderByDescending(x => x.version)
+                .Select(x => System.IO.Path.Combine(x.dir, fileName))
+                .FirstOrDefault(path => File.Exists(path) && MatchesManifest(path) == true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// For a binary the in-app installer put in place (an <c>install.json</c> sits beside it): throws
+    /// unless its SHA-256 still equals the recorded one. A binary with no manifest (the user's own
+    /// copy) passes — the user chose it. Called right before launch; the window between this hash and
+    /// the exec is not closed (see SECURITY.md).
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The installed binary changed since it was verified.</exception>
+    public static void EnsureMatchesManifest(string binaryPath)
+    {
+        if (MatchesManifest(binaryPath) == false)
+        {
+            throw new InvalidOperationException(
+                "monero-wallet-rpc no longer matches what XaultWallet installed and verified, so it was not started. " +
+                "Reinstall it from Settings.");
+        }
+    }
+
+    /// <summary>True when an <c>install.json</c> sits beside the binary: the in-app installer put it there.</summary>
+    internal static bool IsInstallerManaged(string binaryPath) =>
+        System.IO.Path.GetDirectoryName(binaryPath) is { } dir && File.Exists(System.IO.Path.Combine(dir, ManifestName));
+
+    /// <summary>True/false when a manifest sits beside the binary and does/doesn't match; null when
+    /// there is no manifest.</summary>
+    private static bool? MatchesManifest(string binaryPath)
+    {
+        string? dir = System.IO.Path.GetDirectoryName(binaryPath);
+        string manifest = dir is null ? string.Empty : System.IO.Path.Combine(dir, ManifestName);
+        if (!File.Exists(manifest))
+        {
+            return null;
+        }
+
+        try
+        {
+            using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(manifest));
+            string? recorded = doc.RootElement.TryGetProperty("binarySha256", out JsonElement e) ? e.GetString() : null;
+            return recorded is not null
+                && string.Equals(recorded, Convert.ToHexString(HashFile(binaryPath)), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
+        {
+            return false; // an unreadable manifest is not a pass
+        }
+    }
+
     private HttpClient CreateClient()
     {
         HttpMessageHandler handler = HandlerForTesting?.Invoke() ?? CreateHandler(_proxy);

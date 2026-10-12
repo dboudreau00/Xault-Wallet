@@ -66,6 +66,19 @@ public static class MoneroDiagnostics
                     throw new InvalidOperationException($"Unexpected program output: \"{line}\". Is this monero-wallet-rpc?");
                 }
 
+                // "Monero 'Fluorine Fermi' (v0.18.4.3-release)": a copy the in-app installer put in place
+                // (an install.json beside it) must not be older than the oldest release the app installs.
+                // The user's own copy is theirs to choose, and may be older. An unparsable version line
+                // is let through (forks and custom builds word it differently).
+                if (XaultWallet.Core.Installer.WalletRpcInstaller.IsInstallerManaged(binaryPath)
+                    && TryParseVersion(line) is { } found
+                    && found < XaultWallet.Core.Installer.WalletRpcInstaller.MinimumVersion)
+                {
+                    throw new InvalidOperationException(
+                        $"monero-wallet-rpc v{found} is older than the minimum XaultWallet supports " +
+                        $"(v{XaultWallet.Core.Installer.WalletRpcInstaller.MinimumVersion}). Install a current release.");
+                }
+
                 return line;
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
@@ -74,6 +87,13 @@ public static class MoneroDiagnostics
                 throw new TimeoutException("The binary did not respond to --version in time.");
             }
         }
+    }
+
+    /// <summary>The "v0.18.4.3" in a wallet-rpc --version line, or null.</summary>
+    internal static Version? TryParseVersion(string line)
+    {
+        System.Text.RegularExpressions.Match m = System.Text.RegularExpressions.Regex.Match(line, @"\bv(\d+(?:\.\d+){1,3})");
+        return m.Success && Version.TryParse(m.Groups[1].Value, out Version? v) ? v : null;
     }
 
     /// <summary>GET {daemon}/get_height and return the daemon's block height. Throws on failure.

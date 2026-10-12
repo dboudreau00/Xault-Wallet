@@ -184,6 +184,7 @@ public sealed class MoneroProcessManager : IAsyncDisposable
         }
 
         ExecutableLocator.EnsureLaunchable(_walletRpcBinary);
+        XaultWallet.Core.Installer.WalletRpcInstaller.EnsureMatchesManifest(_walletRpcBinary);
 
         if (!DaemonAddress.IsValid(daemonAddress))
         {

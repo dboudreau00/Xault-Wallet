@@ -1,3 +1,4 @@
+using XaultWallet.Core.Installer;
 using XaultWallet.Core.Monero;
 using XaultWallet.Core.Security;
 using Xunit;
@@ -74,5 +75,47 @@ public class SessionHygieneTests : IDisposable
 
         File.WriteAllText(Path.Combine(session, SessionHygiene.PidFileName), "garbage");
         Assert.Equal(SessionHygiene.SessionState.Unknown, SessionHygiene.Inspect(session));
+    }
+
+    [Theory]
+    [InlineData("Monero 'Fluorine Fermi' (v0.18.4.3-release)", "0.18.4.3")]
+    [InlineData("Monero 'Oxygen Orion' (v0.17.3.2-release)", "0.17.3.2")]
+    public void The_Version_Is_Read_From_The_Version_Line(string line, string expected) =>
+        Assert.Equal(Version.Parse(expected), MoneroDiagnostics.TryParseVersion(line));
+
+    [Fact]
+    public void An_Unparsable_Version_Line_Gives_Null() =>
+        Assert.Null(MoneroDiagnostics.TryParseVersion("custom build"));
+
+    [Fact]
+    public void An_Installed_Binary_That_No_Longer_Matches_Its_Manifest_Is_Refused()
+    {
+        string bin = Path.Combine(_dir, "monero-wallet-rpc");
+        File.WriteAllText(bin, "genuine");
+        string hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(bin)));
+        File.WriteAllText(Path.Combine(_dir, "install.json"), $"{{\"binarySha256\":\"{hash.ToLowerInvariant()}\"}}");
+        WalletRpcInstaller.EnsureMatchesManifest(bin); // no throw
+
+        File.WriteAllText(bin, "tampered");
+        Assert.Throws<InvalidOperationException>(() => WalletRpcInstaller.EnsureMatchesManifest(bin));
+    }
+
+    [Fact]
+    public void Only_A_Binary_With_A_Manifest_Beside_It_Counts_As_Installer_Managed()
+    {
+        string bin = Path.Combine(_dir, "monero-wallet-rpc");
+        File.WriteAllText(bin, "mine");
+        Assert.False(WalletRpcInstaller.IsInstallerManaged(bin));
+
+        File.WriteAllText(Path.Combine(_dir, "install.json"), "{}");
+        Assert.True(WalletRpcInstaller.IsInstallerManaged(bin));
+    }
+
+    [Fact]
+    public void A_Binary_Without_A_Manifest_Is_The_Users_Own_And_Passes()
+    {
+        string bin = Path.Combine(_dir, "monero-wallet-rpc");
+        File.WriteAllText(bin, "mine");
+        WalletRpcInstaller.EnsureMatchesManifest(bin);
     }
 }

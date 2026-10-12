@@ -149,9 +149,16 @@ public sealed class AppServices
     {
         string exe = ExecutableLocator.WalletRpcFileName;
 
-        // The user's own copy first — next to our binary, then on PATH — then one the in-app
-        // installer put in place. Always an absolute path, because the launcher (rightly) refuses
-        // bare names.
+        // A copy the in-app installer put in place comes first, and only while its bytes still match
+        // the hash recorded after the signed-checksum check: a binary next to the app or on PATH is
+        // writable by whoever can write those folders. Then the user's own copy — next to our binary,
+        // then on PATH. Always an absolute path, because the launcher (rightly) refuses bare names.
+        string? installed = XaultWallet.Core.Installer.WalletRpcInstaller.FindInstalledVerified(WalletRpcInstallRoot);
+        if (installed is not null)
+        {
+            return installed;
+        }
+
         string local = Path.Combine(AppContext.BaseDirectory, exe);
         if (File.Exists(local))
         {

@@ -5,6 +5,8 @@ XaultWallet and ask it for receive addresses. **The extension holds no key, no s
 balance and no history**, and it stores nothing. XaultWallet on your computer does everything that
 matters; the browser can only ask, and you confirm in the app.
 
+<p align="center"><img src="screenshots/extension-popup.png" alt="The companion extension popup: status, pay, receive" width="300" /></p>
+
 What it does:
 
 - **Pay from a page.** Its popup lists the `monero:` payment links and Monero addresses you can see on

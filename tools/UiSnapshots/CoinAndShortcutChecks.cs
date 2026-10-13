@@ -76,6 +76,35 @@ internal static partial class Program
             $"Shortcuts: Ctrl+6 coins={coins}, Ctrl+2 send={send}, Ctrl+H hid amounts={hidden} (were shown={shown})");
     }
 
+    /// <summary>No key press sends a payment: on the confirmation, Send now never takes the keyboard focus,
+    /// so Tab can't reach it and Enter or Space can't press it. Only a click can.</summary>
+    private static void CheckSendNowTakesAClick()
+    {
+        WalletViewModel vm = Wallet();
+        vm.SelectedTab = 1;
+        vm.ConfirmSendAddress = FakeAddress('5', 21);
+        vm.ConfirmAmountText = "1.5 XMR";
+        vm.ShowSendConfirm = true;
+        vm.ConfirmHeld = false;
+        Window window = ShowWallet(vm);
+        Settle();
+        Button? send = window.GetVisualDescendants().OfType<Button>()
+            .FirstOrDefault(b => Avalonia.Automation.AutomationProperties.GetAutomationId(b) == "SendConfirm.Send");
+        bool reached = false;
+        for (int i = 0; i < 80 && send is not null && !reached; i++)
+        {
+            window.KeyPressQwerty(PhysicalKey.Tab, RawInputModifiers.None);
+            window.KeyReleaseQwerty(PhysicalKey.Tab, RawInputModifiers.None);
+            Settle();
+            reached = send.IsFocused;
+        }
+
+        window.Close();
+        Expect(send is { Focusable: false, IsTabStop: false } && !reached,
+            "Send now ok: it never takes the keyboard focus, so no key press can send.",
+            $"Send now: found={send is not null}, focusable={send?.Focusable}, tab stop={send?.IsTabStop}, reached by Tab={reached}");
+    }
+
     /// <summary>Scroll the control with this automation id into view, with some room above it.</summary>
     private static void ScrollToNamed(Window w, string automationId, double above = 330)
     {

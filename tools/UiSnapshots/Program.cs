@@ -106,6 +106,7 @@ internal static partial class Program
             ("wallet-send-request-wrong-network", () => WalletBrowserRequest('4'), w => SelectTab(w, 1)),
             ("wallet-send-confirm-request", WalletConfirmRequest, w => SelectTab(w, 1)),
             ("wallet-notice-tripwire", Wallet, ShowTripwire),
+            ("wallet-request-held", WalletSend, ShowHeldRequest),
         };
 
         foreach ((string name, Func<ViewModelBase> screen, Action<Window>? arrange) in shots)
@@ -156,6 +157,7 @@ internal static partial class Program
         CheckMotion();
         CheckCoinControl();
         CheckShortcutsPickTabs();
+        CheckSendNowTakesAClick();
         AppServices.Instance.Tor.ShowForPreview(TorState.Off);
         if (!OperatingSystem.IsWindows())
         {

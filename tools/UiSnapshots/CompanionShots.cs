@@ -63,6 +63,14 @@ internal static partial class Program
             warning: true, offersSettings: true);
     }
 
+    /// <summary>A browser request that came while the user was filling the Send form: it waits behind Open it.</summary>
+    private static void ShowHeldRequest(Window w)
+    {
+        SelectTab(w, 1);
+        Shell(w).HeldRequestNote = "A payment request from your browser (shop.example) is waiting, because the Send form holds a payment you started. " +
+                                   "Open it to put it in the Send form in place of that.";
+    }
+
     private static void ShowEnhancedConfirm(Window w)
     {
         Shell(w).ConfirmingEnhancedSecurity = true;

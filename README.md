@@ -411,13 +411,15 @@ its confirmations, and whether it is still maturing.
 
 | Keys (Cmd on macOS) | Does |
 |---|---|
-| **Ctrl+1** … **Ctrl+6** | Receive, Send, History, Contacts, Tools, Coins |
+| **Ctrl+1** … **Ctrl+6** | Receive, Send, History, Contacts, Tools, Coins (Ctrl+2 opens the Send tab; it sends nothing) |
 | **Ctrl+R** | Refresh now |
 | **Ctrl+L** | Lock the vault (every wallet) |
 | **Ctrl+H** | Hide or show amounts |
 
-They work wherever the focus is, a text box included. The window also reopens at the size you left
-it, and while a wallet catches up the sync line estimates the time left.
+They work wherever the focus is, a text box included. **No key sends a payment:** *Send now* on the
+confirmation takes a click (mouse, touchpad, touchscreen or pen) and never takes the keyboard focus.
+The window also reopens at the size you left it, and while a wallet catches up the sync line estimates
+the time left.
 
 ### 13. Pay from the browser (companion extension)
 
@@ -481,7 +483,7 @@ on stagenet; the same run fails on any binding error), so what you see is what s
 | <img src="docs/screenshots/wallet-send-browser-request.png" alt="A payment request from the browser" /><br/>**From the browser**: a payment request, with where it came from. | <img src="docs/screenshots/settings-companion.png" alt="Browser companion settings" /><br/>**Browser companion**: connect Chrome or Firefox, open monero: links. |
 | <img src="docs/screenshots/settings-enhanced-security.png" alt="Enhanced Security" /><br/>**Enhanced Security**: off by default, Windows. | <img src="docs/screenshots/unlock-payment-waiting.png" alt="A request waiting for the unlock" /><br/>**Waiting for the unlock**: a request that came while locked. |
 | <img src="docs/screenshots/extension-popup.png" alt="The companion extension popup" width="300" /><br/>**The extension popup**: whether XaultWallet is unlocked, a payment to open, a fresh receive address. It holds nothing. | <img src="docs/screenshots/wallet-send-confirm-request.png" alt="Confirming a request that came from the browser" /><br/>**Confirming a browser request**: it says it came from outside XaultWallet, and nothing is sent until you press Send now. |
-| <img src="docs/screenshots/wallet-notice-tripwire.png" alt="The tripwire warning" /><br/>**The tripwire**: a browser connection changed behind the app's back is reported across the top of the window. | |
+| <img src="docs/screenshots/wallet-notice-tripwire.png" alt="The tripwire warning" /><br/>**The tripwire**: a browser connection changed behind the app's back is reported across the top of the window. | <img src="docs/screenshots/wallet-request-held.png" alt="A browser request waiting behind Open it" /><br/>**Held**: a request that came while you were filling the Send form waits until you click Open it. |
 | <img src="docs/screenshots/settings-tor-blocked.png" alt="Tor blocked" /><br/>**Blocked by a firewall?** It says which file to allow. | <img src="docs/screenshots/wallet-tor-connecting.png" alt="Waiting for Tor" /><br/>**Fail closed**: a wallet waits for Tor rather than go direct. |
 
 ---

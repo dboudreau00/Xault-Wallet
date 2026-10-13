@@ -448,9 +448,11 @@
                     <Grid ColumnDefinitions="*,10,*">
                         <Button Grid.Column="0" Content="Cancel" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                 MinHeight="42" AutomationProperties.AutomationId="SendConfirm.Cancel" Command="{Binding CancelSendCommand}"/>
+                        <!-- Sending takes a click (mouse, touchpad, touchscreen or pen): the button never takes the
+                             keyboard focus, so no key press, typed or faked, can send a payment. -->
                         <Button Grid.Column="2" Classes="accent" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                 MinHeight="42" AutomationProperties.AutomationId="SendConfirm.Send" AutomationProperties.Name="Send now" Command="{Binding ConfirmSendCommand}"
-                                IsEnabled="{Binding !ConfirmHeld}">
+                                IsEnabled="{Binding !ConfirmHeld}" Focusable="False" IsTabStop="False">
                             <TextBlock Text="Send now" Foreground="{StaticResource AccentText}"/>
                         </Button>
                     </Grid>

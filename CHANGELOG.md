@@ -62,6 +62,9 @@ settings and wallets are unchanged**; nothing new happens until you use it.
 - **The confirmation says which wallet pays** ("From Everyday", with the account when there are several)
   and, for a request from a link or the browser, where it came from. *Review* and *Send now* ignore
   clicks for a moment after a request lands or the confirmation appears.
+- **No key press sends a payment.** *Send now* takes a click (mouse, touchpad, touchscreen or pen): it
+  never takes the keyboard focus, so neither a stray Enter nor a keystroke another program fakes can
+  send. *Review* still works from the keyboard; it only builds the transaction.
 - A payment link for another network than the wallet on screen is flagged as soon as it fills the form,
   not at Review.
 - Settings warns before *Close* throws away unsaved changes.

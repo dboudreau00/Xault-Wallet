@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>XaultWallet</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 20 20" aria-hidden="true">
+        <line x1="4" y1="3.5" x2="16" y2="16.5" class="mark-a"/>
+        <line x1="16" y1="3.5" x2="4" y2="16.5" class="mark-b"/>
+      </svg>
+      <span><b>Xault</b>Wallet</span>
+    </div>
+    <span id="status" class="pill" role="status">Checking…</span>
+  </header>
+
+  <p id="status-detail" class="detail" hidden></p>
+
+  <section id="on-page" hidden>
+    <h2>On this page</h2>
+    <ul id="found" class="found"></ul>
+  </section>
+
+  <section id="pay">
+    <h2>Pay</h2>
+    <label for="pay-input" class="sr">Address or monero: link</label>
+    <textarea id="pay-input" rows="2" spellcheck="false" autocomplete="off"
+              placeholder="Paste an address or a monero: link"></textarea>
+    <button id="pay-button" class="accent" type="button">Open in XaultWallet</button>
+    <p class="hint">XaultWallet shows the payment in its Send tab. Nothing is sent until you confirm it there.</p>
+  </section>
+
+  <section id="receive">
+    <h2>Receive</h2>
+    <div class="row">
+      <label for="label-input" class="sr">Label for the new address</label>
+      <input id="label-input" type="text" maxlength="40" spellcheck="false" autocomplete="off" placeholder="Label (optional)">
+      <button id="receive-button" type="button">New address</button>
+    </div>
+    <div id="address-box" hidden>
+      <code id="address" class="address"></code>
+      <div class="row end">
+        <span class="hint">XaultWallet shows the same start and end in a notice.</span>
+        <button id="copy-button" type="button">Copy</button>
+      </div>
+    </div>
+  </section>
+
+  <p id="message" class="message" role="alert" hidden></p>
+
+  <footer>
+    <button id="show-button" class="link" type="button">Open XaultWallet</button>
+    <span id="version" class="version"></span>
+  </footer>
+
+  <script src="shared.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

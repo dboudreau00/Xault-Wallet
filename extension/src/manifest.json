@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "XaultWallet Companion",
+  "short_name": "XaultWallet",
+  "description": "Pay monero: links and get receive addresses with the XaultWallet desktop app. Holds no keys: every payment is confirmed in the app.",
+  "version": "0.0.0",
+  "author": "dboudreau",
+  "homepage_url": "https://github.com/dboudreau00/Xault-Wallet",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAz2K6hpKkJ2yAEvdKQCGCq2zzZZMFx/iDinJbv6LyPXSbD4W6eksdNoiU778x+UEZ6uZfYfQLRVWFnthalLS5MTsRCxGznGmAgP4eTaQ03NdtwjIhDBA1g5BrFl1gK2HikIm/XKveWBxV/g72PxUd3/qBhM/4YoTFxwr4u2CIHHdvAdXdGm8ooJp54/zHeQzMyHDfaENQIxJW6+qZTXkz3nr+fyfW7Z4hHFbu92ugcqBaZZsZHzfODXun8vH+W78FoqB1JumWVYN6B2Hh4mEHoQJsnhBC76aknoefIgrRcPuI+mHB2PIh2JjzGW/orBh8YUPz3+RIT9qnPvmK1o2OWQIDAQAB",
+  "minimum_chrome_version": "121",
+  "permissions": ["nativeMessaging", "contextMenus", "activeTab", "scripting"],
+  "background": { "service_worker": "background.js" },
+  "action": {
+    "default_title": "XaultWallet",
+    "default_popup": "popup.html",
+    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png" }
+  },
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "content_security_policy": {
+    "extension_pages": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+  }
+}

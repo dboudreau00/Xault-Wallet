@@ -3,12 +3,20 @@
 // Send tab, and gets a new receive address. It shows; XaultWallet decides; nothing is kept.
 "use strict";
 
-const { ask, parseUri, toPayable, originOf, hostOf, scanPage } = globalThis.XaultShared;
+const { ask, fit, parseUri, toPayable, originOf, hostOf, isInsecurePage, scanPage } = globalThis.XaultShared;
 const browserApi = globalThis.browser ?? globalThis.chrome;
 const $ = (id) => document.getElementById(id);
 
 let tabUrl = "";
 let state = "unknown";
+
+// Where a payment request went, by the app's answer.
+const WHERE = new Map([
+  ["shown", "It's in XaultWallet's Send tab: check it there and confirm."],
+  ["after-unlock", "It opens in XaultWallet's Send tab once you unlock."],
+  ["waiting", "It opens in XaultWallet's Send tab when you close Settings there."],
+  ["held", "XaultWallet's Send form is in use: open the request from the notice in XaultWallet."],
+]);
 
 function say(text, ok = false) {
   const m = $("message");
@@ -44,14 +52,13 @@ async function refreshStatus() {
   }
 
   state = reply.state;
-  $("version").textContent = typeof reply.version === "string" ? "XaultWallet " + reply.version.slice(0, 32) : "";
-  if (reply.state === "unlocked" && reply.ready === false) {
+  $("version").textContent = reply.version ? "XaultWallet " + reply.version : "";
+  if (reply.state === "unlocked" && !reply.ready) {
     state = "starting";
     setStatus("Starting…", "warn", "The wallet on screen is still starting. Payments can be opened now; ask for an address in a moment.");
   } else if (reply.state === "unlocked") {
-    const network = typeof reply.network === "string" ? reply.network : "";
-    const watch = reply.watchOnly === true ? " (watch-only)" : "";
-    setStatus("Unlocked" + (network ? " · " + network : ""), "ok", watch ? "The wallet on screen is watch-only: it can receive, not pay." : "");
+    const watch = reply.watchOnly ? "The wallet on screen is watch-only: it can receive, not pay." : "";
+    setStatus("Unlocked" + (reply.network ? " · " + reply.network : ""), "ok", watch);
   } else if (reply.state === "locked") {
     setStatus("Locked", "warn", "Payments open after you unlock XaultWallet. Unlock it to get an address.");
   } else {
@@ -62,8 +69,8 @@ async function refreshStatus() {
 }
 
 function updateButtons() {
-  const reachable = state === "unlocked" || state === "starting" || state === "locked" || state === "not-running";
-  $("pay-button").disabled = !reachable;
+  const reachable = ["unlocked", "starting", "locked", "not-running", "setup"].includes(state);
+  $("pay-button").disabled = !reachable || state === "setup";
   $("receive-button").disabled = state !== "unlocked";
   $("show-button").disabled = !reachable;
 }
@@ -82,18 +89,14 @@ async function pay(uri) {
     return;
   }
 
-  const where = {
-    "after-unlock": "It opens in XaultWallet's Send tab once you unlock.",
-    waiting: "It opens in XaultWallet's Send tab when you close Settings there.",
-  }[reply.result] ?? "It's in XaultWallet's Send tab: check it there and confirm.";
-  say(where, true);
+  say(WHERE.get(reply.result) ?? WHERE.get("shown"), true);
 }
 
 async function receive() {
   say("");
   $("receive-button").disabled = true;
   try {
-    const reply = await ask({ type: "receive", label: $("label-input").value.trim().slice(0, 40), origin: originOf(tabUrl) });
+    const reply = await ask({ type: "receive", label: fit($("label-input").value.trim(), 40), origin: originOf(tabUrl) });
     if (!reply.ok) {
       say(reply.error.message);
       return;
@@ -101,9 +104,7 @@ async function receive() {
 
     $("address").textContent = reply.address;
     $("address-box").hidden = false;
-    say(typeof reply.network === "string" && reply.network !== "Mainnet"
-      ? `A ${reply.network} address: it can't receive real XMR.`
-      : "", false);
+    say(reply.network !== "Mainnet" ? `A ${reply.network} address: it can't receive real XMR.` : "", false);
   } finally {
     $("receive-button").disabled = state !== "unlocked";
   }
@@ -111,6 +112,10 @@ async function receive() {
 
 async function copyAddress() {
   const text = $("address").textContent;
+  if (!text) {
+    return;
+  }
+
   try {
     await navigator.clipboard.writeText(text);
     say("Address copied.", true);
@@ -122,6 +127,42 @@ async function copyAddress() {
     selection.addRange(range);
     say("Copying was refused here: the address is selected, press Ctrl+C.");
   }
+}
+
+// One found payment: what the app can vouch for (amount, address) plainly, and what the page wrote about
+// it in quotes, isolated so it can't turn the text around it.
+function foundItem(item) {
+  const li = document.createElement("li");
+  const what = document.createElement("div");
+  what.className = "what";
+
+  const who = document.createElement("div");
+  who.className = "who";
+  who.textContent = item.parsed.amount ? `${item.parsed.amount} XMR` : "Monero address";
+  what.append(who);
+
+  const words = [item.parsed.recipient, item.parsed.description].filter((w) => w).join(": ");
+  if (words) {
+    const says = document.createElement("div");
+    says.className = "says";
+    const quoted = document.createElement("bdi");
+    quoted.textContent = words;
+    says.append("“", quoted, "”");
+    what.append(says);
+  }
+
+  const addr = document.createElement("div");
+  addr.className = "addr";
+  addr.textContent = shortAddress(item.parsed.address);
+  what.append(addr);
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = "Pay";
+  button.title = "Open this payment in XaultWallet";
+  button.addEventListener("click", () => pay(item.uri));
+  li.append(what, button);
+  return li;
 }
 
 // Payment links and addresses on the page the popup was opened on (activeTab: only this tab, only now).
@@ -144,16 +185,16 @@ async function findOnPage(tabId) {
 
   const items = [];
   const seen = new Set();
-  for (const link of found.links) {
-    const parsed = parseUri(link);
+  for (const link of found.links.slice(0, 10)) {
+    const parsed = typeof link === "string" ? parseUri(link) : null;
     if (parsed && !seen.has(parsed.address + parsed.amount)) {
       seen.add(parsed.address + parsed.amount);
-      items.push({ uri: link, parsed });
+      items.push({ uri: link.trim(), parsed });
     }
   }
 
-  for (const address of found.addresses) {
-    if (!items.some((i) => i.parsed.address === address)) {
+  for (const address of found.addresses.slice(0, 10)) {
+    if (typeof address === "string" && !items.some((i) => i.parsed.address === address)) {
       const parsed = parseUri("monero:" + address);
       if (parsed) {
         items.push({ uri: "monero:" + address, parsed });
@@ -161,29 +202,9 @@ async function findOnPage(tabId) {
     }
   }
 
-  const list = $("found");
-  list.replaceChildren();
-  for (const item of items.slice(0, 6)) {
-    const li = document.createElement("li");
-    const what = document.createElement("div");
-    what.className = "what";
-    const who = document.createElement("div");
-    who.className = "who";
-    const title = item.parsed.recipient || item.parsed.description || "Monero address";
-    who.textContent = item.parsed.amount ? `${item.parsed.amount} XMR · ${title}` : title;
-    const addr = document.createElement("div");
-    addr.className = "addr";
-    addr.textContent = shortAddress(item.parsed.address);
-    what.append(who, addr);
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = "Pay";
-    button.title = "Open this payment in XaultWallet";
-    button.addEventListener("click", () => pay(item.uri));
-    li.append(what, button);
-    list.append(li);
-  }
-
+  $("found").replaceChildren(...items.slice(0, 6).map(foundItem));
+  $("page-source").textContent = `Written by ${hostOf(tabUrl)}. Check them against what you expect before you pay.`;
+  $("page-insecure").hidden = !isInsecurePage(tabUrl);
   $("on-page").hidden = items.length === 0;
 }
 
@@ -209,15 +230,16 @@ async function start() {
   }
 
   tabUrl = (tab && tab.url) || "";
-  $("label-input").value = hostOf(tabUrl).slice(0, 40);
+  $("label-input").value = fit(hostOf(tabUrl), 40);
   try {
-    await browserApi.action.setBadgeText({ text: "" }); // a problem flagged on the button has been seen
+    // A problem flagged on the toolbar button has been seen.
+    await browserApi.action.setBadgeText({ text: "" });
+    await browserApi.action.setTitle({ title: "XaultWallet" });
   } catch {
     // not available everywhere
   }
 
-  await refreshStatus();
-  await findOnPage(tab && tab.id);
+  await Promise.all([refreshStatus(), findOnPage(tab && tab.id)]);
 }
 
 start();

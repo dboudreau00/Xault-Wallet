@@ -1,0 +1,3 @@
+# The extension ships its files byte for byte: the same on every checkout, whatever the platform.
+extension/** text eol=lf
+extension/**/*.png binary

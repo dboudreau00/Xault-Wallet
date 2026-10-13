@@ -9,7 +9,7 @@
 // produces aren't the ones the app allows (BrowserRegistration.cs): a mismatch would ship an extension
 // the app refuses. Zips are stored (not compressed) with fixed dates: the same sources give the same bytes.
 import { createHash } from "node:crypto";
-import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -19,6 +19,10 @@ const src = join(here, "src");
 const dist = join(here, "dist");
 
 const FIREFOX_ID = "xaultwallet-companion@dboudreau.dev";
+
+// Exactly what ships: anything else that turns up in src/ (an editor backup, a stray script) stays out.
+const SHIPPED = ["background.js", "shared.js", "popup.html", "popup.js", "popup.css",
+  "icons/icon16.png", "icons/icon32.png", "icons/icon48.png", "icons/icon128.png"];
 
 function fail(message) {
   console.error("build: " + message);
@@ -171,14 +175,22 @@ export function build() {
   for (const [name, manifest] of [["chrome", chrome], ["firefox", firefox]]) {
     const out = join(dist, name);
     mkdirSync(out, { recursive: true });
-    cpSync(src, out, { recursive: true, filter: (path) => !path.endsWith("manifest.json") });
+    for (const file of SHIPPED) {
+      if (!existsSync(join(src, file))) {
+        fail(`src/${file} is missing`);
+      }
+
+      mkdirSync(dirname(join(out, file)), { recursive: true });
+      copyFileSync(join(src, file), join(out, file));
+    }
+
     writeFileSync(join(out, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
   }
 
   return { release, version, chromeId };
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url))) {
   const result = build();
   const zipAt = process.argv.indexOf("--zip");
   if (zipAt > 0) {

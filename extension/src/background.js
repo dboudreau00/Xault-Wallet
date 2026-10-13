@@ -26,11 +26,12 @@ browserApi.contextMenus.onClicked.addListener(async (info) => {
 
   const uri = toPayable(info.selectionText || "");
   if (!uri) {
-    await flag("The selection isn't one Monero address or payment link.");
+    await flag("Select just one Monero address or payment link (a whole page is too much to trust).");
     return;
   }
 
-  const reply = await ask({ type: "pay", uri, origin: originOf(info.pageUrl || "") });
+  // The frame the selection is in: a page can show another site inside it.
+  const reply = await ask({ type: "pay", uri, origin: originOf(info.frameUrl || info.pageUrl || "") });
   if (reply.ok) {
     await flag("");
   } else {

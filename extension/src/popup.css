@@ -253,6 +253,14 @@ button.link:hover:not(:disabled) {
   white-space: nowrap;
 }
 
+.found .says {
+  color: var(--text-2);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .found .addr {
   font: 11px ui-monospace, "Cascadia Code", Consolas, monospace;
   color: var(--text-2);
@@ -265,6 +273,15 @@ button.link:hover:not(:disabled) {
   font-size: 12px;
   background: rgba(224, 160, 48, 0.12);
   color: #ebd9ae;
+}
+
+.warning {
+  margin: 0 0 8px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  background: rgba(255, 107, 107, 0.12);
+  color: #f3c2c2;
 }
 
 .message.ok {

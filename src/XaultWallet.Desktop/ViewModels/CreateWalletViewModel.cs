@@ -402,7 +402,7 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         // so the indices can point past the (now empty) word list.
         if (_verifyIndices.Length != 3 || _verifyIndices.Any(i => i >= words.Length))
         {
-            VerifyMessage = "The seed changed — generate it again before verifying.";
+            VerifyMessage = "The seed changed: generate it again before verifying.";
             RealVerified = false;
             return;
         }
@@ -497,7 +497,7 @@ public sealed partial class CreateWalletViewModel : ViewModelBase
         if (PasswordStrength.Evaluate(MainPassword).level < PasswordStrength.MinimumAccepted)
         {
             Error = "That password is too easy to guess (a common word, sequence or repeated pattern). " +
-                    "Anyone who copies the vault file can try passwords offline — choose something longer or less predictable.";
+                    "Anyone who copies the vault file can try passwords offline: choose something longer or less predictable.";
             return;
         }
 

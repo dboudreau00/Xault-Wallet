@@ -53,10 +53,10 @@
                                    Text="{Binding SendRecipientName}" IsVisible="{Binding SendRecipientName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                         <Border Classes="callout" Padding="12,9" IsVisible="{Binding PaymentRequestNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                 Classes.warning="{Binding PaymentRequestIsProblem}">
-                            <StackPanel Orientation="Horizontal" Spacing="9">
-                                <c:Icon Data="{StaticResource IconLink}" Width="15" Height="15" VerticalAlignment="Center"/>
-                                <TextBlock AutomationProperties.AutomationId="Send.PaymentRequest" Text="{Binding PaymentRequestNote}" TextWrapping="Wrap" VerticalAlignment="Center"/>
-                            </StackPanel>
+                            <Grid ColumnDefinitions="Auto,*">
+                                <c:Icon Grid.Column="0" Data="{StaticResource IconLink}" Width="15" Height="15" Margin="0,1,9,0" VerticalAlignment="Top"/>
+                                <TextBlock Grid.Column="1" AutomationProperties.AutomationId="Send.PaymentRequest" Text="{Binding PaymentRequestNote}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                            </Grid>
                         </Border>
                     </StackPanel>
                     <Grid ColumnDefinitions="*,12,Auto,12,Auto">
@@ -145,7 +145,7 @@
                     </Button>
                     <ProgressBar IsIndeterminate="True" IsVisible="{Binding Sending}" Height="3"/>
                     <TextBlock Classes="muted" TextWrapping="Wrap"
-                               Text="The transaction is built and signed first — you see the exact fee and total before anything is broadcast."/>
+                               Text="The transaction is built and signed first: you see the exact fee and total before anything is broadcast."/>
 
                     <!-- Outcome of the last attempt: sent / check History first / not sent -->
                     <Border x:Name="SendOutcomeCard" Classes="callout outcome"
@@ -184,7 +184,7 @@
                                 <TextBlock Text="PAYMENT PROOF · LAST SEND" Classes="eyebrow" VerticalAlignment="Center"/>
                             </StackPanel>
                             <TextBlock Classes="caption" TextWrapping="Wrap"
-                                       Text="Share the transaction ID and key to prove this payment. The key proves this one payment only — it cannot spend anything. Never share your seed."/>
+                                       Text="Share the transaction ID and key to prove this payment. The key proves this one payment only: it cannot spend anything. Never share your seed."/>
                             <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,8,Auto">
                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Tx ID" Classes="caption" Margin="0,0,14,0" VerticalAlignment="Center"/>
                                 <SelectableTextBlock Grid.Row="0" Grid.Column="1" Classes="mono" FontSize="12" AutomationProperties.AutomationId="Send.LastTxId" Text="{Binding LastTxId}" TextWrapping="Wrap" VerticalAlignment="Center"/>

@@ -64,8 +64,8 @@
                     </Button>
                 </Grid>
                 <Grid ColumnDefinitions="*,8,Auto">
-                    <TextBox MaxLength="40" PlaceholderText="Name of the account on screen" AutomationProperties.AutomationId="Manage.AccountName"
-                             AutomationProperties.Name="Name of the account on screen" Text="{Binding AccountRenameText}"/>
+                    <TextBox MaxLength="40" PlaceholderText="New name for the account shown" AutomationProperties.AutomationId="Manage.AccountName"
+                             AutomationProperties.Name="New name for the account shown" Text="{Binding AccountRenameText}"/>
                     <Button Grid.Column="2" Content="Rename account" AutomationProperties.AutomationId="Manage.RenameAccount" Command="{Binding RenameAccountCommand}"/>
                 </Grid>
             </StackPanel>

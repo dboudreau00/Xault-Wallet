@@ -112,6 +112,50 @@ public sealed partial class WalletViewModel
     /// <summary>The address the shown payment request is for: the note goes when the address changes.</summary>
     private string _paymentRequestAddress = string.Empty;
 
+    /// <summary>Where the shown payment request came from when it wasn't typed or pasted here ("your
+    /// browser (shop.example)", "a monero: link"); empty otherwise.</summary>
+    private string _paymentRequestSource = string.Empty;
+
+    /// <summary>Set while <see cref="ApplyPaymentRequest"/> fills the form: a link pasted by hand has
+    /// no outside source.</summary>
+    private bool _applyingOutsideRequest;
+
+    /// <summary>The confirmation repeats it: a request the user didn't expect is the one to look at twice.</summary>
+    [ObservableProperty] private string _confirmRequestSource = string.Empty;
+
+    /// <summary>Which wallet and account pay ("From Everyday · Primary account").</summary>
+    [ObservableProperty] private string _confirmFromText = string.Empty;
+
+    /// <summary>
+    /// A payment request from outside (a monero: link, or the browser companion): it replaces the form and
+    /// opens the Send tab, saying where it came from. Nothing is sent: the user reviews and confirms as for
+    /// any payment. Returns null, or why it wasn't taken (a payment is being confirmed or sent).
+    /// </summary>
+    internal string? ApplyPaymentRequest(OutsidePayment payment)
+    {
+        ArgumentNullException.ThrowIfNull(payment);
+        if (ShowSendConfirm || Sending)
+        {
+            return "busy";
+        }
+
+        SendResult = string.Empty;
+        ClearSendForm();
+        _paymentRequestSource = payment.Source;
+        _applyingOutsideRequest = true;
+        try
+        {
+            SendAddress = payment.Uri; // read like a pasted link: address, amount and note
+        }
+        finally
+        {
+            _applyingOutsideRequest = false;
+        }
+
+        SelectedTab = 1;
+        return null;
+    }
+
     /// <summary>Picked from the address book: fills the address.</summary>
     [ObservableProperty] private ContactRow? _selectedSendContact;
 
@@ -192,6 +236,11 @@ public sealed partial class WalletViewModel
         // A pasted monero: link fills the form (amount included) instead of being sent as an "address".
         if (MoneroUri.IsUri(value))
         {
+            if (!_applyingOutsideRequest)
+            {
+                _paymentRequestSource = string.Empty; // typed or pasted here
+            }
+
             MoneroPaymentRequest? request = MoneroUri.TryParse(value, out string? problem);
             if (request is null)
             {
@@ -209,8 +258,16 @@ public sealed partial class WalletViewModel
 
             string who = request.RecipientName.Length > 0 ? " from " + request.RecipientName : string.Empty;
             string what = request.Description.Length > 0 ? ": " + request.Description : string.Empty;
-            PaymentRequestNote = $"Payment request{who}{what}";
-            PaymentRequestIsProblem = false;
+            string note = $"Payment request{who}{what}";
+            if (_paymentRequestSource.Length > 0)
+            {
+                note += $". Opened from {_paymentRequestSource}: check the address against the page or person asking before you confirm.";
+            }
+
+            // A link for another network can't be paid from this wallet: say so now, not at Review.
+            string? wrongNetwork = MoneroAddress.Problem(request.Address, _secrets.Network);
+            PaymentRequestNote = wrongNetwork is null ? note : note + " " + wrongNetwork;
+            PaymentRequestIsProblem = wrongNetwork is not null;
             return;
         }
 
@@ -225,6 +282,7 @@ public sealed partial class WalletViewModel
             PaymentRequestNote = string.Empty; // the request was for another address
             PaymentRequestIsProblem = false;
             _paymentRequestAddress = string.Empty;
+            _paymentRequestSource = string.Empty;
         }
     }
 
@@ -242,7 +300,7 @@ public sealed partial class WalletViewModel
         if (XmrAmount.TryParse(value, out decimal xmr, out string? error))
         {
             return (XmrAmount.LooksThousandsGrouped(value)
-                ? $"= {XmrAmount.Format(xmr)} XMR — the separator is read as a decimal point"
+                ? $"= {XmrAmount.Format(xmr)} XMR (the separator is read as a decimal point)"
                 : $"= {XmrAmount.Format(xmr)} XMR", false);
         }
 
@@ -479,6 +537,8 @@ public sealed partial class WalletViewModel
             }
 
             ConfirmHasSeveral = destinations.Count > 1;
+            ConfirmFromText = FromText();
+            ConfirmRequestSource = RequestSourceFor(destinations.Select(d => d.address));
             ConfirmSendAddress = destinations.Count == 1 ? destinations[0].address : string.Empty;
             ConfirmRecipientName = destinations.Count == 1 ? _profile.ContactNameFor(destinations[0].address) ?? string.Empty : string.Empty;
             _lastRecipientAddress = destinations.Count == 1 ? destinations[0].address : string.Empty;
@@ -566,6 +626,8 @@ public sealed partial class WalletViewModel
             }
 
             _preparedSweep = sweep;
+            ConfirmFromText = FromText();
+            ConfirmRequestSource = RequestSourceFor(new[] { destination });
             ConfirmSendAddress = destination;
             ConfirmRecipientName = _profile.ContactNameFor(destination) ?? string.Empty;
             _lastRecipientAddress = destination;
@@ -599,6 +661,16 @@ public sealed partial class WalletViewModel
             Sending = false;
         }
     }
+
+    private string FromText() =>
+        "From " + WalletName + (HasSeveralAccounts || AccountIndex != 0 ? " · " + (SelectedAccount?.Name ?? "Primary account") : string.Empty);
+
+    /// <summary>"Requested by your browser (shop.example)" when the payment being confirmed pays the
+    /// address a request from outside asked for.</summary>
+    private string RequestSourceFor(IEnumerable<string> addresses) =>
+        _paymentRequestSource.Length > 0 && addresses.Contains(_paymentRequestAddress, StringComparer.Ordinal)
+            ? "Requested by " + _paymentRequestSource
+            : string.Empty;
 
     /// <summary>A fee wildly out of proportion to the amount usually means a misbehaving node's
     /// fee estimate (or a unit mishap) — say so instead of letting habit click through it.</summary>
@@ -642,7 +714,7 @@ public sealed partial class WalletViewModel
         if (prepared is null)
         {
             // Never send blind — but an explicitly-clicked confirm must never LOOK like a send.
-            SendResult = "Nothing was broadcast — the prepared transaction was no longer available. " +
+            SendResult = "Nothing was broadcast: the prepared transaction was no longer available. " +
                          "Review the send again.";
             return;
         }
@@ -670,7 +742,7 @@ public sealed partial class WalletViewModel
         catch (OperationCanceledException)
         {
             // The broadcast request may already have reached the network before cancellation.
-            SendResult = "Send interrupted — the transaction MAY still have been broadcast. " +
+            SendResult = "Send interrupted: the transaction MAY still have been broadcast. " +
                          $"Check History for txid {prepared.TxHash} before sending again.";
             SendOutcome = SendOutcome.NeedsCheck;
         }
@@ -680,7 +752,7 @@ public sealed partial class WalletViewModel
             // and retrying too early can double-pay with a second transaction. Give the txid so
             // "check History" is actually actionable.
             SendResult = "Broadcast failed: " + Friendly(ex) +
-                         $" The transaction may or may not have reached the network — check History for txid {prepared.TxHash} before sending again.";
+                         $" The transaction may or may not have reached the network. Check History for txid {prepared.TxHash} before sending again.";
             SendOutcome = SendOutcome.NeedsCheck;
         }
         finally
@@ -700,6 +772,8 @@ public sealed partial class WalletViewModel
         _payee = null;
         SelectedSendContact = null;
         PaymentRequestNote = string.Empty;
+        _paymentRequestSource = string.Empty;
+        _paymentRequestAddress = string.Empty;
         ExtraRecipients.Clear();
         OnPropertyChanged(nameof(HasExtraRecipients));
     }
@@ -741,7 +815,7 @@ public sealed partial class WalletViewModel
             string done = relayed == 0
                 ? "No transaction is confirmed sent, but the first MAY still have reached the network."
                 : $"{relayed} of {sweep.TxMetadataList.Count} transactions were broadcast before the failure.";
-            SendResult = $"Sweep interrupted: {Friendly(ex)} {done} Check History before retrying — " +
+            SendResult = $"Sweep interrupted: {Friendly(ex)} {done} Check History before retrying: " +
                          "re-running the sweep too early can conflict with the transactions already sent.";
             SendOutcome = SendOutcome.NeedsCheck;
         }
@@ -751,7 +825,7 @@ public sealed partial class WalletViewModel
             // a cancel after a successful relay is handled above) may already have reached the
             // network. Point at the first prepared txid when we have one.
             string tip = sweep.TxHashList.Count > 0 ? $"txid {sweep.TxHashList[0]}" : "the sweep";
-            SendResult = "Sweep interrupted — a transaction MAY still have been broadcast. " +
+            SendResult = "Sweep interrupted: a transaction MAY still have been broadcast. " +
                          $"Check History for {tip} before sweeping again.";
             SendOutcome = SendOutcome.NeedsCheck;
         }

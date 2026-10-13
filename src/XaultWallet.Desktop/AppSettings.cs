@@ -51,6 +51,21 @@ public sealed class AppSettings
 
     public bool WindowMaximized { get; set; }
 
+    /// <summary>Enhanced Security (Windows; off by default): the window is left out of screenshots,
+    /// recordings and remote viewing, the app won't run on a hidden desktop, only input from a real
+    /// keyboard, mouse, touchscreen or pen operates it, other programs can't read its window through
+    /// accessibility interfaces, and its memory (and its wallet backend's) is closed to other programs.
+    /// The same for every password, like every setting here.</summary>
+    public bool EnhancedSecurity { get; set; }
+
+    /// <summary>The browsers the user connected to the companion from this app ("chrome", "firefox"). Kept
+    /// so the app notices when a connection is changed behind its back (another program standing in for
+    /// XaultWallet), not to decide anything: the registration itself is what the browsers read.</summary>
+    public List<string> ConnectedBrowsers { get; set; } = new();
+
+    /// <summary>The user made this app the one that opens monero: links (same purpose as above).</summary>
+    public bool OpensMoneroLinks { get; set; }
+
     /// <summary>True when the last Load found a corrupt settings file and fell back to
     /// defaults (the corrupt file is preserved next to the original as *.bad).</summary>
     public static bool RecoveredFromCorruptFile { get; private set; }
@@ -113,6 +128,8 @@ public sealed class AppSettings
         DefaultDaemonAddress ??= "";
         ProxyAddress ??= "";
         TorBinaryPath ??= "";
+        ConnectedBrowsers = (ConnectedBrowsers ?? new List<string>())
+            .Where(b => b is "chrome" or "firefox").Distinct(StringComparer.Ordinal).ToList();
         if (WindowWidth is < 0 or > 20000 || double.IsNaN(WindowWidth) || WindowHeight is < 0 or > 20000 || double.IsNaN(WindowHeight))
         {
             WindowWidth = WindowHeight = 0;

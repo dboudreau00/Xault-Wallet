@@ -32,6 +32,19 @@
                            HorizontalAlignment="Center"/>
             </StackPanel>
 
+            <!-- A payment request from a monero: link or the browser, waiting for the unlock -->
+            <Border Classes="callout" Padding="14,11" IsVisible="{Binding HasPendingRequest}" AutomationProperties.AutomationId="Unlock.PendingRequest">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <c:Icon Grid.Column="0" Data="{StaticResource IconLink}" Width="15" Height="15" Margin="0,1,10,0" VerticalAlignment="Top"/>
+                    <TextBlock Grid.Column="1" Text="{Binding PendingRequestNote}" TextWrapping="Wrap" FontSize="12.5" VerticalAlignment="Center"/>
+                    <Button Grid.Column="2" Classes="ghost icon" Margin="8,-4,-6,-4" Padding="6" VerticalAlignment="Top"
+                            AutomationProperties.AutomationId="Unlock.DismissRequest" AutomationProperties.Name="Discard the payment request"
+                            ToolTip.Tip="Discard the payment request" Command="{Binding DismissPendingRequestCommand}">
+                        <c:Icon Data="{StaticResource IconClose}" Width="14" Height="14"/>
+                    </Button>
+                </Grid>
+            </Border>
+
             <!-- Login card (it shakes on a wrong password: see the code-behind) -->
             <Border x:Name="LoginCard" Classes="card" app:Entrance.Rise="140" Padding="24">
                 <StackPanel Spacing="14">

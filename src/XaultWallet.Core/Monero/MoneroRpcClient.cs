@@ -379,7 +379,7 @@ public sealed class MoneroRpcClient : IDisposable
 
         if (xmr > MaxXmrAmount)
         {
-            throw new ArgumentOutOfRangeException(nameof(xmr), "Amount exceeds the total Monero supply — check for a typo.");
+            throw new ArgumentOutOfRangeException(nameof(xmr), "Amount exceeds the total Monero supply: check for a typo.");
         }
 
         return (ulong)decimal.Round(xmr * AtomicUnitsPerXmr, 0);

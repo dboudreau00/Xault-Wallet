@@ -4,7 +4,7 @@ namespace XaultWallet.Desktop;
 public sealed record RemoteNode(string Name, string Url, int NetworkIndex)
 {
     // Shown in the dropdown, e.g. "MoneroDevs — http://node.monerodevs.org:28089"
-    public string Display => $"{Name} — {Url}";
+    public string Display => $"{Name} · {Url}";
 }
 
 /// <summary>

@@ -284,8 +284,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
             WalletRpcBinaryPath = installed.Path;
             RefreshBinaryHint();
             BinaryTestOk = true;
-            BinaryTestResult = $"OK \u2014 {installed.VersionLine} ({installed.Path})";
+            BinaryTestResult = $"OK: {installed.VersionLine} ({installed.Path})";
         };
+
+        InitializeCompanion();
 
         if (AppSettings.RecoveredFromCorruptFile)
         {
@@ -335,7 +337,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
             string version = await MoneroDiagnostics.ProbeWalletRpcAsync(path);
             BinaryTestOk = true;
-            BinaryTestResult = $"OK \u2014 {version} ({path})";
+            BinaryTestResult = $"OK: {version} ({path})";
         }
         catch (Exception ex)
         {
@@ -366,7 +368,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             };
             ulong height = await MoneroDiagnostics.ProbeDaemonAsync(DefaultDaemonAddress, proxy);
             DaemonTestOk = true;
-            DaemonTestResult = $"OK \u2014 node at height {height}.";
+            DaemonTestResult = $"OK: node at height {height}.";
         }
         catch (Exception ex)
         {
@@ -387,7 +389,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         string daemon = (DefaultDaemonAddress ?? string.Empty).Trim();
         if (daemon.Length > 0 && !DaemonAddress.IsValid(daemon))
         {
-            SavedMessage = "Default node must be a valid http(s) URL, e.g. http://127.0.0.1:18081 — not saved.";
+            SavedMessage = "Default node must be a valid http(s) URL, e.g. http://127.0.0.1:18081. Not saved.";
             return;
         }
 
@@ -400,7 +402,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
         if (proxy.Length > 0 && !IsValidProxy(proxy))
         {
-            SavedMessage = "Proxy must be host:port (e.g. 127.0.0.1:9050 for Tor) — not saved.";
+            SavedMessage = "Proxy must be host:port (e.g. 127.0.0.1:9050 for Tor). Not saved.";
             return;
         }
 
@@ -419,8 +421,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
             string torPathBefore = s.TorBinaryPath;
             s.UseBuiltInTor = NetworkMode == 1;
             s.TorBinaryPath = torPath;
+            SaveEnhancedSecurity(s, out bool enhancedChanged);
             AppServices.Instance.SaveSettings();
             ApplyTorSetting(torWasOn, torPathBefore != torPath);
+            AfterSave(enhancedChanged);
+            _closeWarned = false;
 
             // Reflect any clamping back into the fields.
             AutoRefreshSeconds = s.AutoRefreshSeconds;
@@ -463,7 +468,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
         if (PasswordStrength.Evaluate(NewPassword).level < PasswordStrength.MinimumAccepted)
         {
-            ChangePasswordResult = "That new password is too easy to guess — choose something longer or less predictable.";
+            ChangePasswordResult = "That new password is too easy to guess: choose something longer or less predictable.";
             return;
         }
 
@@ -573,7 +578,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             VaultFile.Deserialize(bytes); // sanity: never export a corrupt vault as a "backup"
             PrivateFiles.WriteAllBytes(dest, bytes); // 0600, like the vault itself
             BackupOk = true;
-            BackupResult = "Encrypted vault backup saved. Store it somewhere safe — it stays " +
+            BackupResult = "Encrypted vault backup saved. Store it somewhere safe: it stays " +
                            "protected by your password, but anyone holding it can try to brute-force it.";
             // Deliberately NOT logged: a log line proving a backup exists outlives a later
             // duress wipe and hands a coercer exactly the lead the wipe is meant to erase.
@@ -694,7 +699,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         catch
         {
             return $" IMPORTANT: your original vault is preserved as {Path.GetFileName(kept)} " +
-                   "in the data folder — rename it back to vault.xv to recover.";
+                   "in the data folder: rename it back to vault.xv to recover.";
         }
     }
 
@@ -750,6 +755,36 @@ public sealed partial class SettingsViewModel : ViewModelBase
                && port is >= 1 and <= 65535;
     }
 
+    /// <summary>Close once warned: unsaved changes aren't thrown away by a single click.</summary>
+    private bool _closeWarned;
+
     [RelayCommand]
-    private void Close() => Closed?.Invoke();
+    private void Close()
+    {
+        if (!_closeWarned && HasUnsavedChanges())
+        {
+            _closeWarned = true;
+            SavedMessage = "You have unsaved changes. Save them, or press Close again to leave without them.";
+            return;
+        }
+
+        Closed?.Invoke();
+    }
+
+    /// <summary>A field differs from what is saved (the actions that apply at once, such as Tor's Start
+    /// or a password change, aren't fields).</summary>
+    internal bool HasUnsavedChanges()
+    {
+        AppSettings s = AppServices.Instance.Settings;
+        int savedMode = s.UseBuiltInTor ? 1 : s.ProxyAddress.Trim().Length > 0 ? 2 : 0;
+        return (WalletRpcBinaryPath ?? string.Empty).Trim() != s.WalletRpcBinaryPath
+               || (DefaultDaemonAddress ?? string.Empty).Trim() != s.DefaultDaemonAddress
+               || NetworkIndex != s.DefaultNetworkIndex
+               || AutoRefreshSeconds != s.AutoRefreshSeconds
+               || AutoLockMinutes != s.AutoLockMinutes
+               || NetworkMode != savedMode
+               || (NetworkMode == 2 && (ProxyAddress ?? string.Empty).Trim() != s.ProxyAddress)
+               || (TorBinaryPath ?? string.Empty).Trim() != s.TorBinaryPath
+               || EnhancedSecurity != (s.EnhancedSecurity && EnhancedSecuritySupported);
+    }
 }

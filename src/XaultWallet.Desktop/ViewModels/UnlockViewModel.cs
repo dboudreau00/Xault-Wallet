@@ -31,6 +31,23 @@ public sealed partial class UnlockViewModel : ViewModelBase
     /// the vault has none.</summary>
     public event Action<VaultSession>? Unlocked;
 
+    /// <summary>A payment request (from a monero: link or the browser) waiting for the unlock.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPendingRequest))]
+    private string _pendingRequestNote = string.Empty;
+
+    public bool HasPendingRequest => PendingRequestNote.Length > 0;
+
+    /// <summary>The user threw the waiting request away.</summary>
+    public event Action? PendingRequestDismissed;
+
+    [RelayCommand]
+    private void DismissPendingRequest()
+    {
+        PendingRequestNote = string.Empty;
+        PendingRequestDismissed?.Invoke();
+    }
+
     [RelayCommand]
     private async Task UnlockAsync()
     {

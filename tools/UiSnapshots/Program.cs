@@ -98,6 +98,14 @@ internal static partial class Program
             ("settings-tor-connecting", () => SettingsTor(TorState.Starting), w => ScrollToNamed(w, "Settings.TorPanel")),
             ("settings-tor-installing", SettingsTorInstalling, w => ScrollToNamed(w, "Settings.TorPanel", above: 120)),
             ("settings-tor-blocked", () => SettingsTor(TorState.Failed), w => ScrollToNamed(w, "Settings.TorPanel")),
+            ("settings-enhanced-security", () => new SettingsViewModel(), w => ScrollToNamed(w, "Settings.EnhancedCard", above: 40)),
+            ("settings-enhanced-confirm", () => new SettingsViewModel { EnhancedSecurity = true }, ShowEnhancedConfirm),
+            ("settings-companion", SettingsCompanion, w => ScrollToNamed(w, "Settings.CompanionCard", above: 40)),
+            ("unlock-payment-waiting", UnlockWithRequest, null),
+            ("wallet-send-browser-request", () => WalletBrowserRequest('5'), w => SelectTab(w, 1)),
+            ("wallet-send-request-wrong-network", () => WalletBrowserRequest('4'), w => SelectTab(w, 1)),
+            ("wallet-send-confirm-request", WalletConfirmRequest, w => SelectTab(w, 1)),
+            ("wallet-notice-tripwire", Wallet, ShowTripwire),
         };
 
         foreach ((string name, Func<ViewModelBase> screen, Action<Window>? arrange) in shots)
@@ -131,6 +139,7 @@ internal static partial class Program
         }
 
         CheckHistoryRowSettles();
+        CheckBrowserRequestLandsInSend();
         CheckMiningRewardRow();
         CheckSwitcherItemsAreNamed();
         CheckSwitcherKeysOpenTheList();
@@ -797,6 +806,7 @@ internal static partial class Program
         vm.ConfirmLines.Add(new ConfirmLine("Bob's Books", FakeAddress('5', 31), "0.2 XMR"));
         vm.ConfirmLines.Add(new ConfirmLine("Carol", FakeAddress('7', 32), "0.05 XMR"));
         vm.ConfirmHasSeveral = true;
+        vm.ConfirmFromText = "From Everyday";
         vm.SendSummary = "Default priority · 2 recipients · built and signed, not yet broadcast";
         vm.ConfirmAmountText = "0.25 XMR";
         vm.SendFeeText = "0.00004312 XMR";
@@ -830,7 +840,7 @@ internal static partial class Program
         vm.VerifyTxKey = FakeTxId(12);
         vm.VerifyAddress = FakeAddress('5', 31);
         vm.VerifyOk = true;
-        vm.VerifyResult = "Verified: that address received 1.25 XMR — 24 confirmation(s).";
+        vm.VerifyResult = "Verified: that address received 1.25 XMR, 24 confirmations.";
         vm.SignMessage = "I control this wallet. 2026-10-06";
         vm.Signature = "SigV2" + FakeTxId(13)[..60];
         vm.SignNotice = "Signed with your main address. Share the message, the address and this signature.";
@@ -948,6 +958,7 @@ internal static partial class Program
         vm.SendAddress = FakeAddress('5', 11);
         vm.SendAmountText = "0.25";
         vm.ConfirmSendAddress = vm.SendAddress;
+        vm.ConfirmFromText = "From Everyday";
         vm.SendSummary = "Low priority · built and signed, not yet broadcast";
         vm.ConfirmAmountText = "0.25 XMR";
         vm.SendFeeText = "0.00003066 XMR";

@@ -35,7 +35,7 @@
             <Grid MaxWidth="820" Margin="28,18" ColumnDefinitions="*,Auto,Auto,Auto">
                 <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
                     <TextBlock Text="Settings" Classes="h1"/>
-                    <TextBlock Classes="caption" Text="Stored in settings.json beside your vault — no secrets are ever written there."/>
+                    <TextBlock Classes="caption" Text="Stored in settings.json beside your vault. No secrets are ever written there."/>
                 </StackPanel>
                 <TextBlock Grid.Column="1" AutomationProperties.AutomationId="Settings.SavedMessage" Text="{Binding SavedMessage}" Classes="caption" VerticalAlignment="Center" Margin="0,0,14,0"
                            Foreground="{StaticResource SuccessBrush}" MaxWidth="260" TextWrapping="Wrap"/>
@@ -223,6 +223,96 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ============ Enhanced Security (Windows; off by default) ============ -->
+                <Border Classes="section" app:Entrance.Rise="210" AutomationProperties.AutomationId="Settings.EnhancedCard">
+                    <StackPanel Spacing="12">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <Border Classes="sectionIcon"><c:Icon Data="{StaticResource IconShield}"/></Border>
+                                <StackPanel Spacing="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Enhanced Security" Classes="h2"/>
+                                    <TextBlock Classes="caption" Text="Off by default. Keeps other programs from watching or operating XaultWallet."/>
+                                </StackPanel>
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" OnContent="" OffContent="" VerticalAlignment="Center"
+                                          AutomationProperties.AutomationId="Settings.EnhancedSecurity" AutomationProperties.Name="Enhanced Security"
+                                          IsChecked="{Binding EnhancedSecurity}" IsEnabled="{Binding EnhancedSecuritySupported}"/>
+                        </Grid>
+                        <StackPanel Spacing="5">
+                            <TextBlock Classes="muted" TextWrapping="Wrap" Text="While it's on:"/>
+                            <TextBlock Classes="muted" TextWrapping="Wrap" Margin="12,0,0,0" Text="• screenshots, screen recordings, Recall and remote viewing show nothing where XaultWallet's window is;"/>
+                            <TextBlock Classes="muted" TextWrapping="Wrap" Margin="12,0,0,0" Text="• only your own keyboard, mouse, touchscreen or pen can click and type in it, so malware that drives apps unseen (hidden VNC) can't;"/>
+                            <TextBlock Classes="muted" TextWrapping="Wrap" Margin="12,0,0,0" Text="• other programs can't read its text or press its buttons through accessibility interfaces, and can't read its memory or the wallet backend's;"/>
+                            <TextBlock Classes="muted" TextWrapping="Wrap" Margin="12,0,0,0" Text="• it won't start on a desktop you can't see."/>
+                        </StackPanel>
+                        <Border Classes="callout warning">
+                            <TextBlock Foreground="#EBD9AE" TextWrapping="Wrap"
+                                       Text="Screen readers, voice control, password-manager auto-type and remote-control tools can't operate XaultWallet while it's on. It takes away the easy ways common malware watches and drives a wallet; it can't make an infected computer safe."/>
+                        </Border>
+                        <TextBlock Classes="caption" TextWrapping="Wrap" IsVisible="{Binding EnhancedSecuritySupported}"
+                                   Text="Takes effect when you save. XaultWallet then asks for one click: if it doesn't get it, it turns Enhanced Security off again by itself."/>
+                        <TextBlock Classes="caption" TextWrapping="Wrap" IsVisible="{Binding !EnhancedSecuritySupported}"
+                                   Text="Available on Windows."/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ============ Browser companion ============ -->
+                <Border Classes="section" app:Entrance.Rise="210" AutomationProperties.AutomationId="Settings.CompanionCard">
+                    <StackPanel Spacing="12">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Border Classes="sectionIcon"><c:Icon Data="{StaticResource IconBrowser}"/></Border>
+                            <StackPanel Spacing="1" VerticalAlignment="Center">
+                                <TextBlock Text="Browser companion" Classes="h2"/>
+                                <TextBlock Classes="caption" Text="Pay monero: links and get receive addresses from Chrome or Firefox."/>
+                            </StackPanel>
+                        </StackPanel>
+                        <TextBlock Classes="muted" TextWrapping="Wrap"
+                                   Text="The extension never holds a key, a seed or a balance. It can show whether XaultWallet is unlocked, put a payment request in the Send tab for you to review and confirm here, and ask for a new receive address. Only the companion extension can connect, and only after you connect its browser here."/>
+
+                        <Grid ColumnDefinitions="110,*,Auto" RowDefinitions="Auto,8,Auto" IsVisible="{Binding CanConnectBrowsers}">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Chrome" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" AutomationProperties.AutomationId="Settings.ChromeStatus" Text="{Binding ChromeStatus}" Classes="caption" VerticalAlignment="Center"
+                                       Foreground="{Binding ChromeElsewhere, Converter={x:Static conv:BoolToBrushConverter.ErrorMuted}}"/>
+                            <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                                <Button Content="Connect" AutomationProperties.AutomationId="Settings.ConnectChrome" AutomationProperties.Name="Connect Chrome"
+                                        Command="{Binding ConnectBrowserCommand}" CommandParameter="chrome" IsVisible="{Binding !ChromeConnected}"/>
+                                <Button Content="Disconnect" AutomationProperties.AutomationId="Settings.DisconnectChrome" AutomationProperties.Name="Disconnect Chrome"
+                                        Command="{Binding DisconnectBrowserCommand}" CommandParameter="chrome" IsVisible="{Binding ChromeConnected}"/>
+                            </StackPanel>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Firefox" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Row="2" Grid.Column="1" AutomationProperties.AutomationId="Settings.FirefoxStatus" Text="{Binding FirefoxStatus}" Classes="caption" VerticalAlignment="Center"
+                                       Foreground="{Binding FirefoxElsewhere, Converter={x:Static conv:BoolToBrushConverter.ErrorMuted}}"/>
+                            <StackPanel Grid.Row="2" Grid.Column="2" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                                <Button Content="Connect" AutomationProperties.AutomationId="Settings.ConnectFirefox" AutomationProperties.Name="Connect Firefox"
+                                        Command="{Binding ConnectBrowserCommand}" CommandParameter="firefox" IsVisible="{Binding !FirefoxConnected}"/>
+                                <Button Content="Disconnect" AutomationProperties.AutomationId="Settings.DisconnectFirefox" AutomationProperties.Name="Disconnect Firefox"
+                                        Command="{Binding DisconnectBrowserCommand}" CommandParameter="firefox" IsVisible="{Binding FirefoxConnected}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <Separator Margin="0,2" IsVisible="{Binding LinksSupported}"/>
+                        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding LinksSupported}">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="Open monero: links with XaultWallet" FontWeight="SemiBold"/>
+                                <TextBlock AutomationProperties.AutomationId="Settings.LinksStatus" Text="{Binding LinksStatus}" Classes="caption" TextWrapping="Wrap"
+                                           Foreground="{Binding LinksElsewhere, Converter={x:Static conv:BoolToBrushConverter.ErrorMuted}}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Button Content="Open them here" AutomationProperties.AutomationId="Settings.RegisterLinks" AutomationProperties.Name="Open monero: links with XaultWallet"
+                                        Command="{Binding RegisterLinksCommand}" IsVisible="{Binding !LinksRegistered}"/>
+                                <Button Content="Stop" AutomationProperties.AutomationId="Settings.UnregisterLinks" AutomationProperties.Name="Stop opening monero: links with XaultWallet"
+                                        Command="{Binding UnregisterLinksCommand}" IsVisible="{Binding LinksRegistered}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock Classes="caption" TextWrapping="Wrap" IsVisible="{Binding !CanConnectBrowsers}"
+                                   Text="Browsers can be connected from the installed or downloaded XaultWallet, not from a development build."/>
+                        <TextBlock AutomationProperties.AutomationId="Settings.CompanionResult" Text="{Binding CompanionResult}" Classes="result"
+                                   IsVisible="{Binding CompanionResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                   Foreground="{Binding CompanionOk, Converter={x:Static conv:BoolToBrushConverter.OkWarn}}"/>
+                    </StackPanel>
+                </Border>
+
                 <!-- ============ This wallet (only with a vault) ============ -->
                 <Border Classes="section" app:Entrance.Rise="210" IsVisible="{Binding VaultExists}">
                     <StackPanel Spacing="12">
@@ -268,7 +358,7 @@
                                    Text="It keeps that format until you upgrade it: about 4 KB for the wallets, contacts and notes of each password. Upgrading makes room for many more (256 KB per password); 0.3 can't open the vault afterwards. It can't be undone: export a backup first if you might go back to 0.3."/>
                         <Border Classes="callout warning">
                             <TextBlock Foreground="#EBD9AE" TextWrapping="Wrap"
-                                       Text="Upgrading converts only the part of the vault that the password you unlocked with opens. If this vault has a second password, its part stays in the old format until that password is used in 0.5 — and until then, anyone holding it and the vault file can tell that another password was used. So upgrade from the second password first. If that password is set to wipe the other wallets when used, don't use it: rebuild the vault instead (SECURITY.md, “Upgrading to 0.5”)."/>
+                                       Text="Upgrading converts only the part of the vault that the password you unlocked with opens. If this vault has a second password, its part stays in the old format until that password is used in 0.5, and until then anyone holding it and the vault file can tell that another password was used. So upgrade from the second password first. If that password is set to wipe the other wallets when used, don't use it: rebuild the vault instead (SECURITY.md, “Upgrading to 0.5”)."/>
                         </Border>
                         <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding VaultIsOldFormat}">
                             <Button Content="Upgrade vault…" AutomationProperties.AutomationId="Settings.AskUpgradeFormat" Command="{Binding AskFormatUpgradeCommand}"
@@ -293,11 +383,11 @@
                             <Border Classes="sectionIcon"><c:Icon Data="{StaticResource IconDownload}"/></Border>
                             <StackPanel Spacing="1" VerticalAlignment="Center">
                                 <TextBlock Text="Encrypted vault backup" Classes="h2"/>
-                                <TextBlock Classes="caption" Text="A copy of vault.xv — still protected by your password(s)."/>
+                                <TextBlock Classes="caption" Text="A copy of vault.xv, still protected by your password(s)."/>
                             </StackPanel>
                         </StackPanel>
                         <TextBlock Classes="muted" TextWrapping="Wrap"
-                                   Text="Restoring brings a lost or corrupted vault back. A backup made before a duress wipe still contains the wiped wallet — keep it somewhere a coercer can't find. Restore is only offered while no wallet is unlocked; the replaced vault is kept beside the new one (a duress wipe destroys those kept copies too)."/>
+                                   Text="Restoring brings a lost or corrupted vault back. A backup made before a duress wipe still contains the wiped wallet: keep it somewhere a coercer can't find. Restore is only offered while no wallet is unlocked; the replaced vault is kept beside the new one (a duress wipe destroys those kept copies too)."/>
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <Button AutomationProperties.AutomationId="Settings.ExportVault" AutomationProperties.Name="Export backup" Command="{Binding ExportVaultCommand}" IsEnabled="{Binding VaultExists}">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
@@ -335,7 +425,7 @@
                                     <TextBlock Text="Data folder"/>
                                 </StackPanel>
                             </Button>
-                            <Button Classes="ghost" AutomationProperties.AutomationId="Settings.LogsFolder" AutomationProperties.Name="Open logs folder" Command="{Binding OpenLogsFolderCommand}" ToolTip.Tip="Diagnostic logs — no secrets are ever logged">
+                            <Button Classes="ghost" AutomationProperties.AutomationId="Settings.LogsFolder" AutomationProperties.Name="Open logs folder" Command="{Binding OpenLogsFolderCommand}" ToolTip.Tip="Diagnostic logs. No secrets are ever logged.">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <c:Icon Data="{StaticResource IconFolder}" Width="16" Height="16"/>
                                     <TextBlock Text="Logs"/>

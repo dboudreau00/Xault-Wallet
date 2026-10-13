@@ -52,14 +52,14 @@ public static class XmrAmount
             }
 
             error = c is ' ' or ' ' or ' ' or '\'' or '_'
-                ? "Don't use thousands separators — type the amount like 1234.5."
+                ? "Don't use thousands separators: type the amount like 1234.5."
                 : $"'{c}' isn't allowed in an amount.";
             return false;
         }
 
         if (separators > 1)
         {
-            error = "Use one decimal point and no thousands separators — e.g. 1234.5.";
+            error = "Use one decimal point and no thousands separators, e.g. 1234.5.";
             return false;
         }
 

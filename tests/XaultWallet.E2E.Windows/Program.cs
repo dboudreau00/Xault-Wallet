@@ -15,7 +15,7 @@ namespace XaultWallet.E2E;
 /// session folder in %TEMP%, nothing written next to the exe. Exit code 0 = all of it passed.
 /// Arguments: the path to XaultWallet.exe (monero-wallet-rpc.exe next to it), the screenshot folder.
 /// </summary>
-internal static class Program
+internal static partial class Program
 {
     private static async Task<int> Main(string[] args)
     {
@@ -64,6 +64,7 @@ internal static class Program
         using Application app = Application.Launch(new ProcessStartInfo(exe) { WorkingDirectory = appDir, UseShellExecute = false });
         int pid = app.ProcessId;
         WalletScenario? scenario = null;
+        int orangeBefore = 0;
         try
         {
             Window window = app.GetMainWindow(uia, TimeSpan.FromSeconds(120))
@@ -74,10 +75,18 @@ internal static class Program
             await FitOnScreenAsync(window, driver, log);
             problems.AddRange(await CheckTitleBarAsync(window, log));
 
-            scenario = new WalletScenario(driver, chain, log, timeScale, installWalletRpc);
+            scenario = new WalletScenario(driver, chain, log, timeScale, installWalletRpc,
+                companion: json => NativeHostClient.AskAsync(HostStart(exe), json, TimeSpan.FromSeconds(90)));
             try
             {
                 await scenario.RunAsync();
+
+                // On the unlock screen now: its orange button, as a screen capture sees it (Enhanced
+                // Security must make it disappear later), then the connections made in Settings.
+                window.SetForeground();
+                await Task.Delay(1000);
+                orangeBefore = OrangePixels(window.BoundingRectangle);
+                problems.AddRange(await CheckConnectionsAsync(driver, exe, log));
             }
             catch (Exception ex)
             {
@@ -125,6 +134,13 @@ internal static class Program
         foreach (string path in Directory.EnumerateFileSystemEntries(appDir).Where(p => !appDirBefore.Contains(p)))
         {
             problems.Add($"written next to the exe: {Path.GetFileName(path)}");
+        }
+
+        // Started again: the tripwire, then Enhanced Security, each in a run of its own.
+        if (problems.Count == 0)
+        {
+            problems.AddRange(await CheckTripwireAsync(uia, exe, screenshots, log));
+            problems.AddRange(await CheckEnhancedSecurityAsync(uia, exe, profile, orangeBefore, log));
         }
 
         if (problems.Count > 0)

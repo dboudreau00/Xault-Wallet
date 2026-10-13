@@ -16,13 +16,23 @@
                     </StackPanel>
                     <TextBlock Classes="muted" TextWrapping="Wrap" MaxWidth="760" HorizontalAlignment="Left"
                                Text="A transaction key proves that one payment reached an address, and nothing more: it can't spend. Fetch the key of a payment this wallet sent, or check a payment someone says they sent you."/>
+                    <!-- Labelled above, not only by placeholders: once filled, a box still says what it holds. -->
                     <Grid ColumnDefinitions="*,12,*" RowDefinitions="Auto,10,Auto">
-                        <TextBox Grid.Row="0" Grid.Column="0" Classes="mono" FontSize="12" PlaceholderText="Transaction ID" AutomationProperties.AutomationId="Proof.TxId"
-                                 AutomationProperties.Name="Transaction ID" Text="{Binding VerifyTxId}"/>
-                        <TextBox Grid.Row="0" Grid.Column="2" Classes="mono" FontSize="12" PlaceholderText="Transaction key" AutomationProperties.AutomationId="Proof.TxKey"
-                                 AutomationProperties.Name="Transaction key" Text="{Binding VerifyTxKey}"/>
-                        <TextBox Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Classes="mono" FontSize="12" PlaceholderText="The address that was paid" AutomationProperties.AutomationId="Proof.Address"
-                                 AutomationProperties.Name="Destination address" Text="{Binding VerifyAddress}"/>
+                        <StackPanel Grid.Row="0" Grid.Column="0" Spacing="6">
+                            <TextBlock Text="TRANSACTION ID" Classes="eyebrow"/>
+                            <TextBox Classes="mono" FontSize="12" PlaceholderText="64 hex characters" AutomationProperties.AutomationId="Proof.TxId"
+                                     AutomationProperties.Name="Transaction ID" Text="{Binding VerifyTxId}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="0" Grid.Column="2" Spacing="6">
+                            <TextBlock Text="TRANSACTION KEY" Classes="eyebrow"/>
+                            <TextBox Classes="mono" FontSize="12" PlaceholderText="From the sender, or Fetch key" AutomationProperties.AutomationId="Proof.TxKey"
+                                     AutomationProperties.Name="Transaction key" Text="{Binding VerifyTxKey}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Spacing="6">
+                            <TextBlock Text="ADDRESS THAT WAS PAID" Classes="eyebrow"/>
+                            <TextBox Classes="mono" FontSize="12" PlaceholderText="The recipient's address" AutomationProperties.AutomationId="Proof.Address"
+                                     AutomationProperties.Name="Destination address" Text="{Binding VerifyAddress}"/>
+                        </StackPanel>
                     </Grid>
                     <WrapPanel Orientation="Horizontal">
                         <Button Classes="accent" Margin="0,0,8,6" AutomationProperties.AutomationId="Proof.Verify" AutomationProperties.Name="Check payment" Command="{Binding VerifyPaymentCommand}">

@@ -182,21 +182,8 @@ public sealed partial class WalletViewModel
         try
         {
             ReceiveNotice = string.Empty;
-            uint account = AccountIndex;
-            (uint index, string address) = await _wallet.NewSubaddressAsync(account, label, _cts.Token);
-            _secrets.SubaddressCounts[account] = Math.Max(_secrets.SubaddressCounts.GetValueOrDefault(account), index + 1);
-            if (label.Length > 0)
-            {
-                _secrets.Labels[$"{account}/{index}"] = label;
-            }
-
-            if (await _profile.SaveAsync() is { } error)
-            {
-                ReceiveNotice = "The new subaddress works, but it couldn't be recorded in the vault, so it may be handed out again after you lock: " + error;
-            }
-
+            string address = await CreateSubaddressAsync(label);
             NewAddressLabel = string.Empty;
-            await RefreshAddressesAsync(_cts.Token);
             ReceiveAddress = address;
         }
         catch (OperationCanceledException)
@@ -208,6 +195,64 @@ public sealed partial class WalletViewModel
             // NOT Status: the sync tracker overwrites Status every few seconds, so the
             // failure would vanish before the user saw it.
             ReceiveNotice = "Couldn't create a new address: " + Friendly(ex);
+        }
+    }
+
+    /// <summary>A new subaddress of the selected account, recorded in the vault (count and label) so
+    /// it is never handed out twice; the list is refreshed. A vault that couldn't be written is said on
+    /// the Receive tab, but the address works and is returned.</summary>
+    private async Task<string> CreateSubaddressAsync(string label)
+    {
+        uint account = AccountIndex;
+        (uint index, string address) = await _wallet.NewSubaddressAsync(account, label, _cts.Token);
+        _secrets.SubaddressCounts[account] = Math.Max(_secrets.SubaddressCounts.GetValueOrDefault(account), index + 1);
+        if (label.Length > 0)
+        {
+            _secrets.Labels[$"{account}/{index}"] = label;
+        }
+
+        if (await _profile.SaveAsync() is { } error)
+        {
+            ReceiveNotice = "The new subaddress works, but it couldn't be recorded in the vault, so it may be handed out again after you lock: " + error;
+        }
+
+        await RefreshAddressesAsync(_cts.Token);
+        return address;
+    }
+
+    /// <summary>
+    /// A new receive address for the browser companion, labelled with what the user typed there (or the
+    /// site): it is the Receive tab's "New subaddress", asked for from the browser. The app says so in a
+    /// toast, with the start and end of the address, so the user can compare it with what the browser shows.
+    /// Returns the address, or why there is none.
+    /// </summary>
+    internal async Task<(string? Address, string? Error)> CreateAddressForCompanionAsync(string label, string origin)
+    {
+        if (!IsReady)
+        {
+            return (null, "The wallet isn't ready yet.");
+        }
+
+        string host = XaultWallet.Core.Companion.CompanionProtocol.HostOf(origin);
+        string name = label.Length > 0 ? label : host.Length > 0 ? host : "From the browser";
+        if (name.Length > MaxLabelLength)
+        {
+            name = name[..MaxLabelLength];
+        }
+
+        try
+        {
+            string address = await CreateSubaddressAsync(name);
+            Toast($"New address given to your browser: {address[..8]}…{address[^8..]}");
+            return (address, null);
+        }
+        catch (OperationCanceledException)
+        {
+            return (null, "The vault was locked.");
+        }
+        catch (Exception ex)
+        {
+            return (null, "Couldn't create a new address: " + Friendly(ex));
         }
     }
 

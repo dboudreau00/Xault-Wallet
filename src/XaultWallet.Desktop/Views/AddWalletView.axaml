@@ -192,7 +192,7 @@
                                     Command="{Binding OpenVerifyCommand}" IsVisible="{Binding !SeedVerified}">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <c:Icon Data="{StaticResource IconCheck}" Width="16" Height="16"/>
-                                    <TextBlock Text="I've written them down — check" Foreground="{StaticResource AccentText}"/>
+                                    <TextBlock Text="Check the words I wrote down" Foreground="{StaticResource AccentText}"/>
                                 </StackPanel>
                             </Button>
                         </StackPanel>
@@ -276,7 +276,7 @@
                 <StackPanel Spacing="16">
                     <StackPanel Spacing="4">
                         <TextBlock Text="Check your backup" Classes="h2"/>
-                        <TextBlock Classes="muted" TextWrapping="Wrap" Text="Type the words at these positions from what you wrote down — not from the screen."/>
+                        <TextBlock Classes="muted" TextWrapping="Wrap" Text="Type the words at these positions from what you wrote down, not from the screen."/>
                     </StackPanel>
                     <StackPanel Spacing="5">
                         <TextBlock AutomationProperties.AutomationId="AddWallet.Verify.Prompt1" Text="{Binding VerifyPrompt1}" Classes="eyebrow"/>
@@ -320,11 +320,11 @@
                         </StackPanel>
                     </Border>
                     <Grid ColumnDefinitions="*,10,*">
-                        <Button Content="No — go back" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" AutomationProperties.AutomationId="AddWallet.ConfirmNo"
+                        <Button Content="No, go back" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" AutomationProperties.AutomationId="AddWallet.ConfirmNo"
                                 Command="{Binding CancelConfirmCommand}"/>
                         <Button Grid.Column="2" Classes="accent" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                 AutomationProperties.AutomationId="AddWallet.ConfirmYes" AutomationProperties.Name="Yes, add it" Command="{Binding ConfirmAddCommand}">
-                            <TextBlock Text="Yes — add it" Foreground="{StaticResource AccentText}"/>
+                            <TextBlock Text="Yes, add it" Foreground="{StaticResource AccentText}"/>
                         </Button>
                     </Grid>
                 </StackPanel>

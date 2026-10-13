@@ -368,6 +368,7 @@
                         </Border>
                         <StackPanel VerticalAlignment="Center" Spacing="2">
                             <TextBlock Text="Confirm this send" Classes="h2"/>
+                            <TextBlock AutomationProperties.AutomationId="SendConfirm.From" Text="{Binding ConfirmFromText}" Classes="caption" FontWeight="SemiBold"/>
                             <TextBlock AutomationProperties.AutomationId="SendConfirm.Summary" Text="{Binding SendSummary}" Classes="caption"/>
                         </StackPanel>
                     </StackPanel>
@@ -419,8 +420,16 @@
                                 <TextBlock Text="Total" FontWeight="SemiBold" VerticalAlignment="Center"/>
                                 <TextBlock Grid.Column="1" Classes="mono" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Right" AutomationProperties.AutomationId="SendConfirm.Total" Text="{Binding SendTotalText}"/>
                             </Grid>
-                            <TextBlock Classes="caption" TextWrapping="Wrap" Text="The fee is locked into the signed transaction — it can't change after you confirm."/>
+                            <TextBlock Classes="caption" TextWrapping="Wrap" Text="The fee is locked into the signed transaction: it can't change after you confirm."/>
                         </StackPanel>
+                    </Border>
+
+                    <!-- A request from a monero: link or the browser: the one to look at twice -->
+                    <Border Classes="callout" Padding="12,9" IsVisible="{Binding ConfirmRequestSource, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <c:Icon Grid.Column="0" Data="{StaticResource IconLink}" Width="15" Height="15" Margin="0,1,9,0" VerticalAlignment="Top"/>
+                            <TextBlock Grid.Column="1" AutomationProperties.AutomationId="SendConfirm.RequestSource" Text="{Binding ConfirmRequestSource}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                        </Grid>
                     </Border>
 
                     <Border Classes="callout danger" IsVisible="{Binding SendFeeWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
@@ -432,7 +441,7 @@
                             <c:Icon Grid.Column="0" Data="{StaticResource IconWarning}" Foreground="{StaticResource WarningBrush}"
                                     Width="16" Height="16" Margin="0,1,10,0" VerticalAlignment="Top"/>
                             <TextBlock Grid.Column="1" Foreground="#EBD9AE"
-                                       Text="Monero transactions are irreversible. Check the address — funds sent to a wrong address can't be recovered."/>
+                                       Text="Monero transactions are irreversible. Check the address: funds sent to a wrong address can't be recovered."/>
                         </Grid>
                     </Border>
 

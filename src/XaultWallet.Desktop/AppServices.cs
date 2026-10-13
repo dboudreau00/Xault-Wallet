@@ -1,3 +1,4 @@
+using XaultWallet.Core.Companion;
 using XaultWallet.Core.Monero;
 using XaultWallet.Core.Security;
 
@@ -13,7 +14,7 @@ public sealed class AppServices
 
     private AppServices()
     {
-        DataDirectory = Path.Combine(UserConfigRoot(), "XaultWallet");
+        DataDirectory = DefaultDataDirectory();
         // 0700 folder, 0600 files — and tighten what an older version created with the umask.
         PrivateFiles.EnsureDirectory(DataDirectory);
         PrivateFiles.TightenTree(DataDirectory);
@@ -25,7 +26,36 @@ public sealed class AppServices
         TorInstallRoot = Path.Combine(LocalDataRoot() ?? DataDirectory, "XaultWallet", "tor");
         TorDataDirectory = Path.Combine(LocalDataRoot() ?? DataDirectory, "XaultWallet", "tor-data");
         Tor = new TorController(() => TorInstallRoot, () => TorDataDirectory, () => Settings.TorBinaryPath, () => Settings.UseBuiltInTor);
+        CompanionEndpoint = CompanionEndpoint.ForDataDirectory(DataDirectory);
+        BrowserPaths = TestProfile.Root is { } test
+            ? new BrowserPaths(Path.Combine(test, "home"), Path.Combine(test, "home", ".config"), Path.Combine(test, "home", ".local", "share"), Path.Combine(test, "local", "XaultWallet"))
+            : BrowserPaths.ForCurrentUser(Path.Combine(LocalDataRoot() ?? DataDirectory, "XaultWallet"));
+        UserRegistry = !OperatingSystem.IsWindows() ? null : TestProfile.Root is not null ? new MemoryRegistry() : new WindowsUserRegistry();
     }
+
+    /// <summary>Where the app's vault and settings live: %APPDATA%\XaultWallet, ~/.config/XaultWallet…
+    /// (also what the browser companion's native host uses to find the running app, without creating
+    /// anything).</summary>
+    internal static string DefaultDataDirectory() => Path.Combine(UserConfigRoot(), "XaultWallet");
+
+    /// <summary>Where this app listens for the browser companion and for monero: links.</summary>
+    public CompanionEndpoint CompanionEndpoint { get; }
+
+    /// <summary>The folders the browsers read native messaging hosts from (a throwaway home in tests).</summary>
+    public BrowserPaths BrowserPaths { get; }
+
+    /// <summary>HKEY_CURRENT_USER on Windows (in memory for the screenshot tool and tests); null elsewhere.</summary>
+    public IUserRegistry? UserRegistry { get; }
+
+    /// <summary>
+    /// The executable the browsers and monero: links should start: this one. Null when it can't be
+    /// pointed at (a development run through the dotnet command rather than the app's own executable).
+    /// </summary>
+    public static string? ExecutablePath =>
+        Environment.ProcessPath is { } path && Path.IsPathFullyQualified(path)
+        && !Path.GetFileNameWithoutExtension(path).Equals("dotnet", StringComparison.OrdinalIgnoreCase)
+            ? path
+            : null;
 
     /// <summary>Where "Download &amp; install Tor" puts tor: one folder per Tor Browser release.</summary>
     public string TorInstallRoot { get; }
@@ -188,8 +218,10 @@ public sealed class AppServices
         {
             AppServices app = Instance;
             string prefix = Path.TrimEndingDirectorySeparator(root) + Path.DirectorySeparatorChar;
-            return new[] { app.DataDirectory, app.VaultPath, app.SettingsPath, app.WalletRpcInstallRoot, app.TorInstallRoot, app.TorDataDirectory }
-                .Where(path => !path.StartsWith(prefix, StringComparison.Ordinal))
+            BrowserPaths browsers = app.BrowserPaths;
+            return new[] { app.DataDirectory, app.VaultPath, app.SettingsPath, app.WalletRpcInstallRoot, app.TorInstallRoot, app.TorDataDirectory,
+                    browsers.Home, browsers.ConfigHome, browsers.DataHome, browsers.AppLocalData }
+                .Where(path => !(Path.TrimEndingDirectorySeparator(path) + Path.DirectorySeparatorChar).StartsWith(prefix, StringComparison.Ordinal))
                 .ToArray();
         }
     }

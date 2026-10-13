@@ -72,11 +72,11 @@ public sealed partial class StartupViewModel : ViewModelBase
             {
                 string version = await MoneroDiagnostics.ProbeWalletRpcAsync(binary, _cts.Token);
                 Detail = version;
-                Log.Info("Startup: wallet-rpc OK — " + version);
+                Log.Info("Startup: wallet-rpc OK: " + version);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                Log.Warn("Startup: wallet-rpc check failed — " + ex.GetType().Name);
+                Log.Warn("Startup: wallet-rpc check failed: " + ex.GetType().Name);
 
                 // Every wallet needs it: stop here and offer to set it up, rather than let the user
                 // walk into a wallet screen that can only say "not found".
@@ -214,7 +214,7 @@ public sealed partial class StartupViewModel : ViewModelBase
             AppServices.Instance.Settings.WalletRpcBinaryPath = picked;
             AppServices.Instance.SaveSettings();
             ChooseResult = string.Empty;
-            Log.Info("Startup: wallet-rpc chosen by the user — " + version);
+            Log.Info("Startup: wallet-rpc chosen by the user: " + version);
             _backendReady.TrySetResult();
         }
         catch (OperationCanceledException)

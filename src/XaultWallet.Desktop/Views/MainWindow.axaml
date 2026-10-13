@@ -16,7 +16,7 @@
         ExtendClientAreaToDecorationsHint="True"
         WindowDecorations="BorderOnly">
 
-    <Grid RowDefinitions="Auto,*">
+    <Grid RowDefinitions="Auto,Auto,*">
         <!-- Custom title bar: our own chrome extended to the top edge. The TitleBar role gives it the
              system's own dragging, double-click to maximise and snapping. Every button on it carries the
              User role: without one, the system takes a click on the button for a click on the bar. -->
@@ -67,9 +67,45 @@
             </Grid>
         </Border>
 
+        <!-- Across every screen: Enhanced Security asking to be kept on, and what the app noticed
+             about its own setup (a browser connection changed behind its back...). -->
+        <StackPanel Grid.Row="1">
+            <Border Classes="callout" Margin="18,10,18,0" Padding="14,10" IsVisible="{Binding ConfirmingEnhancedSecurity}"
+                    AutomationProperties.AutomationId="Shell.EnhancedConfirm">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <c:Icon Grid.Column="0" Data="{StaticResource IconShield}" Width="16" Height="16" Margin="0,0,10,0"
+                            Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Text="{Binding EnhancedSecurityCountdown}" TextWrapping="Wrap" VerticalAlignment="Center" FontSize="12.5"/>
+                    <Button Grid.Column="2" Classes="accent" Margin="12,0,0,0" VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="Shell.KeepEnhanced" AutomationProperties.Name="Keep Enhanced Security on"
+                            Command="{Binding KeepEnhancedSecurityCommand}">
+                        <TextBlock Text="Keep it on" Foreground="{StaticResource AccentText}"/>
+                    </Button>
+                </Grid>
+            </Border>
+            <Border Classes="callout" Classes.warning="{Binding NoticeIsWarning}" Margin="18,10,18,0" Padding="14,10"
+                    IsVisible="{Binding HasNotice}" AutomationProperties.AutomationId="Shell.Notice">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <c:Icon Grid.Column="0" Data="{StaticResource IconWarning}" Width="16" Height="16" Margin="0,0,10,0"
+                            Foreground="{StaticResource WarningBrush}" VerticalAlignment="Center" IsVisible="{Binding NoticeIsWarning}"/>
+                    <c:Icon Grid.Column="0" Data="{StaticResource IconShield}" Width="16" Height="16" Margin="0,0,10,0"
+                            Foreground="{StaticResource SuccessBrush}" VerticalAlignment="Center" IsVisible="{Binding !NoticeIsWarning}"/>
+                    <TextBlock Grid.Column="1" AutomationProperties.AutomationId="Shell.NoticeText" Text="{Binding Notice}" TextWrapping="Wrap"
+                               VerticalAlignment="Center" FontSize="12.5"/>
+                    <Button Grid.Column="2" Content="Review" Margin="12,0,0,0" VerticalAlignment="Center" IsVisible="{Binding NoticeOffersSettings}"
+                            AutomationProperties.AutomationId="Shell.ReviewNotice" AutomationProperties.Name="Review in Settings" Command="{Binding ReviewNoticeCommand}"/>
+                    <Button Grid.Column="3" Classes="ghost icon" Margin="6,0,-4,0" Padding="6" VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="Shell.DismissNotice" AutomationProperties.Name="Dismiss" ToolTip.Tip="Dismiss"
+                            Command="{Binding DismissNoticeCommand}">
+                        <c:Icon Data="{StaticResource IconClose}" Width="14" Height="14"/>
+                    </Button>
+                </Grid>
+            </Border>
+        </StackPanel>
+
         <!-- Screen changes: the old screen fades out, the new one rises into place (instant with
              reduced motion; see Motion). -->
-        <TransitioningContentControl Grid.Row="1" Content="{Binding Current}" Margin="0">
+        <TransitioningContentControl Grid.Row="2" Content="{Binding Current}" Margin="0">
             <TransitioningContentControl.PageTransition>
                 <app:FadeLiftTransition/>
             </TransitioningContentControl.PageTransition>

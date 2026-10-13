@@ -37,13 +37,17 @@ public sealed partial class WalletScenario
 
     /// <param name="installWalletRpc">The app starts without monero-wallet-rpc: the scenario begins
     /// by installing it with the startup screen's "Download &amp; install" (signed list, checksum).</param>
-    public WalletScenario(IAppDriver app, TestChain chain, Action<string> log, double timeScale = 1.0, bool installWalletRpc = false)
+    /// <param name="companion">Sends a browser companion request through the real native messaging host
+    /// and returns the reply (both JSON); the companion steps are skipped without it.</param>
+    public WalletScenario(IAppDriver app, TestChain chain, Action<string> log, double timeScale = 1.0, bool installWalletRpc = false,
+        Func<string, Task<string>>? companion = null)
     {
         _app = app;
         _chain = chain;
         _log = log;
         _timeScale = timeScale;
         _installWalletRpc = installWalletRpc;
+        _companion = companion;
     }
 
     /// <summary>What the install reported, when the scenario installed monero-wallet-rpc.</summary>
@@ -82,6 +86,7 @@ public sealed partial class WalletScenario
         await StepAsync("The main wallet reopens with its funds and history", MainAgainAsync);
         await StepAsync("Coin control: freeze a coin on the Coins tab", FreezeCoinAsync);
         await StepAsync("Settings opens and closes", SettingsAsync);
+        await CompanionStepsAsync();
         await StepAsync("Add a second wallet to the open vault (new seed, backup checked)", AddSecondWalletAsync);
         await StepAsync("Switch back to the first wallet", () => SwitchToAsync(FirstWalletName, MainAddress));
         await StepAsync("Save the decoy wallet as a contact", AddContactAsync);

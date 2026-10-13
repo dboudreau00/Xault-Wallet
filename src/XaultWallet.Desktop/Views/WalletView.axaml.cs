@@ -296,12 +296,12 @@ public partial class WalletView : UserControl
             {
                 // Never let a copy fail silently: the user may otherwise paste stale
                 // clipboard content (e.g. an OLD address) somewhere irreversible.
-                ShowToast("Nothing was copied — the clipboard is unavailable.", ok: false);
+                ShowToast("Nothing was copied: the clipboard is unavailable.", ok: false);
                 return;
             }
 
             await SensitiveClipboard.SetAsync(clipboard, text);
-            ShowToast($"{what} copied — the clipboard clears in {ClipboardClearDelay.TotalSeconds:0} s.");
+            ShowToast($"{what} copied. The clipboard clears in {ClipboardClearDelay.TotalSeconds:0} s.");
 
             // Auto-clear: wallet data shouldn't linger for whatever the user pastes next week.
             // Only clear if (a) no newer copy was made from the app and (b) the clipboard still
@@ -320,7 +320,7 @@ public partial class WalletView : UserControl
         {
             // Clipboard can be unavailable on some platforms/headless; tell the user rather
             // than pretend the copy happened.
-            ShowToast("Copy failed — the clipboard is unavailable.", ok: false);
+            ShowToast("Copy failed: the clipboard is unavailable.", ok: false);
         }
     }
 }

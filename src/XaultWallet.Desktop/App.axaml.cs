@@ -4,6 +4,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using XaultWallet.Core.Diagnostics;
+using XaultWallet.Desktop.Companion;
 using XaultWallet.Desktop.ViewModels;
 using XaultWallet.Desktop.Views;
 
@@ -11,6 +12,8 @@ namespace XaultWallet.Desktop;
 
 public partial class App : Application
 {
+    private CompanionServer? _companion;
+
     public override void Initialize()
     {
         Motion.RegisterAnimators(); // before any style animation can start
@@ -60,6 +63,11 @@ public partial class App : Application
                 try
                 {
                     window.RememberPlacement(AppServices.Instance.Settings);
+                    if (_companion is not null)
+                    {
+                        await _companion.DisposeAsync(); // no more browser requests or links
+                    }
+
                     await SensitiveClipboard.ClearIfStillOursAsync();
                     await mainVm.ShutdownAsync();
                 }
@@ -77,6 +85,36 @@ public partial class App : Application
 
             desktop.MainWindow = window;
             ListenForSecondLaunch(window);
+
+            // Enhanced Security (Settings): the window is protected from the moment it exists.
+            mainVm.ApplyEnhancedSecurity = on =>
+            {
+                if (on)
+                {
+                    EnhancedSecurity.Activate(window);
+                }
+                else
+                {
+                    EnhancedSecurity.Deactivate();
+                }
+            };
+            if (AppServices.Instance.Settings.EnhancedSecurity && EnhancedSecurity.IsSupported)
+            {
+                window.Opened += (_, _) => EnhancedSecurity.Activate(window);
+            }
+
+            // The browser companion and monero: links (a second launch hands its link over here).
+            var handler = new CompanionHandler(mainVm, () => BringToFront(window));
+            _companion = new CompanionServer(AppServices.Instance.CompanionEndpoint, handler.HandleAsync);
+            _companion.NameTaken += () => Dispatcher.UIThread.Post(mainVm.CompanionNameTaken);
+            _companion.Start();
+            if (Program.LaunchLink is { } link)
+            {
+                mainVm.OfferLaunchLink(link);
+            }
+
+            // The tripwire: the connections this app set up must still lead to it.
+            Dispatcher.UIThread.Post(mainVm.CheckRegistrations, DispatcherPriority.Background);
         }
 
         base.OnFrameworkInitializationCompleted();
@@ -92,6 +130,18 @@ public partial class App : Application
         {
             // Shown in Settings and on any wallet that waits for it; logged by the controller.
         }
+    }
+
+    /// <summary>Un-minimise and focus the window: a payment request from the browser or a link is
+    /// waiting in it.</summary>
+    private static void BringToFront(Window window)
+    {
+        if (window.WindowState == WindowState.Minimized)
+        {
+            window.WindowState = WindowState.Normal;
+        }
+
+        window.Activate();
     }
 
     /// <summary>A second launch signals this instance (see Program.Main): un-minimise and focus the

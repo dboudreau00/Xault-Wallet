@@ -80,8 +80,8 @@ public sealed partial class WalletViewModel
             else
             {
                 VerifyOk = true;
-                string status = inPool ? "in mempool (0 confirmations)" : $"{confirmations:N0} confirmation(s)";
-                VerifyResult = $"Verified: that address received {XmrAmount.Format(received)} XMR — {status}.";
+                string status = inPool ? "in the mempool, not yet confirmed" : confirmations == 1 ? "1 confirmation" : $"{confirmations:N0} confirmations";
+                VerifyResult = $"Verified: that address received {XmrAmount.Format(received)} XMR, {status}.";
             }
         }
         catch (Exception ex)

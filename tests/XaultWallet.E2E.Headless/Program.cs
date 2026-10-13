@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Threading;
 using XaultWallet.Desktop;
+using XaultWallet.Desktop.Companion;
 using XaultWallet.Desktop.ViewModels;
 using XaultWallet.Desktop.Views;
 
@@ -51,10 +53,37 @@ internal static class Program
 
         using var chain = new TestChain(daemon);
         var log = new Action<string>(line => Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {line}"));
-        var scenario = new WalletScenario(new HeadlessDriver(window, screenshots), chain, log);
+
+        // The browser companion: the app listens as it does when started for real, and the scenario
+        // talks to it through the real native host, a child process started the way Chrome starts it.
+        // Not on Windows: there the child would look for the app in the real profile (the throwaway
+        // one is this process's setting only), and the Windows run tests the published exe instead.
+        CompanionServer? companion = null;
+        Func<string, Task<string>>? ask = null;
+        if (!OperatingSystem.IsWindows())
+        {
+            var handler = new CompanionHandler(shell, () => { });
+            companion = new CompanionServer(AppServices.Instance.CompanionEndpoint, handler.HandleAsync);
+            companion.Start();
+            ask = json => NativeHostClient.AskAsync(NativeHostStart(), json, TimeSpan.FromSeconds(90));
+        }
+
+        var driver = new HeadlessDriver(window, screenshots);
+        var scenario = new WalletScenario(driver, chain, log, companion: ask);
 
         Task run = scenario.RunAsync();
         Pump(run);
+
+        // For trying real browsers against the app (XW_E2E_HOLD_DIR): unlocked again, it keeps answering
+        // the companion until the folder gets a "done" file, then says what arrived.
+        if (Environment.GetEnvironmentVariable("XW_E2E_HOLD_DIR") is { Length: > 0 } holdDir && !run.IsFaulted && companion is not null)
+        {
+            Pump(HoldForBrowsersAsync(driver, scenario, home, holdDir, log));
+        }
+        if (companion is not null)
+        {
+            Pump(companion.DisposeAsync().AsTask());
+        }
         Pump(shell.ShutdownAsync()); // stops monero-wallet-rpc and shreds its session folder
         window.Close();
 
@@ -81,6 +110,70 @@ internal static class Program
         }
 
         Dispatcher.UIThread.RunJobs();
+    }
+
+    private static async Task HoldForBrowsersAsync(HeadlessDriver driver, WalletScenario scenario, string home, string holdDir, Action<string> log)
+    {
+        await driver.TypeAsync("Unlock.Password", WalletScenario.MainPassword);
+        await driver.ClickAsync("Unlock.Submit");
+        DateTime synced = DateTime.UtcNow.AddMinutes(4);
+        while (!(await driver.IsVisibleAsync("Wallet.SyncText") && (await driver.ReadTextAsync("Wallet.SyncText")).StartsWith("Synced", StringComparison.Ordinal)))
+        {
+            if (DateTime.UtcNow > synced)
+            {
+                throw new TimeoutException("the wallet didn't sync for the browser tests");
+            }
+
+            await Task.Delay(500);
+        }
+        string ready = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string?>
+        {
+            ["home"] = home,
+            ["config"] = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME"),
+            ["data"] = Environment.GetEnvironmentVariable("XDG_DATA_HOME"),
+            ["runtime"] = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR"),
+            ["main"] = scenario.MainAddress,
+            ["decoy"] = scenario.DecoyAddress,
+        });
+        File.WriteAllText(Path.Combine(holdDir, "ready.json"), ready);
+        log("Holding for the browser tests: " + ready);
+
+        DateTime until = DateTime.UtcNow.AddMinutes(20);
+        while (!File.Exists(Path.Combine(holdDir, "done")) && DateTime.UtcNow < until)
+        {
+            await Task.Delay(500);
+        }
+
+        await driver.ClickAsync("Wallet.Tab.Send");
+        log("Send tab after the browsers: " + await driver.ReadTextAsync("Send.Address") + " | " + await driver.ReadTextAsync("Send.Amount")
+            + " | " + (await driver.IsVisibleAsync("Send.PaymentRequest") ? await driver.ReadTextAsync("Send.PaymentRequest") : "(no request note)"));
+        await driver.ScreenshotAsync("hold-send");
+        await driver.ClickAsync("Wallet.Tab.Receive");
+        log("Receive list after the browsers: " + string.Join(" | ", await driver.ReadTextsAsync("Receive.Addresses")));
+        await driver.ScreenshotAsync("hold-receive");
+        await driver.ClickAsync("Wallet.Lock");
+    }
+
+    /// <summary>XaultWallet as Chrome starts its native host: the app's own assembly (built beside this
+    /// test), run by the dotnet host with this test's runtime settings, the extension's origin as argument.</summary>
+    private static ProcessStartInfo NativeHostStart()
+    {
+        string here = AppContext.BaseDirectory;
+        string self = Path.GetFileNameWithoutExtension(typeof(Program).Assembly.Location);
+        var start = new ProcessStartInfo("dotnet");
+        foreach (string arg in new[]
+                 {
+                     "exec",
+                     "--runtimeconfig", Path.Combine(here, self + ".runtimeconfig.json"),
+                     "--depsfile", Path.Combine(here, self + ".deps.json"),
+                     Path.Combine(here, "XaultWallet.dll"),
+                     NativeHostClient.ChromeOrigin,
+                 })
+        {
+            start.ArgumentList.Add(arg);
+        }
+
+        return start;
     }
 
     private static string Short(string address) => address.Length > 12 ? address[..6] + "…" + address[^6..] : address;

@@ -240,6 +240,9 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
 
     public bool IsMainnetWallet => _secrets.Network == MoneroNetwork.Mainnet && !IsLocalTestChain;
 
+    /// <summary>The network as the browser companion is told it: Mainnet, Stagenet, Testnet or Regtest.</summary>
+    internal string CompanionNetwork => IsLocalTestChain ? "Regtest" : _secrets.Network.ToString();
+
     /// <summary>The node is the user's own private test chain (see MoneroDiagnostics.IsLocalTestChainAsync).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(NetworkLabel))]

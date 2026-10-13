@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using XaultWallet.Core.Monero;
@@ -126,20 +127,47 @@ public sealed partial class WalletViewModel
     /// <summary>Which wallet and account pay ("From Everyday · Primary account").</summary>
     [ObservableProperty] private string _confirmFromText = string.Empty;
 
+    /// <summary>The amount an outside request filled in: changed since, the form is the user's.</summary>
+    private string _outsideAmountText = string.Empty;
+
     /// <summary>
-    /// A payment request from outside (a monero: link, or the browser companion): it replaces the form and
-    /// opens the Send tab, saying where it came from. Nothing is sent: the user reviews and confirms as for
-    /// any payment. Returns null, or why it wasn't taken (a payment is being confirmed or sent).
+    /// A payment request from outside (a monero: link, or the browser companion): it fills an empty form
+    /// (or replaces an earlier outside request the user hasn't touched) and opens the Send tab, saying where
+    /// it came from. Nothing is sent: the user reviews and confirms as for any payment, and Review waits a
+    /// moment so a click meant for something else can't land on it. Never replaces a payment being
+    /// confirmed; a form the user filled, or a payment that may have gone out and waits to be checked, is
+    /// replaced only when <paramref name="userChose"/> (the user clicked Open it), and the warning about
+    /// that payment stays on screen.
     /// </summary>
-    internal string? ApplyPaymentRequest(OutsidePayment payment)
+    internal PaymentOffer ApplyPaymentRequest(OutsidePayment payment, bool userChose = false)
     {
         ArgumentNullException.ThrowIfNull(payment);
         if (ShowSendConfirm || Sending)
         {
-            return "busy";
+            return PaymentOffer.Confirming;
         }
 
-        SendResult = string.Empty;
+        if (!CanSpend)
+        {
+            return PaymentOffer.WatchOnly;
+        }
+
+        if (!userChose && SendOutcome == SendOutcome.NeedsCheck)
+        {
+            return PaymentOffer.CheckLastPayment;
+        }
+
+        if (!userChose && HasOwnSendInput())
+        {
+            return PaymentOffer.FormInUse;
+        }
+
+        bool replacing = _paymentRequestSource.Length > 0;
+        if (SendOutcome != SendOutcome.NeedsCheck)
+        {
+            SendResult = string.Empty; // a payment that may have gone out stays in view until the user checked it
+        }
+
         ClearSendForm();
         _paymentRequestSource = payment.Source;
         _applyingOutsideRequest = true;
@@ -152,9 +180,54 @@ public sealed partial class WalletViewModel
             _applyingOutsideRequest = false;
         }
 
+        _outsideAmountText = SendAmountText;
+        if (replacing && PaymentRequestNote.Length > 0)
+        {
+            PaymentRequestNote += " It replaced an earlier request.";
+        }
+
+        HoldReview();
         SelectedTab = 1;
-        return null;
+        return PaymentOffer.Shown;
     }
+
+    /// <summary>Something in the form came from the user: an address, an amount or more recipients that
+    /// aren't an untouched outside request.</summary>
+    private bool HasOwnSendInput() =>
+        ExtraRecipients.Count > 0 || (_paymentRequestSource.Length == 0
+            ? SendAddress.Trim().Length > 0 || SendAmountText.Trim().Length > 0
+            : SendAddress.Trim() != _paymentRequestAddress || SendAmountText != _outsideAmountText);
+
+    /// <summary>Review (and Send max) wait this long after an outside request fills the form.</summary>
+    internal static readonly TimeSpan ReviewHoldTime = TimeSpan.FromSeconds(1.5);
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanReview))]
+    private bool _reviewHeld;
+
+    /// <summary>Review and Send max can be pressed: nothing is being prepared, and no outside request
+    /// has just landed.</summary>
+    public bool CanReview => !Sending && !ReviewHeld;
+
+    private DispatcherTimer? _reviewHold;
+
+    private void HoldReview()
+    {
+        ReviewHeld = true;
+        _reviewHold?.Stop();
+        _reviewHold = new DispatcherTimer { Interval = ReviewHoldTime };
+        _reviewHold.Tick += (_, _) =>
+        {
+            _reviewHold?.Stop();
+            ReviewHeld = false;
+        };
+        _reviewHold.Start();
+    }
+
+    /// <summary>The user has checked a payment that may have gone out: its warning goes, and outside
+    /// requests are taken again.</summary>
+    [RelayCommand]
+    private void DismissSendResult() => SendResult = string.Empty;
 
     /// <summary>Picked from the address book: fills the address.</summary>
     [ObservableProperty] private ContactRow? _selectedSendContact;
@@ -256,12 +329,19 @@ public sealed partial class WalletViewModel
                 SendAmountText = XmrAmount.Format(amount);
             }
 
-            string who = request.RecipientName.Length > 0 ? " from " + request.RecipientName : string.Empty;
-            string what = request.Description.Length > 0 ? ": " + request.Description : string.Empty;
-            string note = $"Payment request{who}{what}";
+            // From outside: where it came from first, then the request's own words, quoted, on a line of their own.
+            string note;
             if (_paymentRequestSource.Length > 0)
             {
-                note += $". Opened from {_paymentRequestSource}: check the address against the page or person asking before you confirm.";
+                string words = string.Join(": ", new[] { request.RecipientName, request.Description }.Where(w => w.Length > 0));
+                note = $"Opened from {_paymentRequestSource}. Check the address with the page or person asking before you confirm."
+                       + (words.Length > 0 ? "\nThe request says: “" + words + "”" : string.Empty);
+            }
+            else
+            {
+                string who = request.RecipientName.Length > 0 ? " from " + request.RecipientName : string.Empty;
+                string what = request.Description.Length > 0 ? ": " + request.Description : string.Empty;
+                note = $"Payment request{who}{what}";
             }
 
             // A link for another network can't be paid from this wallet: say so now, not at Review.
@@ -379,7 +459,9 @@ public sealed partial class WalletViewModel
         }
     }
 
-    [ObservableProperty] private bool _sending;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanReview))]
+    private bool _sending;
 
     /// <summary>After paying an address that isn't in the address book: offer to save it.</summary>
     [ObservableProperty] private bool _offerSaveRecipient;
@@ -456,8 +538,8 @@ public sealed partial class WalletViewModel
     {
         // Re-entrancy guard: the form stays keyboard-reachable under the confirm overlay, and a
         // second prepare racing a pending confirm can desync display from broadcast. One prepared
-        // tx at a time, driven only by the overlay's buttons.
-        if (Sending || ShowSendConfirm)
+        // tx at a time, driven only by the overlay's buttons. Held a moment after an outside request.
+        if (Sending || ShowSendConfirm || ReviewHeld)
         {
             return;
         }
@@ -510,6 +592,11 @@ public sealed partial class WalletViewModel
             return;
         }
 
+        // Who pays and who asked, as they are now: the overlay describes what this prepare builds, whatever
+        // changes on screen while it runs.
+        uint account = AccountIndex;
+        string from = FromText();
+        string requestSource = RequestSourceFor(destinations.Select(d => d.address));
         Sending = true;
         try
         {
@@ -521,7 +608,7 @@ public sealed partial class WalletViewModel
 
             _replacedAddresses.Clear();
             await ApplyFrozenCoinsAsync(_cts.Token);
-            TransferResult prepared = await _wallet.PrepareSendAsync(destinations, AccountIndex, priority, _cts.Token);
+            TransferResult prepared = await _wallet.PrepareSendAsync(destinations, account, priority, _cts.Token);
             if (destinations.Any(d => _replacedAddresses.Contains(d.address)))
             {
                 SendResult = ReplacedWhileBuilding; // built for an address its contact no longer has
@@ -537,8 +624,8 @@ public sealed partial class WalletViewModel
             }
 
             ConfirmHasSeveral = destinations.Count > 1;
-            ConfirmFromText = FromText();
-            ConfirmRequestSource = RequestSourceFor(destinations.Select(d => d.address));
+            ConfirmFromText = from;
+            ConfirmRequestSource = requestSource;
             ConfirmSendAddress = destinations.Count == 1 ? destinations[0].address : string.Empty;
             ConfirmRecipientName = destinations.Count == 1 ? _profile.ContactNameFor(destinations[0].address) ?? string.Empty : string.Empty;
             _lastRecipientAddress = destinations.Count == 1 ? destinations[0].address : string.Empty;
@@ -573,7 +660,7 @@ public sealed partial class WalletViewModel
     [RelayCommand]
     private async Task ReviewSendMaxAsync()
     {
-        if (Sending || ShowSendConfirm)
+        if (Sending || ShowSendConfirm || ReviewHeld)
         {
             return;
         }
@@ -610,15 +697,18 @@ public sealed partial class WalletViewModel
             return;
         }
 
+        string destination = SendAddress.Trim();
+        uint account = AccountIndex;
+        string from = FromText();
+        string requestSource = RequestSourceFor(new[] { destination });
         Sending = true;
         try
         {
             uint priority = (uint)Math.Clamp(SendPriority, 0, 3);
-            string destination = SendAddress.Trim();
 
             _replacedAddresses.Clear();
             await ApplyFrozenCoinsAsync(_cts.Token);
-            SweepAllResult sweep = await _wallet.PrepareSweepAllAsync(destination, AccountIndex, priority, _cts.Token);
+            SweepAllResult sweep = await _wallet.PrepareSweepAllAsync(destination, account, priority, _cts.Token);
             if (_replacedAddresses.Contains(destination))
             {
                 SendResult = ReplacedWhileBuilding;
@@ -626,8 +716,8 @@ public sealed partial class WalletViewModel
             }
 
             _preparedSweep = sweep;
-            ConfirmFromText = FromText();
-            ConfirmRequestSource = RequestSourceFor(new[] { destination });
+            ConfirmFromText = from;
+            ConfirmRequestSource = requestSource;
             ConfirmSendAddress = destination;
             ConfirmRecipientName = _profile.ContactNameFor(destination) ?? string.Empty;
             _lastRecipientAddress = destination;
@@ -665,12 +755,38 @@ public sealed partial class WalletViewModel
     private string FromText() =>
         "From " + WalletName + (HasSeveralAccounts || AccountIndex != 0 ? " · " + (SelectedAccount?.Name ?? "Primary account") : string.Empty);
 
-    /// <summary>"Requested by your browser (shop.example)" when the payment being confirmed pays the
-    /// address a request from outside asked for.</summary>
+    /// <summary>Said on the confirmation when the payment pays the address a request from outside asked for:
+    /// where it says it came from, and that nobody vouches for that.</summary>
     private string RequestSourceFor(IEnumerable<string> addresses) =>
         _paymentRequestSource.Length > 0 && addresses.Contains(_paymentRequestAddress, StringComparer.Ordinal)
-            ? "Requested by " + _paymentRequestSource
+            ? "Came from outside XaultWallet: " + _paymentRequestSource + ". XaultWallet can't confirm who sent it; check the address."
             : string.Empty;
+
+    /// <summary>"Send now" waits this long after the confirmation appears: a second click meant for Review,
+    /// or one timed by another program, can't land on it.</summary>
+    internal static readonly TimeSpan ConfirmHoldTime = TimeSpan.FromMilliseconds(800);
+
+    [ObservableProperty] private bool _confirmHeld;
+
+    private DispatcherTimer? _confirmHold;
+
+    partial void OnShowSendConfirmChanged(bool value)
+    {
+        _confirmHold?.Stop();
+        ConfirmHeld = value;
+        if (!value)
+        {
+            return;
+        }
+
+        _confirmHold = new DispatcherTimer { Interval = ConfirmHoldTime };
+        _confirmHold.Tick += (_, _) =>
+        {
+            _confirmHold?.Stop();
+            ConfirmHeld = false;
+        };
+        _confirmHold.Start();
+    }
 
     /// <summary>A fee wildly out of proportion to the amount usually means a misbehaving node's
     /// fee estimate (or a unit mishap) — say so instead of letting habit click through it.</summary>
@@ -698,6 +814,11 @@ public sealed partial class WalletViewModel
     [RelayCommand]
     private async Task ConfirmSendAsync()
     {
+        if (ConfirmHeld)
+        {
+            return; // Enter pressed the moment the confirmation appeared
+        }
+
         ShowSendConfirm = false;
         SendFeeWarning = string.Empty;
         TransferResult? prepared = _preparedTx;
@@ -774,6 +895,7 @@ public sealed partial class WalletViewModel
         PaymentRequestNote = string.Empty;
         _paymentRequestSource = string.Empty;
         _paymentRequestAddress = string.Empty;
+        _outsideAmountText = string.Empty;
         ExtraRecipients.Clear();
         OnPropertyChanged(nameof(HasExtraRecipients));
     }

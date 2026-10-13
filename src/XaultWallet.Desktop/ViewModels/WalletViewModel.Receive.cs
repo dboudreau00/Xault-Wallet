@@ -182,9 +182,13 @@ public sealed partial class WalletViewModel
         try
         {
             ReceiveNotice = string.Empty;
-            string address = await CreateSubaddressAsync(label);
+            (string address, string? unsaved) = await CreateSubaddressAsync(label);
             NewAddressLabel = string.Empty;
             ReceiveAddress = address;
+            if (unsaved is not null)
+            {
+                ReceiveNotice = "The new subaddress works, but it couldn't be recorded in the vault, so it may be handed out again after you lock: " + unsaved;
+            }
         }
         catch (OperationCanceledException)
         {
@@ -199,9 +203,9 @@ public sealed partial class WalletViewModel
     }
 
     /// <summary>A new subaddress of the selected account, recorded in the vault (count and label) so
-    /// it is never handed out twice; the list is refreshed. A vault that couldn't be written is said on
-    /// the Receive tab, but the address works and is returned.</summary>
-    private async Task<string> CreateSubaddressAsync(string label)
+    /// it is never handed out twice; the list is refreshed. Also returns why the vault couldn't be
+    /// written, if it couldn't: the address works, but may be handed out again after a lock.</summary>
+    private async Task<(string Address, string? Unsaved)> CreateSubaddressAsync(string label)
     {
         uint account = AccountIndex;
         (uint index, string address) = await _wallet.NewSubaddressAsync(account, label, _cts.Token);
@@ -211,48 +215,59 @@ public sealed partial class WalletViewModel
             _secrets.Labels[$"{account}/{index}"] = label;
         }
 
-        if (await _profile.SaveAsync() is { } error)
-        {
-            ReceiveNotice = "The new subaddress works, but it couldn't be recorded in the vault, so it may be handed out again after you lock: " + error;
-        }
-
+        string? unsaved = await _profile.SaveAsync();
         await RefreshAddressesAsync(_cts.Token);
-        return address;
+        return (address, unsaved);
     }
 
+    /// <summary>Labels of addresses given to the browser start with this, so one can't pass for an
+    /// address the user labelled themselves.</summary>
+    internal const string BrowserLabelPrefix = "Browser: ";
+
     /// <summary>
-    /// A new receive address for the browser companion, labelled with what the user typed there (or the
-    /// site): it is the Receive tab's "New subaddress", asked for from the browser. The app says so in a
-    /// toast, with the start and end of the address, so the user can compare it with what the browser shows.
-    /// Returns the address, or why there is none.
+    /// A new receive address for the browser companion, labelled "Browser: " and what the user typed there
+    /// (or the site): it is the Receive tab's "New subaddress", asked for from the browser (the shell
+    /// announces it). Null when there is none (the Receive tab says why); one the vault couldn't record
+    /// isn't given out, so it can't reach a page and then be handed out again.
     /// </summary>
-    internal async Task<(string? Address, string? Error)> CreateAddressForCompanionAsync(string label, string origin)
+    internal async Task<string?> CreateAddressForCompanionAsync(string label, string origin)
     {
         if (!IsReady)
         {
-            return (null, "The wallet isn't ready yet.");
+            return null;
         }
 
         string host = XaultWallet.Core.Companion.CompanionProtocol.HostOf(origin);
-        string name = label.Length > 0 ? label : host.Length > 0 ? host : "From the browser";
+        string name = BrowserLabelPrefix + (label.Length > 0 ? label : host.Length > 0 ? host : "no page");
         if (name.Length > MaxLabelLength)
         {
-            name = name[..MaxLabelLength];
+            name = name[..MaxLabelLength].TrimEnd();
+            if (char.IsHighSurrogate(name[^1]))
+            {
+                name = name[..^1];
+            }
         }
 
         try
         {
-            string address = await CreateSubaddressAsync(name);
-            Toast($"New address given to your browser: {address[..8]}…{address[^8..]}");
-            return (address, null);
+            ReceiveNotice = string.Empty;
+            (string address, string? unsaved) = await CreateSubaddressAsync(name);
+            if (unsaved is not null)
+            {
+                ReceiveNotice = "A new address was made for your browser but couldn't be recorded in the vault, so it wasn't given out: " + unsaved;
+                return null;
+            }
+
+            return address;
         }
         catch (OperationCanceledException)
         {
-            return (null, "The vault was locked.");
+            return null; // locked meanwhile
         }
         catch (Exception ex)
         {
-            return (null, "Couldn't create a new address: " + Friendly(ex));
+            ReceiveNotice = "Couldn't create a new address for your browser: " + Friendly(ex);
+            return null;
         }
     }
 

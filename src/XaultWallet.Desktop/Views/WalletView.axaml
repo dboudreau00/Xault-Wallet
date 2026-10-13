@@ -198,7 +198,7 @@
                         <TextBlock Text="{Binding BalanceLabel}" Classes="eyebrow" VerticalAlignment="Center"/>
                         <!-- Accounts: separate balances inside one wallet (shown once there are several) -->
                         <ComboBox AutomationProperties.AutomationId="Wallet.Account" AutomationProperties.Name="Account"
-                                  IsVisible="{Binding HasSeveralAccounts}" ItemsSource="{Binding Accounts}" SelectedItem="{Binding SelectedAccount}"
+                                  IsVisible="{Binding HasSeveralAccounts}" ItemsSource="{Binding Accounts}" SelectedItem="{Binding SelectedAccount}" IsEnabled="{Binding !Sending}"
                                   MinHeight="30" Padding="10,3" FontSize="12.5" VerticalAlignment="Center" ToolTip.Tip="Account">
                             <ComboBox.Styles>
                                 <Style Selector="ComboBoxItem" x:DataType="vm:AccountChoice">
@@ -449,7 +449,8 @@
                         <Button Grid.Column="0" Content="Cancel" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                 MinHeight="42" AutomationProperties.AutomationId="SendConfirm.Cancel" Command="{Binding CancelSendCommand}"/>
                         <Button Grid.Column="2" Classes="accent" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                MinHeight="42" AutomationProperties.AutomationId="SendConfirm.Send" AutomationProperties.Name="Send now" Command="{Binding ConfirmSendCommand}">
+                                MinHeight="42" AutomationProperties.AutomationId="SendConfirm.Send" AutomationProperties.Name="Send now" Command="{Binding ConfirmSendCommand}"
+                                IsEnabled="{Binding !ConfirmHeld}">
                             <TextBlock Text="Send now" Foreground="{StaticResource AccentText}"/>
                         </Button>
                     </Grid>

@@ -83,6 +83,22 @@
                     </Button>
                 </Grid>
             </Border>
+            <Border Classes="callout" Margin="18,10,18,0" Padding="14,10" IsVisible="{Binding HasHeldRequest}"
+                    AutomationProperties.AutomationId="Shell.HeldRequest">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <c:Icon Grid.Column="0" Data="{StaticResource IconLink}" Width="16" Height="16" Margin="0,0,10,0"
+                            Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" AutomationProperties.AutomationId="Shell.HeldRequestText" Text="{Binding HeldRequestNote}" TextWrapping="Wrap"
+                               VerticalAlignment="Center" FontSize="12.5"/>
+                    <Button Grid.Column="2" Content="Open it" Margin="12,0,0,0" VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="Shell.OpenHeldRequest" AutomationProperties.Name="Open the payment request" Command="{Binding OpenHeldRequestCommand}"/>
+                    <Button Grid.Column="3" Classes="ghost icon" Margin="6,0,-4,0" Padding="6" VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="Shell.DismissHeldRequest" AutomationProperties.Name="Dismiss the payment request" ToolTip.Tip="Dismiss"
+                            Command="{Binding DismissHeldRequestCommand}">
+                        <c:Icon Data="{StaticResource IconClose}" Width="14" Height="14"/>
+                    </Button>
+                </Grid>
+            </Border>
             <Border Classes="callout" Classes.warning="{Binding NoticeIsWarning}" Margin="18,10,18,0" Padding="14,10"
                     IsVisible="{Binding HasNotice}" AutomationProperties.AutomationId="Shell.Notice">
                 <Grid ColumnDefinitions="Auto,*,Auto,Auto">

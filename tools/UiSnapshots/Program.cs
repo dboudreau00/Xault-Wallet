@@ -812,6 +812,7 @@ internal static partial class Program
         vm.SendFeeText = "0.00004312 XMR";
         vm.SendTotalText = "0.25004312 XMR";
         vm.ShowSendConfirm = true;
+        vm.ConfirmHeld = false; // as it looks a moment later
         return vm;
     }
 
@@ -964,6 +965,7 @@ internal static partial class Program
         vm.SendFeeText = "0.00003066 XMR";
         vm.SendTotalText = "0.25003066 XMR";
         vm.ShowSendConfirm = true;
+        vm.ConfirmHeld = false; // as it looks a moment later
         return vm;
     }
 

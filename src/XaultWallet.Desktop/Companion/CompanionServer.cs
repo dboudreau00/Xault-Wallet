@@ -8,17 +8,27 @@ namespace XaultWallet.Desktop.Companion;
 /// Listens on the app's <see cref="CompanionEndpoint"/> for the browser companion's native host and
 /// for monero: links handed to a second launch. One request per connection; every request is parsed
 /// and checked again here (the other end is any program running as the user, not necessarily ours).
+/// A caller gets a few seconds to send its request and the app a few more to answer, so connections
+/// that stall can't keep the channel occupied.
 /// </summary>
 internal sealed class CompanionServer : IAsyncDisposable
 {
     private const int MaxConnections = 4;
-    private static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>A request is one short line, sent as soon as the connection is made.</summary>
+    private static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(3);
+
+    /// <summary>How long the app may take to answer (a new address asks the wallet backend).</summary>
+    private static readonly TimeSpan AnswerTimeout = TimeSpan.FromSeconds(20);
+
+    private static readonly TimeSpan MaxBackoff = TimeSpan.FromSeconds(30);
 
     private readonly CompanionEndpoint _endpoint;
     private readonly Func<CompanionRequest, Task<byte[]>> _handle;
     private readonly CancellationTokenSource _cts = new();
     private readonly SemaphoreSlim _slots = new(MaxConnections, MaxConnections);
     private Task _loop = Task.CompletedTask;
+    private int _disposed;
 
     /// <param name="handle">Answers one checked request (it runs the work on the UI thread itself).</param>
     public CompanionServer(CompanionEndpoint endpoint, Func<CompanionRequest, Task<byte[]>> handle)
@@ -76,18 +86,15 @@ internal sealed class CompanionServer : IAsyncDisposable
                 NameTaken?.Invoke();
                 return;
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            catch (Exception ex)
             {
+                // Whatever it was, the channel keeps trying (more slowly) rather than going quiet for the run.
                 GiveBack(pipe);
-                Log.WarnOnce("companion-listen", "The companion channel stopped listening for a moment: " + ex.GetType().Name);
-                if (++failures > 8)
-                {
-                    return;
-                }
-
+                Log.WarnOnce("companion-listen-" + ex.GetType().Name, "The companion channel stopped listening for a moment: " + ex.GetType().Name);
+                failures++;
                 try
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(failures), ct).ConfigureAwait(false);
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Min(failures, MaxBackoff.TotalSeconds)), ct).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -100,7 +107,14 @@ internal sealed class CompanionServer : IAsyncDisposable
     /// <summary>A pipe that never got to serve: closed, and its slot given back.</summary>
     private void GiveBack(NamedPipeServerStream? pipe)
     {
-        pipe?.Dispose();
+        try
+        {
+            pipe?.Dispose();
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+        {
+        }
+
         _slots.Release();
     }
 
@@ -123,7 +137,7 @@ internal sealed class CompanionServer : IAsyncDisposable
             CompanionRequest? request = CompanionProtocol.Parse(line, via: null, out CompanionError? error);
             byte[] reply = request is null
                 ? CompanionProtocol.Fail(CompanionProtocol.TryReadId(line), error!)
-                : await _handle(request).ConfigureAwait(false);
+                : await AnswerAsync(request, ct).ConfigureAwait(false);
             await CompanionWire.WriteLineAsync(pipe, reply, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or OperationCanceledException or ObjectDisposedException)
@@ -136,22 +150,51 @@ internal sealed class CompanionServer : IAsyncDisposable
         }
         finally
         {
-            await pipe.DisposeAsync().ConfigureAwait(false);
+            try
+            {
+                await pipe.DisposeAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+            {
+            }
+
             _slots.Release();
         }
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>The app's answer, or a refusal when it doesn't come in time (the work may still finish:
+    /// a new address is then in the wallet, and the app says so on screen).</summary>
+    private async Task<byte[]> AnswerAsync(CompanionRequest request, CancellationToken ct)
     {
-        await _cts.CancelAsync().ConfigureAwait(false);
         try
         {
-            await _loop.ConfigureAwait(false);
+            return await _handle(request).WaitAsync(AnswerTimeout, ct).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (TimeoutException)
         {
+            return CompanionProtocol.Fail(request.Id, new CompanionError(CompanionErrors.Failed, "XaultWallet took too long to answer. Try again in a moment."));
+        }
+    }
+
+    /// <summary>Stops listening. Safe to call more than once, and never throws: the app's shutdown
+    /// (which shreds the wallet's temporary files) runs after it whatever happens here.</summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
         }
 
-        _cts.Dispose();
+        try
+        {
+            await _cts.CancelAsync().ConfigureAwait(false);
+            await _loop.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("The companion channel didn't close cleanly: " + ex.GetType().Name);
+        }
+
+        // The token source is left to the garbage collector: a connection still being served may hold its token.
     }
 }

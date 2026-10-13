@@ -32,6 +32,8 @@
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <DebugType>none</DebugType>
     <DebuggerSupport>false</DebuggerSupport>
+    <!-- DOTNET_STARTUP_HOOKS (which any program can set in the user's environment) is ignored. -->
+    <StartupHookSupport>false</StartupHookSupport>
   </PropertyGroup>
 
   <ItemGroup>

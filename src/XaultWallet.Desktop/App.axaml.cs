@@ -48,10 +48,12 @@ public partial class App : Application
             }
 
             bool cleaned = false;
+            bool cleaning = false;
 
             // Graceful shutdown: cancel the first close, run async cleanup (kill the
             // monero-wallet-rpc child and shred temp files), then actually close. Without
-            // this the child could be orphaned and secrets left in temp.
+            // this the child could be orphaned and secrets left in temp. A second click on
+            // close while that runs waits for it; nothing before the shutdown can skip it.
             window.Closing += async (_, e) =>
             {
                 if (cleaned)
@@ -60,20 +62,28 @@ public partial class App : Application
                 }
 
                 e.Cancel = true;
+                if (cleaning)
+                {
+                    return;
+                }
+
+                cleaning = true;
                 try
                 {
-                    window.RememberPlacement(AppServices.Instance.Settings);
+                    // Each step on its own: one that fails doesn't skip the ones after it (the last one
+                    // stops the wallet backends and shreds their temporary files).
+                    await ShutdownStepAsync("remembering the window", () =>
+                    {
+                        window.RememberPlacement(AppServices.Instance.Settings);
+                        return Task.CompletedTask;
+                    });
                     if (_companion is not null)
                     {
-                        await _companion.DisposeAsync(); // no more browser requests or links
+                        await ShutdownStepAsync("closing the browser channel", () => _companion.DisposeAsync().AsTask());
                     }
 
-                    await SensitiveClipboard.ClearIfStillOursAsync();
-                    await mainVm.ShutdownAsync();
-                }
-                catch (Exception ex)
-                {
-                    Log.Error("Error during shutdown cleanup", ex);
+                    await ShutdownStepAsync("clearing the clipboard", () => SensitiveClipboard.ClearIfStillOursAsync());
+                    await ShutdownStepAsync("stopping the wallets", () => mainVm.ShutdownAsync());
                 }
                 finally
                 {
@@ -98,26 +108,80 @@ public partial class App : Application
                     EnhancedSecurity.Deactivate();
                 }
             };
-            if (AppServices.Instance.Settings.EnhancedSecurity && EnhancedSecurity.IsSupported)
+            mainVm.EnhancedSecurityShortfall = EnhancedSecurity.Shortfall;
+            if (Program.EnhancedAtStart)
             {
                 window.Opened += (_, _) => EnhancedSecurity.Activate(window);
+            }
+            else if (Program.EnhancedNotConfirmed)
+            {
+                mainVm.EnhancedSecurityNotConfirmed();
+            }
+
+            EnhancedSecurity.InputIgnoredRepeatedly += () => Dispatcher.UIThread.Post(mainVm.EnhancedInputIgnored);
+            EnhancedSecurity.InputFromDevice += () => Dispatcher.UIThread.Post(mainVm.EnhancedInputConfirmed);
+            if (Program.SettingsWereDamaged)
+            {
+                mainVm.SettingsWereDamaged();
             }
 
             // The browser companion and monero: links (a second launch hands its link over here).
             var handler = new CompanionHandler(mainVm, () => BringToFront(window));
             _companion = new CompanionServer(AppServices.Instance.CompanionEndpoint, handler.HandleAsync);
             _companion.NameTaken += () => Dispatcher.UIThread.Post(mainVm.CompanionNameTaken);
-            _companion.Start();
+            if (AppServices.Instance.CompanionEndpoint.IsUsable)
+            {
+                _companion.Start();
+            }
+            else
+            {
+                Log.Warn("The browser companion's channel can't be made here: the path to the data folder is too long for a socket.");
+                mainVm.CompanionUnavailable();
+            }
             if (Program.LaunchLink is { } link)
             {
                 mainVm.OfferLaunchLink(link);
             }
 
-            // The tripwire: the connections this app set up must still lead to it.
-            Dispatcher.UIThread.Post(mainVm.CheckRegistrations, DispatcherPriority.Background);
+            // The tripwire: the connections this app set up must still lead to it. Checked at start and
+            // again (at most once a minute) when the window comes back to the front.
+            Dispatcher.UIThread.Post(() => _ = CheckRegistrationsAsync(mainVm), DispatcherPriority.Background);
+            long lastCheck = Environment.TickCount64;
+            window.Activated += (_, _) =>
+            {
+                if (Environment.TickCount64 - lastCheck >= 60_000)
+                {
+                    lastCheck = Environment.TickCount64;
+                    Dispatcher.UIThread.Post(() => _ = CheckRegistrationsAsync(mainVm), DispatcherPriority.Background);
+                }
+            };
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private static async Task ShutdownStepAsync(string what, Func<Task> step)
+    {
+        try
+        {
+            await step();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Error during shutdown cleanup (" + what + ")", ex);
+        }
+    }
+
+    private static async Task CheckRegistrationsAsync(MainWindowViewModel shell)
+    {
+        try
+        {
+            await shell.CheckRegistrationsAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Checking the browser connections failed", ex);
+        }
     }
 
     private static async Task StartTorAsync()

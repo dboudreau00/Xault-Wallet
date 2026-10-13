@@ -408,6 +408,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
         string torPath = (TorBinaryPath ?? string.Empty).Trim();
 
+        // Enhanced Security is applied only after a save that succeeded: a failed one leaves it as it was,
+        // so trying again still sees the change and applies it.
+        (bool enhancedBefore, bool confirmedBefore) = (AppServices.Instance.Settings.EnhancedSecurity, AppServices.Instance.Settings.EnhancedSecurityConfirmed);
+        bool saved = false;
         try
         {
             AppSettings s = AppServices.Instance.Settings;
@@ -423,6 +427,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             s.TorBinaryPath = torPath;
             SaveEnhancedSecurity(s, out bool enhancedChanged);
             AppServices.Instance.SaveSettings();
+            saved = true;
             ApplyTorSetting(torWasOn, torPathBefore != torPath);
             AfterSave(enhancedChanged);
             _closeWarned = false;
@@ -437,6 +442,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
+            if (!saved)
+            {
+                (AppServices.Instance.Settings.EnhancedSecurity, AppServices.Instance.Settings.EnhancedSecurityConfirmed) = (enhancedBefore, confirmedBefore);
+            }
+
             SavedMessage = "Couldn't save settings: " + ex.Message;
             Log.Error("Saving settings failed", ex);
         }

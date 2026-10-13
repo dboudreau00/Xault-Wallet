@@ -22,6 +22,13 @@ internal sealed class CompanionHandler
     // A few a minute is plenty for a person; a program asking more is refused.
     private readonly RateLimit _receive = new(5, TimeSpan.FromMinutes(1));
     private readonly RateLimit _pay = new(6, TimeSpan.FromMinutes(1));
+    private readonly RateLimit _show = new(10, TimeSpan.FromMinutes(1));
+    private readonly RateLimit _status = new(60, TimeSpan.FromMinutes(1));
+
+    /// <summary>The window is brought forward at most this often, whatever asks.</summary>
+    private static readonly TimeSpan FrontGap = TimeSpan.FromSeconds(2);
+
+    private long _lastFront = long.MinValue / 2;
 
     public CompanionHandler(MainWindowViewModel shell, Action bringToFront)
     {
@@ -37,10 +44,15 @@ internal sealed class CompanionHandler
         switch (r.Type)
         {
             case CompanionRequestType.Status:
-                return Status(r.Id);
+                return _status.TryTake() ? Status(r.Id) : TooMany(r.Id);
 
             case CompanionRequestType.Show:
-                _bringToFront();
+                if (!_show.TryTake())
+                {
+                    return TooMany(r.Id);
+                }
+
+                BringToFront();
                 return CompanionProtocol.Ok(r.Id);
 
             case CompanionRequestType.Pay:
@@ -49,10 +61,15 @@ internal sealed class CompanionHandler
                     return Fail(r.Id, CompanionErrors.TooMany, "Too many payment requests in a minute. Wait a moment.");
                 }
 
-                PaymentOffer offer = _shell.OfferPayment(new OutsidePayment(r.Uri, r.Via, r.Origin));
-                if (offer is PaymentOffer.Shown or PaymentOffer.AfterUnlock or PaymentOffer.Waiting)
+                var payment = new OutsidePayment(r.Uri, r.Via, r.Origin);
+                PaymentOffer offer = _shell.OfferPayment(payment);
+                if (offer is PaymentOffer.Shown or PaymentOffer.AfterUnlock or PaymentOffer.Waiting or PaymentOffer.Held)
                 {
-                    _bringToFront();
+                    BringToFront();
+                }
+                else if (offer is not PaymentOffer.NoVault)
+                {
+                    _shell.PaymentNotOpened(payment, offer); // the app says so too: a link click has no other answer
                 }
 
                 return offer switch
@@ -60,7 +77,11 @@ internal sealed class CompanionHandler
                     PaymentOffer.Shown => CompanionProtocol.Ok(r.Id, w => w.WriteString("result", "shown")),
                     PaymentOffer.AfterUnlock => CompanionProtocol.Ok(r.Id, w => w.WriteString("result", "after-unlock")),
                     PaymentOffer.Waiting => CompanionProtocol.Ok(r.Id, w => w.WriteString("result", "waiting")),
-                    PaymentOffer.Busy => Fail(r.Id, CompanionErrors.Busy, "A payment is being confirmed in XaultWallet. Finish or cancel it first."),
+                    PaymentOffer.Held => CompanionProtocol.Ok(r.Id, w => w.WriteString("result", "held")),
+                    PaymentOffer.Confirming => Fail(r.Id, CompanionErrors.Busy, "A payment is being confirmed in XaultWallet. Finish or cancel it first."),
+                    PaymentOffer.FormInUse => Fail(r.Id, CompanionErrors.Busy, "XaultWallet's Send form holds a payment you started. Send or clear it there first."),
+                    PaymentOffer.CheckLastPayment => Fail(r.Id, CompanionErrors.Busy, "XaultWallet is showing a payment that may already have gone out. Check it there first."),
+                    PaymentOffer.WatchOnly => Fail(r.Id, CompanionErrors.WatchOnly, "The wallet open in XaultWallet is watch-only: it can't pay."),
                     _ => Fail(r.Id, CompanionErrors.NoVault, "XaultWallet has no wallet yet. Set it up first."),
                 };
 
@@ -81,6 +102,20 @@ internal sealed class CompanionHandler
         }
     }
 
+    /// <summary>Forward, but never more often than every couple of seconds (a program asking in a loop
+    /// would otherwise keep the window jumping in front of everything).</summary>
+    private void BringToFront()
+    {
+        long now = Environment.TickCount64;
+        if (now - _lastFront < (long)FrontGap.TotalMilliseconds)
+        {
+            return;
+        }
+
+        _lastFront = now;
+        _bringToFront();
+    }
+
     private byte[] Status(string id)
     {
         CompanionStatus s = _shell.StatusForCompanion();
@@ -98,18 +133,22 @@ internal sealed class CompanionHandler
         });
     }
 
+    private static byte[] TooMany(string id) => Fail(id, CompanionErrors.TooMany, "Too many requests in a minute. Wait a moment.");
+
     private static byte[] Fail(string id, string code, string message) => CompanionProtocol.Fail(id, new CompanionError(code, message));
 }
 
-/// <summary>At most <c>count</c> takes per <c>window</c>, sliding.</summary>
+/// <summary>At most <c>count</c> takes per <c>window</c>, sliding, on the system's monotonic clock (a
+/// change of the computer's date or time doesn't open or close it).</summary>
 internal sealed class RateLimit(int count, TimeSpan window)
 {
-    private readonly Queue<DateTime> _taken = new();
+    private readonly Queue<long> _taken = new();
 
-    public bool TryTake(DateTime? now = null)
+    /// <param name="now">Milliseconds on the monotonic clock (tests pass their own).</param>
+    public bool TryTake(long? now = null)
     {
-        DateTime t = now ?? DateTime.UtcNow;
-        while (_taken.Count > 0 && t - _taken.Peek() >= window)
+        long t = now ?? Environment.TickCount64;
+        while (_taken.Count > 0 && t - _taken.Peek() >= (long)window.TotalMilliseconds)
         {
             _taken.Dequeue();
         }

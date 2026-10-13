@@ -24,8 +24,13 @@ public partial class MainWindow : Window
         AddHandler(KeyDownEvent, OnUserActivity, RoutingStrategies.Tunnel);
     }
 
-    private void OnUserActivity(object? sender, RoutedEventArgs e) =>
-        (DataContext as ViewModels.MainWindowViewModel)?.NotifyActivity();
+    private void OnUserActivity(object? sender, RoutedEventArgs e)
+    {
+        if (!EnhancedSecurity.IgnoresActivity) // with it on, only input from a device keeps the wallet open
+        {
+            (DataContext as ViewModels.MainWindowViewModel)?.NotifyActivity();
+        }
+    }
 
     private bool _maximizeOnOpen;
 

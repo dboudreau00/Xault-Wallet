@@ -80,7 +80,7 @@
                         </StackPanel>
                         <StackPanel Grid.Column="4" Spacing="7" VerticalAlignment="Bottom">
                             <Button Content="Send max" AutomationProperties.AutomationId="Send.Max" Command="{Binding ReviewSendMaxCommand}" MinHeight="40"
-                                    IsEnabled="{Binding !Sending}"
+                                    IsEnabled="{Binding CanReview}"
                                     ToolTip.Tip="Sweep the entire spendable balance of this account to this address. The exact amount and fee are shown for confirmation before anything is sent."/>
                         </StackPanel>
                     </Grid>
@@ -137,7 +137,7 @@
                     </Button>
 
                     <Button Classes="accent" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" MinHeight="44"
-                            AutomationProperties.AutomationId="Send.Review" AutomationProperties.Name="Review and send" Command="{Binding ReviewSendCommand}" IsEnabled="{Binding !Sending}">
+                            AutomationProperties.AutomationId="Send.Review" AutomationProperties.Name="Review and send" Command="{Binding ReviewSendCommand}" IsEnabled="{Binding CanReview}">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <c:Icon Data="{StaticResource IconSend}" Width="16" Height="16"/>
                             <TextBlock Text="Review &amp; send" Foreground="{StaticResource AccentText}"/>
@@ -165,6 +165,9 @@
                                 <TextBlock AutomationProperties.AutomationId="Send.ResultDetail" Classes="outcomeDetail" Text="{Binding SendResultDetail}"
                                            IsVisible="{Binding SendResultDetail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                             </StackPanel>
+                            <Button Grid.Column="2" VerticalAlignment="Center" Margin="12,0,0,0" AutomationProperties.AutomationId="Send.Checked" AutomationProperties.Name="I have checked it"
+                                    Content="I&apos;ve checked it" Command="{Binding DismissSendResultCommand}" IsVisible="{Binding SendNeedsCheck}"
+                                    ToolTip.Tip="Clear this warning once History shows whether the payment went out"/>
                             <Button Grid.Column="2" VerticalAlignment="Center" Margin="12,0,0,0" AutomationProperties.AutomationId="Send.SaveContact" AutomationProperties.Name="Save as contact"
                                     Command="{Binding SaveRecipientAsContactCommand}" IsVisible="{Binding OfferSaveRecipient}"
                                     ToolTip.Tip="Save this address in your contacts">

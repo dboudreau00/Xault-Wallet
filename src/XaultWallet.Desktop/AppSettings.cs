@@ -52,11 +52,16 @@ public sealed class AppSettings
     public bool WindowMaximized { get; set; }
 
     /// <summary>Enhanced Security (Windows; off by default): the window is left out of screenshots,
-    /// recordings and remote viewing, the app won't run on a hidden desktop, only input from a real
-    /// keyboard, mouse, touchscreen or pen operates it, other programs can't read its window through
-    /// accessibility interfaces, and its memory (and its wallet backend's) is closed to other programs.
-    /// The same for every password, like every setting here.</summary>
+    /// recordings and screen sharing, the app won't run on a hidden desktop, only key presses and clicks
+    /// from a real keyboard, mouse, touchscreen or pen act on it, other programs can't read its window
+    /// through accessibility interfaces or open its memory (or its wallet backend's). See SECURITY.md for
+    /// what that leaves open. The same for every password, like every setting here.</summary>
     public bool EnhancedSecurity { get; set; }
+
+    /// <summary>Enhanced Security was confirmed (the user clicked Keep it on) since it was last turned on.
+    /// Until then it isn't trusted to start with the app: the app may have been closed while nothing
+    /// could be clicked, and a start finding it unconfirmed leaves it off.</summary>
+    public bool EnhancedSecurityConfirmed { get; set; }
 
     /// <summary>The browsers the user connected to the companion from this app ("chrome", "firefox"). Kept
     /// so the app notices when a connection is changed behind its back (another program standing in for

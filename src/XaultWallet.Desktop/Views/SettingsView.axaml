@@ -240,9 +240,9 @@
                         </Grid>
                         <StackPanel Spacing="5">
                             <TextBlock Classes="muted" TextWrapping="Wrap" Text="While it's on:"/>
-                            <TextBlock Classes="muted" TextWrapping="Wrap" Margin="12,0,0,0" Text="• screenshots, screen recordings, Recall and remote viewing show nothing where XaultWallet's window is;"/>
-                            <TextBlock Classes="muted" TextWrapping="Wrap" Margin="12,0,0,0" Text="• only your own keyboard, mouse, touchscreen or pen can click and type in it, so malware that drives apps unseen (hidden VNC) can't;"/>
-                            <TextBlock Classes="muted" TextWrapping="Wrap" Margin="12,0,0,0" Text="• other programs can't read its text or press its buttons through accessibility interfaces, and can't read its memory or the wallet backend's;"/>
+                            <TextBlock Classes="muted" TextWrapping="Wrap" Margin="12,0,0,0" Text="• screenshots, screen recordings, Recall and screen sharing show nothing where XaultWallet's window is;"/>
+                            <TextBlock Classes="muted" TextWrapping="Wrap" Margin="12,0,0,0" Text="• only your own keyboard, mouse, touchscreen or pen can press its keys and buttons, so malware that drives apps unseen (hidden VNC) can't;"/>
+                            <TextBlock Classes="muted" TextWrapping="Wrap" Margin="12,0,0,0" Text="• other programs can't read its text or press its buttons through accessibility interfaces, and can't open its memory or the wallet backend's;"/>
                             <TextBlock Classes="muted" TextWrapping="Wrap" Margin="12,0,0,0" Text="• it won't start on a desktop you can't see."/>
                         </StackPanel>
                         <Border Classes="callout warning">
@@ -250,7 +250,7 @@
                                        Text="Screen readers, voice control, password-manager auto-type and remote-control tools can't operate XaultWallet while it's on. It takes away the easy ways common malware watches and drives a wallet; it can't make an infected computer safe."/>
                         </Border>
                         <TextBlock Classes="caption" TextWrapping="Wrap" IsVisible="{Binding EnhancedSecuritySupported}"
-                                   Text="Takes effect when you save. XaultWallet then asks for one click: if it doesn't get it, it turns Enhanced Security off again by itself."/>
+                                   Text="Takes effect when you save. XaultWallet then asks for one click: if it doesn't get it, it turns Enhanced Security off again by itself. Restart XaultWallet afterwards so its menus and lists are covered too."/>
                         <TextBlock Classes="caption" TextWrapping="Wrap" IsVisible="{Binding !EnhancedSecuritySupported}"
                                    Text="Available on Windows."/>
                     </StackPanel>
@@ -277,7 +277,7 @@
                                 <Button Content="Connect" AutomationProperties.AutomationId="Settings.ConnectChrome" AutomationProperties.Name="Connect Chrome"
                                         Command="{Binding ConnectBrowserCommand}" CommandParameter="chrome" IsVisible="{Binding !ChromeConnected}"/>
                                 <Button Content="Disconnect" AutomationProperties.AutomationId="Settings.DisconnectChrome" AutomationProperties.Name="Disconnect Chrome"
-                                        Command="{Binding DisconnectBrowserCommand}" CommandParameter="chrome" IsVisible="{Binding ChromeConnected}"/>
+                                        Command="{Binding DisconnectBrowserCommand}" CommandParameter="chrome" IsVisible="{Binding ChromeCanDisconnect}"/>
                             </StackPanel>
                             <TextBlock Grid.Row="2" Grid.Column="0" Text="Firefox" FontWeight="SemiBold" VerticalAlignment="Center"/>
                             <TextBlock Grid.Row="2" Grid.Column="1" AutomationProperties.AutomationId="Settings.FirefoxStatus" Text="{Binding FirefoxStatus}" Classes="caption" VerticalAlignment="Center"
@@ -286,7 +286,7 @@
                                 <Button Content="Connect" AutomationProperties.AutomationId="Settings.ConnectFirefox" AutomationProperties.Name="Connect Firefox"
                                         Command="{Binding ConnectBrowserCommand}" CommandParameter="firefox" IsVisible="{Binding !FirefoxConnected}"/>
                                 <Button Content="Disconnect" AutomationProperties.AutomationId="Settings.DisconnectFirefox" AutomationProperties.Name="Disconnect Firefox"
-                                        Command="{Binding DisconnectBrowserCommand}" CommandParameter="firefox" IsVisible="{Binding FirefoxConnected}"/>
+                                        Command="{Binding DisconnectBrowserCommand}" CommandParameter="firefox" IsVisible="{Binding FirefoxCanDisconnect}"/>
                             </StackPanel>
                         </Grid>
 
@@ -301,7 +301,7 @@
                                 <Button Content="Open them here" AutomationProperties.AutomationId="Settings.RegisterLinks" AutomationProperties.Name="Open monero: links with XaultWallet"
                                         Command="{Binding RegisterLinksCommand}" IsVisible="{Binding !LinksRegistered}"/>
                                 <Button Content="Stop" AutomationProperties.AutomationId="Settings.UnregisterLinks" AutomationProperties.Name="Stop opening monero: links with XaultWallet"
-                                        Command="{Binding UnregisterLinksCommand}" IsVisible="{Binding LinksRegistered}"/>
+                                        Command="{Binding UnregisterLinksCommand}" IsVisible="{Binding LinksCanStop}"/>
                             </StackPanel>
                         </Grid>
 

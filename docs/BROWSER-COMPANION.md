@@ -5,7 +5,10 @@ XaultWallet and ask it for receive addresses. **The extension holds no key, no s
 balance and no history**, and it stores nothing. XaultWallet on your computer does everything that
 matters; the browser can only ask, and you confirm in the app.
 
-<p align="center"><img src="screenshots/extension-popup.png" alt="The companion extension popup: status, pay, receive" width="300" /></p>
+<p align="center">
+  <img src="screenshots/extension-popup-page.png" alt="The popup on a checkout page: the payments found there, with the page's own words in quotes" width="300" />
+  <img src="screenshots/extension-popup.png" alt="The popup after paying a link and asking for a receive address" width="300" />
+</p>
 
 What it does:
 

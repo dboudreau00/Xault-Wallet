@@ -434,6 +434,9 @@ the time left.
    against the page and confirm in the app. Or select an address, right-click, **Pay with XaultWallet**.
    If the Send form already holds a payment you started, the request waits at the top of the window
    until you click **Open it**.
+
+   <img src="docs/screenshots/extension-popup-page.png" alt="The popup on a checkout page: the payments found there, with the page's own words in quotes" width="280" />
+
 4. **New address** gives you a fresh subaddress of the wallet on screen, labelled *Browser:* and the
    site, to paste into a form. The app shows the start and end of the same address across the top of
    its window.

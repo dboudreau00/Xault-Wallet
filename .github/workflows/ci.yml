@@ -78,6 +78,20 @@ jobs:
           path: e2e-screens/
           if-no-files-found: warn
 
+  extension:
+    name: Browser companion extension (unit tests + build)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Unit tests (Node's own test runner; the extension has no dependencies)
+        run: node --test extension/test/*.test.mjs
+      - name: Build the Chrome and Firefox packages (fails if their ids aren't the ones the app allows)
+        run: node extension/build.mjs --zip extension-dist --name XaultWallet-companion-${GITHUB_SHA::7}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-extension
+          path: extension-dist/
+
   ui-snapshots:
     name: UI smoke test + screenshots
     runs-on: ubuntu-24.04

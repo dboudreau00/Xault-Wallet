@@ -87,12 +87,13 @@ A packaged `.exe` looks finished, but packaging changes nothing about the code's
   first. The wallet never ships someone else's key-handling binary.
 - **Back up your seed** independently of the app.
 
-Version is stamped as `0.6.0b-beta` in the project file's `<ReleaseVersion>`, the name the tag,
-the archives and Settings → About use. Beside it, `<Version>` (`0.6.0-beta.b`, SemVer) and
-`<FileVersion>` (`0.6.0.2`, numeric, also the MSI's version) carry the same release in the forms
-.NET and Windows need: bump all three together. A lower-case letter after the patch number marks a
-revision of that release (0.6.0a, 0.6.0b, …); without one, `<ReleaseVersion>` and `<Version>` are
-the same.
+Version is stamped as `0.7.0-beta` in the project file's `<ReleaseVersion>`, the name the tag,
+the archives, Settings → About and the browser companion use. Beside it, `<Version>` (`0.7.0-beta`,
+SemVer) and `<FileVersion>` (`0.7.0.0`, numeric, also the MSI's version) carry the same release in the
+forms .NET and Windows need: bump all three together. A lower-case letter after the patch number marks
+a revision of that release (0.6.0a, 0.6.0b, …: then `<Version>` is `0.6.0-beta.a` and `<FileVersion>`
+`0.6.0.1`); without one, `<ReleaseVersion>` and `<Version>` are the same. The browser companion's
+manifests take their version from `<ReleaseVersion>` when `extension/build.mjs` runs.
 
 ## Automated releases (GitHub Actions)
 
@@ -101,13 +102,15 @@ executables for `win-x64`, `linux-x64` and `osx-arm64`, plus two Windows install
 `XaultWallet-<version>-win-x64-setup.exe` (Inno Setup, from `installer/XaultWallet.iss`) and
 `XaultWallet-<version>-win-x64.msi` (WiX Toolset 3, from `installer/XaultWallet.wxs`). Each is
 checked in the same job: a silent per-user install must put the exact published exe in place and
-uninstalling must remove it again. Each archive holds the executable plus
-`README.md`, `SECURITY.md`, `CHANGELOG.md`, `LICENSE` and `THIRD-PARTY-NOTICES.md`. They are attached with a `SHA256SUMS` file
+uninstalling must remove it again (and a `monero:` link handler pointing at it). Each archive holds
+the executable plus `README.md`, `SECURITY.md`, `CHANGELOG.md`, `LICENSE` and `THIRD-PARTY-NOTICES.md`.
+The browser companion is packaged for Chrome and Firefox (`XaultWallet-<version>-browser-chrome.zip`,
+`…-browser-firefox.zip`, from `extension/`). They are attached with a `SHA256SUMS` file
 to a **draft** release for you to review and publish. There are two ways to start it:
 
-- **Push a tag** such as `v0.6.0b-beta`.
+- **Push a tag** such as `v0.7.0-beta`.
 - **Run it by hand** (no git needed): GitHub → Actions → Release → *Run workflow*, with `version` set
-  to `v0.6.0b-beta`. The draft targets the commit the run started from (normally `main`). GitHub
+  to `v0.7.0-beta`. The draft targets the commit the run started from (normally `main`). GitHub
   creates the tag only when you press **Publish** on the draft: the workflow never creates or moves a
   tag. Run without a version, it only builds (a dry run) and publishes nothing.
 

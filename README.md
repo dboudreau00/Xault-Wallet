@@ -18,6 +18,25 @@ installed, and fail-closed while it runs) and coin control come built in.
 
 ## Notification - Documentation and code review assisted by Claude Code.
 
+## What's new in 0.7
+
+- **Browser companion for Chrome and Firefox.** Pay the `monero:` links and addresses on a web page
+  (or right-click a selected one) and the payment opens in XaultWallet's Send tab for you to confirm;
+  ask for a fresh receive address without leaving the page. The extension holds no key, seed or
+  balance and stores nothing: an infostealer that copies the browser gets nothing of the wallet.
+  [How-to #13](#13-pay-from-the-browser-companion-extension)
+- **`monero:` links open in XaultWallet** from any browser (Windows, Linux), when you choose it.
+- **Enhanced Security** (Windows, off by default): XaultWallet disappears from screenshots, screen
+  recordings and remote viewing, only your own keyboard, mouse or touchscreen can operate it (not
+  hidden-VNC malware), other programs can't read its window or its memory, and it won't run on a
+  hidden desktop. [How-to #14](#14-enhanced-security)
+- **The confirmation says which wallet pays**, and where a payment request came from.
+
+<p align="center">
+  <img src="docs/screenshots/wallet-send-browser-request.png" width="49%" alt="A payment request from the browser, in the Send tab" />
+  <img src="docs/screenshots/settings-enhanced-security.png" width="49%" alt="Settings: Enhanced Security" />
+</p>
+
 ## What's new in 0.6
 
 - **Built-in Tor.** Choose *Tor, built in* in Settings and XaultWallet runs its own Tor: installed
@@ -41,6 +60,7 @@ installed, and fail-closed while it runs) and coin control come built in.
 
 ## Contents
 
+- [What's new in 0.7](#whats-new-in-07)
 - [What's new in 0.6](#whats-new-in-06)
 - [Highlights](#highlights)
 - [How it works (trust model)](#how-it-works-trust-model)
@@ -76,6 +96,8 @@ installed, and fail-closed while it runs) and coin control come built in.
 | **Verified one-click backend** | Bring your own `monero-wallet-rpc` (recommended), or press **Download & install**: the app checks getmonero.org's `hashes.txt` against **binaryFate's signature** (key pinned in the app) and the download against its signed SHA-256 before installing anything. |
 | **Built-in Tor** | Choose *Tor, built in* and the app runs its own `tor`: node traffic, node checks and downloads go through it, and **nothing goes out directly while it connects** (fail closed). *Download & install Tor* checks Tor Project's signature (Tor Browser Developers key, pinned in the app) and the download's signed SHA-256 first. A badge on every wallet says how it reaches its node. |
 | **Coin control** | The **Coins** tab lists unspent coins with the address label they arrived at. **Freeze** one and no transaction spends it (Send max included) until you unfreeze it; the frozen list is sealed in the vault and survives a lock. |
+| **Browser companion** | A Chrome and Firefox extension pays `monero:` links and addresses from web pages and gets fresh receive addresses, through the app: it holds no key, seed or balance, stores nothing, and every payment is confirmed in XaultWallet. |
+| **Enhanced Security** | Optional (Windows): hidden from screenshots and remote viewing, operated only by your own keyboard, mouse or touchscreen (not by hidden-VNC malware), unreadable to other programs, never on a hidden desktop. |
 | **Windows installers** | A per-user `setup.exe` or `.msi` (no admin rights), Start menu entry and uninstaller; the vault in `%APPDATA%` is never touched. Or keep using the zip. |
 | **Locked-down backend** | wallet-rpc runs on loopback with **per-session random credentials**, its files (wallet, log, ring database) live in one folder **shredded on lock**, and the app checks the port belongs to the process it started before sending it a seed or keys. |
 | **Hygiene by default** | Copied addresses/keys **auto-clear from the clipboard after 30 s**. Logs **redact seeds, passwords and keys** and record nothing that tells your two wallets apart. Auto-lock on inactivity. |
@@ -120,7 +142,9 @@ Windows or Linux for now. On Windows you can run
 `XaultWallet-<version>-win-x64-setup.exe` (or the `.msi`, if you deploy MSIs) instead: it installs
 for your user without administrator rights, adds a Start menu entry and an uninstaller, and never
 touches your vault. Binaries and installers are currently **unsigned**, so Windows SmartScreen /
-macOS Gatekeeper will ask before the first run.
+macOS Gatekeeper will ask before the first run. The `…-browser-chrome.zip` and
+`…-browser-firefox.zip` beside them are the optional browser companion
+([How-to #13](#13-pay-from-the-browser-companion-extension)).
 
 ### Step 2: Get monero-wallet-rpc
 
@@ -395,6 +419,35 @@ its confirmations, and whether it is still maturing.
 They work wherever the focus is, a text box included. The window also reopens at the size you left
 it, and while a wallet catches up the sync line estimates the time left.
 
+### 13. Pay from the browser (companion extension)
+
+1. In XaultWallet: **Settings → Browser companion → Connect** next to Chrome or Firefox.
+2. Install the extension from the release (`…-browser-chrome.zip` or `…-browser-firefox.zip`): in
+   Chrome, `chrome://extensions`, *Developer mode*, *Load unpacked*; in Firefox, `about:debugging`,
+   *This Firefox*, *Load Temporary Add-on* (until it is on addons.mozilla.org). Every step and the
+   reasons behind it: [docs/BROWSER-COMPANION.md](docs/BROWSER-COMPANION.md).
+3. On a checkout page, click the XaultWallet button: it shows whether the app is unlocked and lists the
+   page's `monero:` links and addresses. **Pay** opens one in XaultWallet's Send tab, saying where it
+   came from; check the address against the page and confirm in the app. Or select an address,
+   right-click, **Pay with XaultWallet**.
+4. **New address** gives you a fresh subaddress of the wallet on screen, labelled with the site, to
+   paste into a form. The app shows the start and end of the same address in a notice.
+5. Optional: **Open them here** next to *monero: links* makes any browser hand those links to
+   XaultWallet (Windows, Linux), with or without the extension.
+
+A request that arrives while the vault is locked waits on the unlock screen. The browser never gets a
+key, a seed, a balance or a wallet's name.
+
+### 14. Enhanced Security
+
+**Settings → Enhanced Security** (Windows, off by default), **Save changes**, then **Keep it on** in the
+bar that appears. While it is on, screenshots, recordings, Recall and remote viewing show nothing where
+XaultWallet is; only input from your own keyboard, mouse, touchscreen or pen operates it; other programs
+can't read its window through accessibility interfaces, or its memory and its wallet backend's; and it
+won't start on a hidden desktop. Screen readers, voice control, password-manager auto-type and
+remote-control tools can't operate it then. If your click doesn't get through within 20 seconds, it
+turns itself off again. What it can and can't do: [SECURITY.md](SECURITY.md#enhanced-security).
+
 ---
 
 ## Screenshot tour
@@ -418,6 +471,8 @@ on stagenet; the same run fails on any binding error), so what you see is what s
 | <img src="docs/screenshots/add-wallet.png" alt="Add a wallet" /><br/>**Add a wallet**: new, from seed, from keys, watch-only. | <img src="docs/screenshots/wallet-watch-only.png" alt="Watch-only" /><br/>**Watch-only**: sees what arrives, can't spend. |
 | <img src="docs/screenshots/settings.png" alt="Settings" /><br/>**Settings**: wallet backend, network and privacy, security. | <img src="docs/screenshots/settings-vault-format.png" alt="Vault format" /><br/>**Vault format**: a vault from 0.3 asks before it upgrades. |
 | <img src="docs/screenshots/settings-tor.png" alt="Built-in Tor" /><br/>**Built-in Tor**, connected. | <img src="docs/screenshots/settings-tor-installing.png" alt="Installing Tor" /><br/>**Download & install Tor**, verified against Tor Project's key. |
+| <img src="docs/screenshots/wallet-send-browser-request.png" alt="A payment request from the browser" /><br/>**From the browser**: a payment request, with where it came from. | <img src="docs/screenshots/settings-companion.png" alt="Browser companion settings" /><br/>**Browser companion**: connect Chrome or Firefox, open monero: links. |
+| <img src="docs/screenshots/settings-enhanced-security.png" alt="Enhanced Security" /><br/>**Enhanced Security**: off by default, Windows. | <img src="docs/screenshots/unlock-payment-waiting.png" alt="A request waiting for the unlock" /><br/>**Waiting for the unlock**: a request that came while locked. |
 | <img src="docs/screenshots/settings-tor-blocked.png" alt="Tor blocked" /><br/>**Blocked by a firewall?** It says which file to allow. | <img src="docs/screenshots/wallet-tor-connecting.png" alt="Waiting for Tor" /><br/>**Fail closed**: a wallet waits for Tor rather than go direct. |
 
 ---
@@ -446,6 +501,7 @@ syncs in seconds; one restored from full history takes as long as the node needs
 | `%LOCALAPPDATA%\XaultWallet\monero-cli\` (Linux: `~/.local/share/XaultWallet/monero-cli/`) | `monero-wallet-rpc`, only if *Download & install* put it there | Not secret (an official, signature-checked binary) |
 | `%LOCALAPPDATA%\XaultWallet\tor\` (Linux: `~/.local/share/XaultWallet/tor/`) | `tor` and its GeoIP files, only if *Download & install Tor* put them there | Not secret (Tor Project's signature-checked build) |
 | `%LOCALAPPDATA%\XaultWallet\tor-data\` (Linux: `~/.local/share/XaultWallet/tor-data/`) | Tor's own state (consensus cache, guard choice), while built-in Tor is used | Not secret; shows that Tor is used on this computer |
+| Browser connections and `monero:` links (only once you turn them on in Settings) | Native messaging host manifests and registry keys naming this XaultWallet: [docs/BROWSER-COMPANION.md](docs/BROWSER-COMPANION.md#install) | Not secret; they show XaultWallet is installed |
 
 On Linux/macOS the `XaultWallet` folder is `0700` and its files `0600` regardless of your umask (older
 installs are tightened at startup); exports and seed backups you save are written `0600` too.
@@ -538,7 +594,7 @@ dotnet run --project src/XaultWallet.Desktop    # run the app
 - **Single-file release** for your platform: `./publish-windows.ps1` / `./publish-linux.sh`, or
   `dotnet publish src/XaultWallet.Desktop -c Release -r <win-x64|linux-x64|osx-x64|osx-arm64>`.
 - **Windows installers**: publish `win-x64` into `out/`, copy the docs next to the exe, then
-  `iscc /DAppVersion=0.6.0b-beta /DAppNumericVersion=0.6.0.2 /DSourceDir=%CD%\out installer\XaultWallet.iss`
+  `iscc /DAppVersion=0.7.0-beta /DAppNumericVersion=0.7.0.0 /DSourceDir=%CD%\out installer\XaultWallet.iss`
   (Inno Setup 6) for the setup exe, and see the header of `installer/XaultWallet.wxs` for the MSI
   (WiX Toolset 3). The release workflow builds both and test-installs each.
 - **UI snapshots** (every screen, zero-binding-error check, QR round-trip with `zbarimg`):
@@ -618,7 +674,8 @@ the spend key (or, for privacy, the view key).
 - Spending only the coins you pick in a send (coin selection), on top of freezing
 - Key-image import for watch-only wallets (so they can see spends), and offline signing
 - Hardware wallets (Ledger / Trezor through monero-wallet-rpc)
-- Screen-capture protection while the seed is shown
+- Enhanced Security on Linux and macOS (it is Windows-only for now)
+- The browser companion on the Chrome Web Store and addons.mozilla.org (signed, updated by the stores)
 - Opt-in fiat display (off by default: it would call a price API, which is a privacy trade-off)
 - The big one: a **professional third-party security audit** before any mainnet story exists
 

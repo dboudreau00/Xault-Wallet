@@ -165,10 +165,15 @@ jobs:
           if (-not (Test-Path "$dir\XaultWallet.exe")) { throw 'XaultWallet.exe was not installed' }
           if (-not (Test-Path "$dir\THIRD-PARTY-NOTICES.md")) { throw 'THIRD-PARTY-NOTICES.md was not installed' }
           if ((Get-FileHash "$dir\XaultWallet.exe").Hash -ne (Get-FileHash out\XaultWallet.exe).Hash) { throw 'The installed exe differs from the published one' }
+          # As if the app had been made to open monero: links (Settings): uninstalling must undo it.
+          $handler = 'HKCU:\Software\Classes\monero\shell\open\command'
+          New-Item -Path $handler -Force | Out-Null
+          Set-Item -Path $handler -Value ('"' + "$dir\XaultWallet.exe" + '" "%1"')
           $u = Start-Process "$dir\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
           if ($u.ExitCode -ne 0) { throw "Uninstall exited with $($u.ExitCode)" }
           for ($i = 0; $i -lt 30 -and (Test-Path "$dir\XaultWallet.exe"); $i++) { Start-Sleep 1 }
           if (Test-Path "$dir\XaultWallet.exe") { throw 'Uninstalling left XaultWallet.exe behind' }
+          if (Test-Path 'HKCU:\Software\Classes\monero') { throw 'Uninstalling left monero: links pointing at the removed program' }
           Write-Host "Installer OK: $($setup.Name) installs the published exe and uninstalls cleanly."
       - name: MSI package (Windows; WiX Toolset 3, unsigned)
         if: matrix.rid == 'win-x64'
@@ -210,9 +215,14 @@ jobs:
           if (-not (Test-Path $exe)) { throw "XaultWallet.exe was not installed at $exe" }
           if (-not (Test-Path (Join-Path (Split-Path $exe) 'THIRD-PARTY-NOTICES.md'))) { throw 'THIRD-PARTY-NOTICES.md was not installed' }
           if ((Get-FileHash $exe).Hash -ne (Get-FileHash out\XaultWallet.exe).Hash) { throw 'The installed exe differs from the published one' }
+          # As if the app had been made to open monero: links (Settings): uninstalling must undo it.
+          $handler = 'HKCU:\Software\Classes\monero\shell\open\command'
+          New-Item -Path $handler -Force | Out-Null
+          Set-Item -Path $handler -Value ('"' + $exe + '" "%1"')
           $u = Start-Process msiexec.exe -ArgumentList '/x', "`"$msi`"", '/qn', '/norestart' -Wait -PassThru
           if ($u.ExitCode -ne 0) { throw "msiexec /x exited with $($u.ExitCode)" }
           if (Test-Path $exe) { throw 'Uninstalling left XaultWallet.exe behind' }
+          if (Test-Path 'HKCU:\Software\Classes\monero') { throw 'Uninstalling left monero: links pointing at the removed program' }
           Write-Host "MSI OK: $(Split-Path $msi -Leaf) installs the published exe and uninstalls cleanly."
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -231,9 +241,27 @@ jobs:
     with:
       artifact: dist-win-x64
 
+  extension:
+    name: Browser companion (Chrome and Firefox packages)
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    runs-on: ubuntu-24.04
+    env:
+      TAG: ${{ needs.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Unit tests
+        run: node --test extension/test/*.test.mjs
+      - name: Package (the version is the app's; the build stops if the ids aren't the ones the app allows)
+        run: node extension/build.mjs --zip dist --name "XaultWallet-${TAG:-dev-${GITHUB_SHA::7}}-browser"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist-extension
+          path: dist/*
+
   release:
     name: Draft release
-    needs: [plan, publish, e2e-windows]
+    needs: [plan, publish, e2e-windows, extension]
     if: needs.plan.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     permissions:

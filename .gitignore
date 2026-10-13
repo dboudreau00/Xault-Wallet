@@ -11,3 +11,5 @@ e2e-screens/
 e2e-screens-windows/
 release/
 .avalonia-build-tasks/
+extension/dist/
+node_modules/

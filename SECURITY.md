@@ -326,6 +326,65 @@ an unlock, a coin is frozen again as soon as the scan finds it, and every send r
 right before the transaction is built, so a coin found since the last refresh can't slip in. A
 watch-only wallet can't freeze (computing a key image needs the spend key).
 
+## Browser companion
+
+The Chrome and Firefox extension (0.7, [docs/BROWSER-COMPANION.md](docs/BROWSER-COMPANION.md)) can
+ask the running app for its state, put a payment request in the Send tab and get a new receive
+address. It never holds a key, a seed, a password or a balance, and it stores nothing, so an
+infostealer that copies the browser profile gets nothing of the wallet. Payments are confirmed in
+the app, never in the browser.
+
+It reaches the app through the browser's native messaging (XaultWallet's own executable, started by
+the browser only for the extension the host manifest names) and a local channel only your user
+account can open (a named pipe, or a Unix socket in a private folder). Replies carry the state, the
+network of the wallet on screen and, when asked for, one new subaddress: never a wallet's name,
+balance or history. At most 6 payment requests and 5 new addresses a minute are accepted.
+
+**Tripwire.** At every start the app checks that each browser connection it set up still leads to
+it. A connection repointed to another program (to stand in for XaultWallet, for example to hand the
+browser its own "receive" address) brings up a warning; one that was simply removed is forgotten.
+On Windows the app also notices when another program created its channel first.
+
+What it can't stop: a program running as you can rewrite those registrations, talk to the channel
+itself (proposing payments you must still confirm, or asking for subaddresses), or simply read your
+files and keystrokes. The companion adds nothing such a program could steal; the tripwire makes the
+cheapest abuse visible.
+
+## Enhanced Security
+
+Settings, *Enhanced Security* (Windows, off by default). While it is on:
+
+- **Screen capture.** The window is left out of screenshots, screen recordings, Windows Recall and
+  remote viewing (`SetWindowDisplayAffinity` with `WDA_EXCLUDEFROMCAPTURE`, the protection VeraCrypt
+  uses; Windows before 10 2004 shows it black instead). Menus and lists are drawn inside the window
+  so they share it. A camera pointed at the screen still sees it, and Microsoft documents this as
+  content protection, not a security boundary.
+- **Input.** Only input Windows reports as coming from a device (or from the system, or from an
+  accessibility program Windows trusts with UIAccess, such as its on-screen keyboard) can press a key
+  or a button in XaultWallet (`GetCurrentInputMessageSource`). Input injected with `SendInput`, and fake
+  window messages posted or sent by another program (how hidden-VNC malware drives a window), are
+  dropped and logged once. Typed characters alone can fill a field but never act.
+- **Accessibility.** The window answers no UI Automation or MSAA requests, so other programs can
+  neither read its text (addresses, balances, a seed being shown) nor press its buttons that way.
+- **Memory.** XaultWallet and the monero-wallet-rpc it starts get an access list that lets other
+  programs of your account only see that they exist and end them: not read or write their memory,
+  inject code, or change that list back (an "OWNER RIGHTS" entry takes away the owner's implicit right
+  to). Programs running as an administrator or with the debug privilege are not stopped by it.
+- **Hidden desktops.** XaultWallet refuses to start (exit code 4, a line in the log) on a desktop
+  other than the one you see (`WinSta0\Default`): hidden-VNC malware starts its programs on a desktop
+  of its own.
+
+The costs: screen readers, voice control, password-manager auto-type and remote-control tools can't
+operate XaultWallet while it is on. Turning it on asks for one click in the next 20 seconds; if the
+click doesn't get through (an input device Windows doesn't report as one), Enhanced Security turns
+itself off again, so you can't be locked out by it. Turning it off applies at once to the window; the
+memory protection stays until the app restarts.
+
+What it is not: the setting lives in `settings.json`, which a program running as you can change before
+the app starts; that program can also replace the app's files, read the vault file and log your
+password. Enhanced Security takes away the easy ways common malware watches and drives a wallet. It
+can't make an infected computer safe.
+
 ## Choosing a daemon
 
 A remote/public node can see which blocks your wallet asks about and your broadcast

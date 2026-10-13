@@ -14,6 +14,8 @@ monero-wallet-rpc orchestration without the Avalonia desktop app.
 > [CHANGELOG.md](CHANGELOG.md#for-integrators-of-xaultwalletcore-1).
 > 0.6.0 only adds API: coin control on `MoneroWalletService`, `WalletSecrets.FrozenKeyImages` and the
 > `XaultWallet.Core.Tor` namespace. See [CHANGELOG.md](CHANGELOG.md#for-integrators-of-xaultwalletcore).
+> 0.7.0 only adds API: the `XaultWallet.Core.Companion` namespace (the browser companion's protocol,
+> transport and registration) and `ProcessHardening` and `InputTrust` in `XaultWallet.Core.Security`.
 
 ## Namespaces & surface
 
@@ -82,6 +84,14 @@ The sealed payload (internal `SlotPayload`) is identical in shape for every slot
 payloads are read and become a one-wallet profile; a `v` newer than 3, or a profile without wallets,
 is refused with `InvalidDataException`. `frozen` (the key images of frozen coins) is always written,
 as `[]` when nothing is frozen, so the shape stays the same for every slot.
+
+- **`ProcessHardening`** (Windows): `Enable()` gives this process, and every child passed to
+  `Track(process)` (before or after), an access list that lets other programs of the user only query,
+  wait for and end it (no memory access, no code injection, no changing the list back). `Enabled`,
+  `IsSupported`.
+- **`InputTrust`** (Windows): `IsAction(message)` and `IsTrusted(message, sentByAnotherThread, origin)`:
+  which key, button, wheel and pointer messages may act when Enhanced Security is on (device, system or
+  UIAccess input only).
 
 ### `XaultWallet.Core.Models`
 - **`WalletProfile`**: what one password opens: `Wallets`, `Contacts`, `ActiveWalletId` (opens
@@ -227,6 +237,41 @@ as `[]` when nothing is frozen, so the shape stays the same for every slot.
 - **`TorSigningKeys`**: `Trusted`: the Tor Browser Developers key embedded in the assembly, accepted only
   for the pinned `TorBrowserPrimary` and `TorBrowserSigningSubkey` fingerprints; only the signing subkey
   may sign.
+
+### `XaultWallet.Core.Companion`
+The browser companion and `monero:` links ([docs/BROWSER-COMPANION.md](docs/BROWSER-COMPANION.md)).
+- **`CompanionProtocol`**: version 1 of the messages. `Parse(utf8Json, via?, out error)` →
+  `CompanionRequest(Id, Type, Via, Uri, Origin, Label)` or null and a `CompanionError(Code, Message)`
+  (codes in `CompanionErrors`). Strict: one JSON object, `"v": 1`, an id of 1 to 64 letters, digits,
+  `-` or `_`, a known `type` (`status`, `show`, `pay`, `receive`), no field twice, at most
+  `MaxRequestBytes`; a `pay` needs a `monero:` link of at most 4096 characters; `origin` is reduced to
+  `scheme://host[:port]` (ASCII host) by `NormalizeOrigin`; a `label` is cleaned by `CleanLabel` (no
+  control or direction characters, at most 40). With `via` given (the native host's own knowledge of
+  its caller) a `"via"` field in the request is ignored; without it, it is required (the local
+  channel). `Serialize(request)`, `Ok(id, body?)`, `Fail(id, error)`, `IsReplyTo(reply, id)`,
+  `TryReadId(json)`, `HostOf(origin)`.
+- **`NativeMessaging`**: the browsers' framing (`ReadAsync`: null at a clean end, `InvalidDataException`
+  past `MaxIncomingBytes` or on a cut message; `WriteAsync`). **`CompanionWire`**: one line per message
+  on the local channel (`ReadLineAsync(stream, maxBytes)`, `WriteLineAsync`).
+- **`CompanionEndpoint`**: `ForDataDirectory(dir)` → where the app listens (`PipeName`: a named pipe
+  on Windows, from the user, session and folder; a Unix socket in `$XDG_RUNTIME_DIR` or the data folder
+  elsewhere); `CreateServer(maxInstances, first)` (on Windows the first instance fails if the name is
+  taken), `CreateClient()`, `RemoveLeftoverSocket()`. Both ends use `PipeOptions.CurrentUserOnly`.
+  **`CompanionClient`**: `SendAsync(endpoint, request, connectTimeout, replyTimeout)` → the reply, or
+  null when nothing listens.
+- **`NativeHost`**: `TryIdentifyCaller(args, out looksLikeHostLaunch)` (Chrome's and Firefox's
+  command lines, our extension ids only); `new NativeHost(caller, forward, launchApp, startWait?)`;
+  `RunAsync(stdin, stdout)`; `HandleAsync(message)`. A `pay` or `show` for an app that isn't running
+  starts it with `launchApp` (see **`DetachedLauncher`**: `Launch(exe)` outside the browser's job or
+  process group; `AllowAnyForeground()`).
+- **`BrowserRegistration`**: `HostName`, `ChromeExtensionIds`, `FirefoxExtensionIds`;
+  `ManifestJson(browser, exe)`, `ManifestPath(browser, paths)`, `RegistryKey(browser)`,
+  `Status(browser, exe, paths, registry)` → `RegistrationState` (`NotRegistered`, `Registered`,
+  `Elsewhere`, `Unsupported`), `Register`, `Unregister`. `BrowserPaths(Home, ConfigHome, DataHome,
+  AppLocalData)` (`ForCurrentUser`), `IUserRegistry` and `WindowsUserRegistry` (HKCU only).
+- **`MoneroLinkRegistration`**: `IsSupported` (Windows, Linux), `Status`, `Register`, `Unregister`
+  (leaves another program's registration alone), `WindowsUserChoiceOverrides(registry)`,
+  `WindowsCommand(exe)`.
 
 ### `XaultWallet.Core.Diagnostics`
 - **`Log`**: `Initialize(dir)`, `Info/Warn/Error`. Thread-safe file logger. Never log secrets, or

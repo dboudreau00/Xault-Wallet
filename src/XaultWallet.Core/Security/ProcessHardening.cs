@@ -7,8 +7,10 @@ namespace XaultWallet.Core.Security;
 
 /// <summary>
 /// Enhanced Security's memory protection (Windows): other programs running as the same user can no
-/// longer read or write the memory of XaultWallet and of the monero-wallet-rpc it starts, inject code
-/// into them, or change these rules back. They can still see that the processes exist and end them.
+/// longer open XaultWallet, or the monero-wallet-rpc it starts, to read or write their memory or start a
+/// thread in them, or change these rules back. They can still see that the processes exist and end them.
+/// It does not stop code injection that needs no process handle (window hooks, or the threads, which keep
+/// their default access), and a program that opened a process before this ran keeps the access it got.
 /// <para>
 /// It replaces the process's access list with one that lets the user's own programs only query,
 /// wait for and end it, and takes away the implicit rights an owner has (an "OWNER RIGHTS" entry), so
@@ -27,6 +29,9 @@ public static class ProcessHardening
     /// <summary>On for the rest of this run once <see cref="Enable"/> has been called.</summary>
     public static bool Enabled { get; private set; }
 
+    /// <summary>This process's own access list was replaced (false when Windows refused it).</summary>
+    public static bool SelfProtected { get; private set; }
+
     /// <summary>Protect this process and every child started so far or later.</summary>
     public static void Enable()
     {
@@ -37,10 +42,13 @@ public static class ProcessHardening
 
         lock (Gate)
         {
+            bool self = Protect(GetCurrentProcess());
+            int error = Marshal.GetLastWin32Error();
+            SelfProtected |= self;
             Enabled = true;
-            if (!Protect(GetCurrentProcess()))
+            if (!self)
             {
-                Log.WarnOnce("hardening-self", $"Enhanced Security couldn't protect XaultWallet's memory (error {Marshal.GetLastWin32Error()}).");
+                Log.WarnOnce("hardening-self", $"Enhanced Security couldn't protect XaultWallet's memory (error {error}).");
             }
 
             Children.RemoveAll(HasExited);
@@ -171,6 +179,13 @@ public static class InputTrust
         0x020B, 0x020C, 0x020D,         // WM_XBUTTON*
         0x0240,                         // WM_TOUCH
         0x0246, 0x0247, 0x024E, 0x024F, // WM_POINTERDOWN, WM_POINTERUP, WM_POINTERWHEEL, WM_POINTERHWHEEL
+        0x00A4, 0x00A5, 0x00A6,         // WM_NCRBUTTON* (the window turns non-client presses into clicks)
+        0x00A7, 0x00A8, 0x00A9,         // WM_NCMBUTTON*
+        0x00AB, 0x00AC, 0x00AD,         // WM_NCXBUTTON*
+
+        // Left out on purpose: WM_NCLBUTTON* (dragging the window by its own title bar may arrive as a message
+        // the window sends itself) and the pointer update and non-client pointer messages, until a check on
+        // real touch and pen hardware shows they keep working.
     ];
 
     public const int OriginUnavailable = 0;
@@ -180,6 +195,12 @@ public static class InputTrust
 
     /// <summary>Whether <paramref name="message"/> is one this rule judges (the others always pass).</summary>
     public static bool IsAction(uint message) => Actions.Contains(message);
+
+    /// <summary>Whether the message being handled came from a device or the system: not sent from another
+    /// thread, and its source known to be hardware or the system. Used for any input message (a mouse
+    /// move counts as the user being there only when it is real).</summary>
+    public static bool IsFromDevice(bool sentByAnotherThread, int? origin) =>
+        !sentByAnotherThread && origin is OriginHardware or OriginSystem;
 
     /// <summary>
     /// Whether an action message may reach the window. <paramref name="sentByAnotherThread"/>: the
@@ -193,11 +214,6 @@ public static class InputTrust
             return true;
         }
 
-        if (sentByAnotherThread || origin is null)
-        {
-            return false;
-        }
-
-        return origin is OriginHardware or OriginSystem;
+        return IsFromDevice(sentByAnotherThread, origin);
     }
 }

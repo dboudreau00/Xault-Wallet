@@ -1,4 +1,3 @@
-using System.Text;
 using XaultWallet.Core.Security;
 
 namespace XaultWallet.Core.Companion;
@@ -19,58 +18,104 @@ public static class MoneroLinkRegistration
     private const string UserChoiceKey = @"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\monero\UserChoice";
     private const string DesktopFileName = "xaultwallet-monero-link.desktop";
     private const string MimeType = "x-scheme-handler/monero";
+    private const int MaxListBytes = 1024 * 1024;
 
     public static bool IsSupported => OperatingSystem.IsWindows() || OperatingSystem.IsLinux();
 
     /// <summary>The command Windows runs for a link: the executable, quoted, with the link as its one argument.</summary>
     public static string WindowsCommand(string executable) => "\"" + executable + "\" \"%1\"";
 
+    /// <summary>Whether this copy opens monero: links. Never throws: what can't be read counts as
+    /// another program's.</summary>
     public static RegistrationState Status(string executable, BrowserPaths paths, IUserRegistry? registry)
     {
         ArgumentNullException.ThrowIfNull(paths);
-        if (OperatingSystem.IsWindows())
+        try
         {
-            if (registry is null)
+            if (OperatingSystem.IsWindows())
             {
-                return RegistrationState.Unsupported;
+                if (registry is null)
+                {
+                    return RegistrationState.Unsupported;
+                }
+
+                string? command = registry.GetValue(CommandKey, string.Empty);
+                if (command is null)
+                {
+                    return RegistrationState.NotRegistered;
+                }
+
+                if (!string.Equals(command, WindowsCommand(executable), StringComparison.OrdinalIgnoreCase))
+                {
+                    return RegistrationState.Elsewhere;
+                }
+
+                // Other ways the shell could run something else for the same links: a COM handler, DDE, or
+                // another verb made the default. This app writes none of them.
+                return registry.GetValue(CommandKey, "DelegateExecute") is not null
+                       || registry.GetValue(ClassKey + @"\shell\open\ddeexec", string.Empty) is not null
+                       || (registry.GetValue(ClassKey + @"\shell", string.Empty) is { Length: > 0 } verb && !string.Equals(verb, "open", StringComparison.OrdinalIgnoreCase))
+                    ? RegistrationState.Elsewhere
+                    : RegistrationState.Registered;
             }
 
-            string? command = registry.GetValue(CommandKey, string.Empty);
-            if (command is null)
+            if (OperatingSystem.IsLinux())
             {
-                return RegistrationState.NotRegistered;
+                string? handler = DefaultHandler(paths);
+                if (handler is null)
+                {
+                    return RegistrationState.NotRegistered;
+                }
+
+                return handler == DesktopFileName && IsOurDesktopFile(paths, executable) ? RegistrationState.Registered : RegistrationState.Elsewhere;
             }
 
-            return string.Equals(command, WindowsCommand(executable), StringComparison.OrdinalIgnoreCase) ? RegistrationState.Registered : RegistrationState.Elsewhere;
+            return RegistrationState.Unsupported;
         }
-
-        if (OperatingSystem.IsLinux())
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            string? handler = DefaultHandler(paths);
-            if (handler is null)
-            {
-                return RegistrationState.NotRegistered;
-            }
-
-            if (handler != DesktopFileName)
-            {
-                return RegistrationState.Elsewhere;
-            }
-
-            string desktop = DesktopFilePath(paths);
-            return File.Exists(desktop) && File.ReadAllText(desktop).Contains("\nExec=" + DesktopExec(executable) + "\n", StringComparison.Ordinal)
-                ? RegistrationState.Registered
-                : RegistrationState.Elsewhere;
+            return RegistrationState.Elsewhere;
         }
+    }
 
-        return RegistrationState.Unsupported;
+    /// <summary>What opens monero: links now, as the registration has it (the command on Windows, the
+    /// desktop file on Linux), to say what a change replaces; null when nothing does or it can't be read.
+    /// Written by whoever registered it: clean it before showing it.</summary>
+    public static string? CurrentHandler(BrowserPaths paths, IUserRegistry? registry)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        try
+        {
+            return OperatingSystem.IsWindows() ? registry?.GetValue(CommandKey, string.Empty)
+                : OperatingSystem.IsLinux() ? DefaultHandler(paths)
+                : null;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return null;
+        }
     }
 
     /// <summary>On Windows: true when the user picked another app for monero: links in Windows' own
-    /// "default apps" settings, which outranks any registration made here.</summary>
-    public static bool WindowsUserChoiceOverrides(IUserRegistry? registry) =>
-        OperatingSystem.IsWindows() && registry?.GetValue(UserChoiceKey, "ProgId") is { Length: > 0 } progId
-        && !string.Equals(progId, Scheme, StringComparison.OrdinalIgnoreCase);
+    /// "default apps" settings, which outranks any registration made here (and when that choice can't
+    /// be read).</summary>
+    public static bool WindowsUserChoiceOverrides(IUserRegistry? registry)
+    {
+        if (!OperatingSystem.IsWindows() || registry is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            return registry.GetValue(UserChoiceKey, "ProgId") is { Length: > 0 } progId
+                   && !string.Equals(progId, Scheme, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return true;
+        }
+    }
 
     public static void Register(string executable, BrowserPaths paths, IUserRegistry? registry)
     {
@@ -85,6 +130,12 @@ public static class MoneroLinkRegistration
             if (registry is null)
             {
                 throw new PlatformNotSupportedException("Opening monero: links needs the registry on Windows.");
+            }
+
+            // The command's "%1" is the link: a path holding % or a quote could be rewritten by it.
+            if (executable.IndexOfAny(['%', '"']) >= 0)
+            {
+                throw new ArgumentException("XaultWallet's path has a character a link command can't hold (% or \"). Move it to a plainer folder.", nameof(executable));
             }
 
             // A protocol another program registered for this user is replaced: the user asked for it.
@@ -109,7 +160,8 @@ public static class MoneroLinkRegistration
         SetDefaultHandler(paths, DesktopFileName);
     }
 
-    /// <summary>Undo <see cref="Register"/>; a registration that belongs to another program is left alone.</summary>
+    /// <summary>Undo <see cref="Register"/>. A registration that belongs to another program, or to
+    /// another copy of XaultWallet, is left alone.</summary>
     public static void Unregister(string executable, BrowserPaths paths, IUserRegistry? registry)
     {
         ArgumentNullException.ThrowIfNull(paths);
@@ -123,7 +175,8 @@ public static class MoneroLinkRegistration
             return;
         }
 
-        if (!OperatingSystem.IsLinux())
+        // The desktop file is this copy's only when it runs this executable; the default naming it goes with it.
+        if (!OperatingSystem.IsLinux() || !IsOurDesktopFile(paths, executable))
         {
             return;
         }
@@ -133,11 +186,7 @@ public static class MoneroLinkRegistration
             SetDefaultHandler(paths, null);
         }
 
-        string desktop = DesktopFilePath(paths);
-        if (File.Exists(desktop))
-        {
-            File.Delete(desktop);
-        }
+        File.Delete(DesktopFilePath(paths));
     }
 
     internal static string DesktopFilePath(BrowserPaths paths) => Path.Combine(paths.DataHome, "applications", DesktopFileName);
@@ -156,17 +205,57 @@ public static class MoneroLinkRegistration
         return "\"" + executable + "\" %u";
     }
 
+    /// <summary>Whether the desktop file this app writes is there, a plain file, and its [Desktop Entry]
+    /// runs <paramref name="executable"/> (one Exec key, exactly this app's command).</summary>
+    private static bool IsOurDesktopFile(BrowserPaths paths, string executable)
+    {
+        string expected;
+        try
+        {
+            expected = DesktopExec(executable);
+        }
+        catch (ArgumentException)
+        {
+            return false; // this app never writes one for such a path
+        }
+
+        var info = new FileInfo(DesktopFilePath(paths));
+        if (!info.Exists || info.LinkTarget is not null || info.Length is 0 or > 64 * 1024)
+        {
+            return false;
+        }
+
+        var execs = new List<string>();
+        bool inEntry = false;
+        foreach (string raw in File.ReadLines(info.FullName))
+        {
+            string line = raw.Trim();
+            if (line.StartsWith('['))
+            {
+                inEntry = line == "[Desktop Entry]";
+                continue;
+            }
+
+            if (inEntry && KeyOf(line) == "Exec")
+            {
+                execs.Add(ValueOf(line));
+            }
+        }
+
+        return execs.Count == 1 && execs[0] == expected;
+    }
+
     /// <summary>The desktop file the user's mimeapps.list names for monero: links, if any.</summary>
     internal static string? DefaultHandler(BrowserPaths paths)
     {
-        string list = MimeAppsPath(paths);
-        if (!File.Exists(list))
+        var list = new FileInfo(MimeAppsPath(paths));
+        if (!list.Exists || list.Length is 0 or > MaxListBytes)
         {
-            return null;
+            return null; // nothing there (a pipe or a device reports no size and is never opened)
         }
 
         bool inDefaults = false;
-        foreach (string raw in File.ReadLines(list))
+        foreach (string raw in File.ReadLines(list.FullName))
         {
             string line = raw.Trim();
             if (line.StartsWith('['))
@@ -175,10 +264,9 @@ public static class MoneroLinkRegistration
                 continue;
             }
 
-            if (inDefaults && line.StartsWith(MimeType + "=", StringComparison.Ordinal))
+            if (inDefaults && KeyOf(line) == MimeType)
             {
-                string value = line[(MimeType.Length + 1)..].Trim();
-                string first = value.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? string.Empty;
+                string first = ValueOf(line).Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? string.Empty;
                 return first.Length > 0 ? first : null;
             }
         }
@@ -191,7 +279,13 @@ public static class MoneroLinkRegistration
     internal static void SetDefaultHandler(BrowserPaths paths, string? desktopFile)
     {
         string list = MimeAppsPath(paths);
-        List<string> lines = File.Exists(list) ? File.ReadAllLines(list).ToList() : new List<string>();
+        var info = new FileInfo(list);
+        if (info.Exists && info.Length > MaxListBytes)
+        {
+            throw new IOException("mimeapps.list is too large to edit.");
+        }
+
+        List<string> lines = info.Exists && info.Length > 0 ? File.ReadAllLines(list).ToList() : new List<string>();
         int section = lines.FindIndex(l => l.Trim() == "[Default Applications]");
         if (section < 0)
         {
@@ -215,19 +309,16 @@ public static class MoneroLinkRegistration
             end = lines.Count;
         }
 
-        int existing = lines.FindIndex(section + 1, end - section - 1, l => l.Trim().StartsWith(MimeType + "=", StringComparison.Ordinal));
-        if (desktopFile is null)
+        // Every monero: line of the section goes ("key = value" spacing included); one is written back.
+        for (int i = end - 1; i > section; i--)
         {
-            if (existing >= 0)
+            if (KeyOf(lines[i].Trim()) == MimeType)
             {
-                lines.RemoveAt(existing);
+                lines.RemoveAt(i);
             }
         }
-        else if (existing >= 0)
-        {
-            lines[existing] = MimeType + "=" + desktopFile + ";";
-        }
-        else
+
+        if (desktopFile is not null)
         {
             lines.Insert(section + 1, MimeType + "=" + desktopFile + ";");
         }
@@ -236,10 +327,22 @@ public static class MoneroLinkRegistration
         WriteAtomically(list, string.Join('\n', lines) + "\n");
     }
 
+    private static string? KeyOf(string line)
+    {
+        int eq = line.IndexOf('=');
+        return eq > 0 ? line[..eq].Trim() : null;
+    }
+
+    private static string ValueOf(string line) => line[(line.IndexOf('=') + 1)..].Trim();
+
+    /// <summary>Replace a file in one step, readable by this user only. A file kept as a link (a dotfiles
+    /// setup) is written where the link leads, and stays a link.</summary>
     private static void WriteAtomically(string path, string text)
     {
-        string tmp = path + ".xaultwallet.tmp";
-        File.WriteAllText(tmp, text, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-        File.Move(tmp, path, overwrite: true);
+        var info = new FileInfo(path);
+        string target = info.LinkTarget is not null ? info.ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? path : path;
+        string tmp = target + ".xaultwallet.tmp";
+        PrivateFiles.WriteAllText(tmp, text);
+        File.Move(tmp, target, overwrite: true);
     }
 }

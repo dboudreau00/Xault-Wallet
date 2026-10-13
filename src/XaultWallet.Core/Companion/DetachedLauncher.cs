@@ -41,6 +41,7 @@ public static class DetachedLauncher
         {
             if (CreateProcessW(null, commandLine, IntPtr.Zero, IntPtr.Zero, bInheritHandles: false, flags, IntPtr.Zero, directory, ref si, out PROCESS_INFORMATION pi))
             {
+                AllowForeground(pi.dwProcessId); // its window comes up in front of the browser
                 CloseHandle(pi.hThread);
                 CloseHandle(pi.hProcess);
                 return true;
@@ -136,23 +137,22 @@ public static class DetachedLauncher
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool CloseHandle(IntPtr handle);
 
-    /// <summary>Lets the app take the foreground when this process has the right to (it was started
-    /// by the browser the user just clicked in). Windows only; a no-op elsewhere or when it can't.</summary>
-    public static void AllowAnyForeground()
+    /// <summary>Lets the process <paramref name="processId"/> (XaultWallet) take the foreground, when this
+    /// process has the right to give it (it was started by the browser or the shell the user just
+    /// clicked in). Only that process: never every program. Windows only; a no-op elsewhere or when it can't.</summary>
+    public static void AllowForeground(int processId)
     {
-        if (OperatingSystem.IsWindows())
+        if (OperatingSystem.IsWindows() && processId > 0)
         {
             try
             {
-                AllowSetForegroundWindow(ASFW_ANY);
+                AllowSetForegroundWindow(processId);
             }
             catch (EntryPointNotFoundException)
             {
             }
         }
     }
-
-    private const int ASFW_ANY = -1;
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

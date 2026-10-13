@@ -1,5 +1,8 @@
 using System.Diagnostics;
 using System.IO.Pipes;
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+using System.Security.AccessControl;
 using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
@@ -9,10 +12,11 @@ namespace XaultWallet.Core.Companion;
 
 /// <summary>
 /// Where the running app listens for the browser companion and for monero: links: a named pipe on
-/// Windows, a Unix socket elsewhere. Only the same user can connect, and a client only accepts a server
-/// run by the same user (<see cref="PipeOptions.CurrentUserOnly"/>, which checks the peer's identity on
-/// every platform). The name is derived from the user, the login session and the app's data folder, so
-/// a second account, a second session, or a test profile each get their own.
+/// Windows, a Unix socket elsewhere. Only the same user can connect (on Windows only from this computer:
+/// the pipe refuses network logons), and a client only accepts a server run by the same user
+/// (<see cref="PipeOptions.CurrentUserOnly"/>, which checks the peer's identity on every platform). The
+/// name is derived from the user, the login session and the app's data folder, so a second account, a
+/// second session, or a test profile each get their own.
 /// </summary>
 public sealed class CompanionEndpoint
 {
@@ -20,6 +24,13 @@ public sealed class CompanionEndpoint
 
     /// <summary>The pipe's name on Windows; the socket's full path elsewhere.</summary>
     public string PipeName { get; }
+
+    /// <summary>False where the channel can't be made: a Unix socket's path is limited to about 104 bytes,
+    /// and a data folder deep enough to pass that leaves the companion and links off. They are never moved
+    /// to the shared temp folder instead, where another account could take the name first.</summary>
+    public bool IsUsable => OperatingSystem.IsWindows() || Encoding.UTF8.GetByteCount(PipeName) <= MaxSocketPathBytes;
+
+    private const int MaxSocketPathBytes = 100;
 
     /// <summary>The endpoint of the app whose data folder is <paramref name="dataDirectory"/>.</summary>
     public static CompanionEndpoint ForDataDirectory(string dataDirectory)
@@ -53,20 +64,33 @@ public sealed class CompanionEndpoint
     /// </summary>
     public NamedPipeServerStream CreateServer(int maxInstances, bool first = false)
     {
-        PipeOptions options = PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly;
-        if (first && OperatingSystem.IsWindows())
+        if (OperatingSystem.IsWindows())
         {
-            options |= PipeOptions.FirstPipeInstance;
+            // What CurrentUserOnly sets up (this user, full control, as the owner), plus a refusal for
+            // network logons: the same account signing in over the network is someone else's computer.
+            PipeOptions windowsOptions = PipeOptions.Asynchronous | (first ? PipeOptions.FirstPipeInstance : PipeOptions.None);
+            return NamedPipeServerStreamAcl.Create(PipeName, PipeDirection.InOut, maxInstances, PipeTransmissionMode.Byte, windowsOptions, 0, 0, ThisUserOnLocalLogons());
         }
 
-        var server = new NamedPipeServerStream(PipeName, PipeDirection.InOut, maxInstances, PipeTransmissionMode.Byte, options);
-        if (!OperatingSystem.IsWindows())
-        {
-            // The folder is private already; the socket itself is made owner-only as well.
-            try { File.SetUnixFileMode(PipeName, UnixFileMode.UserRead | UnixFileMode.UserWrite); } catch (IOException) { } catch (UnauthorizedAccessException) { }
-        }
+        var server = new NamedPipeServerStream(PipeName, PipeDirection.InOut, maxInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
 
+        // The folder is private already; the socket itself is made owner-only as well.
+        try { File.SetUnixFileMode(PipeName, UnixFileMode.UserRead | UnixFileMode.UserWrite); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         return server;
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static PipeSecurity ThisUserOnLocalLogons()
+    {
+        // The owner and the allowed identity are the token's owner, as CurrentUserOnly sets them: a client with
+        // CurrentUserOnly checks that owner against its own.
+        using WindowsIdentity me = WindowsIdentity.GetCurrent();
+        SecurityIdentifier owner = me.Owner ?? me.User ?? throw new UnauthorizedAccessException("No user identity for the companion channel.");
+        var security = new PipeSecurity();
+        security.SetOwner(owner);
+        security.AddAccessRule(new PipeAccessRule(owner, PipeAccessRights.FullControl, AccessControlType.Allow));
+        security.AddAccessRule(new PipeAccessRule(new SecurityIdentifier(WellKnownSidType.NetworkSid, null), PipeAccessRights.FullControl, AccessControlType.Deny));
+        return security;
     }
 
     /// <summary>A connecting end, for the native host and for a second launch with a link.</summary>
@@ -110,11 +134,18 @@ public static class CompanionClient
     /// <summary>
     /// The app's reply to <paramref name="request"/>, or null when no app is listening within
     /// <paramref name="connectTimeout"/>. A reply that doesn't come within <paramref name="replyTimeout"/>
-    /// throws <see cref="TimeoutException"/>.
+    /// throws <see cref="TimeoutException"/>. On Windows the app that answers may take the foreground
+    /// (this process was started by the browser or the shell the user is clicking in; the right is
+    /// passed to that one process, not to every program).
     /// </summary>
     public static async Task<byte[]?> SendAsync(CompanionEndpoint endpoint, byte[] request, TimeSpan connectTimeout, TimeSpan replyTimeout, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
+        if (!endpoint.IsUsable)
+        {
+            return null; // no app can be listening there
+        }
+
         await using NamedPipeClientStream client = endpoint.CreateClient();
         try
         {
@@ -133,6 +164,11 @@ public static class CompanionClient
             return null;
         }
 
+        if (OperatingSystem.IsWindows() && GetNamedPipeServerProcessId(client.SafePipeHandle, out uint server))
+        {
+            DetachedLauncher.AllowForeground((int)server);
+        }
+
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(replyTimeout);
         try
@@ -146,4 +182,8 @@ public static class CompanionClient
             throw new TimeoutException("XaultWallet didn't reply in time.");
         }
     }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetNamedPipeServerProcessId(Microsoft.Win32.SafeHandles.SafePipeHandle pipe, out uint serverProcessId);
 }

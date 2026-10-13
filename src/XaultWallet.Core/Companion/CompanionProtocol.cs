@@ -1,7 +1,7 @@
 using System.Buffers;
-using System.Text;
 using System.Text.Json;
 using XaultWallet.Core.Monero;
+using XaultWallet.Core.Security;
 
 namespace XaultWallet.Core.Companion;
 
@@ -199,10 +199,9 @@ public static class CompanionProtocol
         string cleanUri = string.Empty, cleanOrigin = string.Empty, cleanLabel = string.Empty;
         if (requestType == CompanionRequestType.Pay)
         {
-            string u = (uri ?? string.Empty).Trim();
-            if (u.Length == 0 || u.Length > MaxUriLength || !MoneroUri.IsUri(u) || HasControlCharacters(u))
+            if (CleanPaymentUri(uri) is not { } u)
             {
-                return Fail(out error, "A payment request needs a monero: link (at most 4096 characters, no line breaks).");
+                return Fail(out error, "A payment request needs a monero: link (at most 4096 characters, no line breaks or hidden characters).");
             }
 
             cleanUri = u;
@@ -348,79 +347,156 @@ public static class CompanionProtocol
         return buffer.WrittenSpan.ToArray();
     }
 
-    /// <summary>A reply from the app is passed on to the browser only if it is a JSON object of this
-    /// version answering this request, and small.</summary>
-    public static bool IsReplyTo(ReadOnlySpan<byte> reply, string id)
+    /// <summary>
+    /// The app's reply to <paramref name="request"/> as the browser gets it: rebuilt from the fields this
+    /// kind of request answers with, each one checked, so nothing else a program on the local channel
+    /// might add reaches the extension. Null when it isn't a usable answer to this request.
+    /// </summary>
+    public static byte[]? RebuildReply(ReadOnlySpan<byte> reply, CompanionRequest request)
     {
+        ArgumentNullException.ThrowIfNull(request);
         if (reply.Length == 0 || reply.Length > MaxReplyBytes)
         {
-            return false;
+            return null;
         }
 
         try
         {
             using JsonDocument doc = JsonDocument.Parse(reply.ToArray(), new JsonDocumentOptions { MaxDepth = 8 });
             JsonElement root = doc.RootElement;
-            return root.ValueKind == JsonValueKind.Object
-                && root.TryGetProperty("v", out JsonElement v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int version) && version == Version
-                && root.TryGetProperty("id", out JsonElement rid) && rid.ValueKind == JsonValueKind.String && rid.GetString() == id
-                && root.TryGetProperty("ok", out JsonElement ok) && ok.ValueKind is JsonValueKind.True or JsonValueKind.False;
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("v", out JsonElement v) || v.ValueKind != JsonValueKind.Number || !v.TryGetInt32(out int version) || version != Version
+                || TextOf(root, "id") != request.Id
+                || !root.TryGetProperty("ok", out JsonElement ok) || ok.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            {
+                return null;
+            }
+
+            if (ok.ValueKind == JsonValueKind.False)
+            {
+                if (!root.TryGetProperty("error", out JsonElement e) || e.ValueKind != JsonValueKind.Object
+                    || TextOf(e, "code") is not { } code || !CompanionErrors.All.Contains(code))
+                {
+                    return null;
+                }
+
+                string message = UntrustedText.Clean(TextOf(e, "message"), MaxMessageLength);
+                return Fail(request.Id, new CompanionError(code, message.Length > 0 ? message : "XaultWallet couldn't do that."));
+            }
+
+            switch (request.Type)
+            {
+                case CompanionRequestType.Status:
+                    string? state = TextOf(root, "state");
+                    string? network = TextOf(root, "network");
+                    string? appVersion = TextOf(root, "version");
+                    if (state is not ("unlocked" or "locked" or "setup") || (network is not null && NetworkOf(network) is null))
+                    {
+                        return null;
+                    }
+
+                    return Ok(request.Id, w =>
+                    {
+                        w.WriteString("app", "XaultWallet");
+                        if (appVersion is { Length: > 0 and <= 32 } && appVersion.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '+'))
+                        {
+                            w.WriteString("version", appVersion);
+                        }
+
+                        w.WriteString("state", state);
+                        if (network is not null)
+                        {
+                            w.WriteString("network", network);
+                            w.WriteBoolean("watchOnly", root.TryGetProperty("watchOnly", out JsonElement wo) && wo.ValueKind == JsonValueKind.True);
+                            w.WriteBoolean("ready", root.TryGetProperty("ready", out JsonElement ready) && ready.ValueKind == JsonValueKind.True);
+                        }
+                    });
+
+                case CompanionRequestType.Show:
+                    return Ok(request.Id);
+
+                case CompanionRequestType.Pay:
+                    string? result = TextOf(root, "result");
+                    return result is "shown" or "after-unlock" or "waiting" or "held" ? Ok(request.Id, w => w.WriteString("result", result)) : null;
+
+                default:
+                    string? address = TextOf(root, "address");
+                    string? addressNetwork = TextOf(root, "network");
+                    return address is { Length: 95 } && NetworkOf(addressNetwork) is { } kind && MoneroAddress.Problem(address, kind) is null
+                        ? Ok(request.Id, w =>
+                        {
+                            w.WriteString("address", address);
+                            w.WriteString("network", addressNetwork);
+                        })
+                        : null;
+            }
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
-            return false;
+            return null; // not JSON, or text that isn't valid UTF-8
         }
     }
 
+    /// <summary>The longest refusal message passed on to the browser.</summary>
+    public const int MaxMessageLength = 300;
+
+    /// <summary>The networks a reply may name, and the address format each uses (a private test chain
+    /// uses mainnet's).</summary>
+    private static Models.MoneroNetwork? NetworkOf(string? name) => name switch
+    {
+        "Mainnet" or "Regtest" => Models.MoneroNetwork.Mainnet,
+        "Stagenet" => Models.MoneroNetwork.Stagenet,
+        "Testnet" => Models.MoneroNetwork.Testnet,
+        _ => null,
+    };
+
+    private static string? TextOf(JsonElement element, string name) =>
+        element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    /// <summary>The checked form of a monero: link from outside (the browser, or the link a launch was
+    /// given): trimmed, at most <see cref="MaxUriLength"/> characters, nothing hidden in it; null when
+    /// it isn't one.</summary>
+    public static string? CleanPaymentUri(string? uri)
+    {
+        string u = (uri ?? string.Empty).Trim();
+        return u.Length > 0 && u.Length <= MaxUriLength && MoneroUri.IsUri(u) && !UntrustedText.HasHiddenCharacters(u) ? u : null;
+    }
+
     /// <summary>scheme://host[:port] of an http(s) page, with the host in its ASCII form (so a look-alike
-    /// in another script shows as xn--… instead of passing for the real name); null when it isn't one.</summary>
+    /// in another script shows as xn--… instead of passing for the real name) and an IPv6 address in
+    /// brackets; null when it isn't one.</summary>
     public static string? NormalizeOrigin(string? origin)
     {
         string o = (origin ?? string.Empty).Trim();
-        if (o.Length == 0 || o.Length > MaxOriginLength || HasControlCharacters(o)
+        if (o.Length == 0 || o.Length > MaxOriginLength || UntrustedText.HasHiddenCharacters(o)
             || !Uri.TryCreate(o, UriKind.Absolute, out Uri? u)
             || (u.Scheme != Uri.UriSchemeHttps && u.Scheme != Uri.UriSchemeHttp)
-            || u.IdnHost.Length == 0 || u.UserInfo.Length > 0)
+            || u.IdnHost.Length == 0 || u.UserInfo.Length > 0 || u.Port <= 0)
         {
             return null;
         }
 
-        return u.IsDefaultPort ? $"{u.Scheme}://{u.IdnHost}" : $"{u.Scheme}://{u.IdnHost}:{u.Port.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        string host = HostPart(u);
+        return u.IsDefaultPort ? $"{u.Scheme}://{host}" : $"{u.Scheme}://{host}:{u.Port.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
     }
 
-    /// <summary>The host part of a normalized origin, for showing ("shop.example").</summary>
+    /// <summary>The host part of a normalized origin, for showing ("shop.example", "[::1]").</summary>
     public static string HostOf(string origin) =>
-        Uri.TryCreate(origin, UriKind.Absolute, out Uri? u) ? u.IdnHost : string.Empty;
+        Uri.TryCreate(origin, UriKind.Absolute, out Uri? u) ? HostPart(u) : string.Empty;
 
-    /// <summary>A label as it will be stored: trimmed, control characters dropped, inner whitespace
-    /// collapsed; null when still too long.</summary>
+    /// <summary>True when <paramref name="origin"/> is a plain http page that isn't on this computer:
+    /// anyone on the network path could have changed what it showed.</summary>
+    public static bool IsInsecureOrigin(string origin) =>
+        Uri.TryCreate(origin, UriKind.Absolute, out Uri? u) && u.Scheme == Uri.UriSchemeHttp && !u.IsLoopback;
+
+    private static string HostPart(Uri u) => u.HostNameType == UriHostNameType.IPv6 ? "[" + u.IdnHost + "]" : u.IdnHost;
+
+    /// <summary>A label as it will be stored: hidden characters dropped (see <see cref="UntrustedText"/>),
+    /// whitespace collapsed, trimmed; null when still too long.</summary>
     public static string? CleanLabel(string? label)
     {
-        var sb = new StringBuilder();
-        bool space = false;
-        foreach (char c in (label ?? string.Empty).Trim())
-        {
-            if (char.IsWhiteSpace(c))
-            {
-                space = true; // tabs and line breaks too: one space between words
-                continue;
-            }
-
-            if (char.IsControl(c) || char.GetUnicodeCategory(c) is System.Globalization.UnicodeCategory.Format)
-            {
-                continue; // includes the bidirectional overrides that can make text read backwards
-            }
-
-            if (space && sb.Length > 0)
-            {
-                sb.Append(' ');
-            }
-
-            space = false;
-            sb.Append(c);
-        }
-
-        return sb.Length <= MaxLabelLength ? sb.ToString() : null;
+        string cleaned = UntrustedText.Clean(label, int.MaxValue);
+        return cleaned.Length <= MaxLabelLength ? cleaned : null;
     }
 
     private static bool IsValidId(string id)
@@ -439,19 +515,6 @@ public static class CompanionProtocol
         }
 
         return true;
-    }
-
-    private static bool HasControlCharacters(string s)
-    {
-        foreach (char c in s)
-        {
-            if (char.IsControl(c) || char.GetUnicodeCategory(c) is System.Globalization.UnicodeCategory.Format)
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private static string? ReadString(ref Utf8JsonReader reader) =>
@@ -495,12 +558,22 @@ public static class CompanionErrors
     /// <summary>The wallet on screen is still starting.</summary>
     public const string NotReady = "not-ready";
 
-    /// <summary>The user is in the middle of something (a payment being confirmed).</summary>
+    /// <summary>The user is in the middle of something (a payment being confirmed, a form they started,
+    /// a payment to check): the request changed nothing.</summary>
     public const string Busy = "busy";
+
+    /// <summary>The wallet on screen is watch-only: it can't pay.</summary>
+    public const string WatchOnly = "watch-only";
 
     /// <summary>Too many requests of this kind in a short time.</summary>
     public const string TooMany = "too-many";
 
     /// <summary>The app couldn't do it (the message says why).</summary>
     public const string Failed = "failed";
+
+    /// <summary>Every code a reply may carry: the native host passes no other on.</summary>
+    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
+    {
+        BadRequest, TooLarge, UnsupportedVersion, UnknownType, NotRunning, NoVault, Locked, NotReady, Busy, WatchOnly, TooMany, Failed,
+    };
 }

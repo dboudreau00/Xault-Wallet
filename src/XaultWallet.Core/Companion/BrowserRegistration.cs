@@ -26,6 +26,10 @@ public enum RegistrationState
     Unsupported,
 }
 
+/// <summary>A registration's state, and the program it leads to when that could be read (as the
+/// registration has it, written by whoever wrote it: clean it before showing it).</summary>
+public sealed record RegistrationCheck(RegistrationState State, string? Target = null);
+
 /// <summary>
 /// The folders the browsers look in for a native messaging host. Passed in, rather than read here,
 /// so tests can point them at a throwaway folder.
@@ -62,10 +66,17 @@ public interface IUserRegistry
 [System.Runtime.Versioning.SupportedOSPlatform("windows")]
 public sealed class WindowsUserRegistry : IUserRegistry
 {
+    /// <summary>The value as text; null when absent. A value of another kind (a number, binary data, a
+    /// list) throws <see cref="InvalidDataException"/>: something is there that this app didn't write.</summary>
     public string? GetValue(string subKey, string name)
     {
         using Microsoft.Win32.RegistryKey? key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(subKey, writable: false);
-        return key?.GetValue(name, null, Microsoft.Win32.RegistryValueOptions.DoNotExpandEnvironmentNames) as string;
+        return key?.GetValue(name, null, Microsoft.Win32.RegistryValueOptions.DoNotExpandEnvironmentNames) switch
+        {
+            null => null,
+            string text => text,
+            _ => throw new InvalidDataException("The registry value isn't text."),
+        };
     }
 
     public void SetValue(string subKey, string name, string value)
@@ -168,37 +179,68 @@ public static class BrowserRegistration
     public static string RegistryKey(CompanionBrowser browser) =>
         (browser == CompanionBrowser.Chrome ? @"Software\Google\Chrome\NativeMessagingHosts\" : @"Software\Mozilla\NativeMessagingHosts\") + HostName;
 
-    public static RegistrationState Status(CompanionBrowser browser, string executable, BrowserPaths paths, IUserRegistry? registry)
+    public static RegistrationState Status(CompanionBrowser browser, string executable, BrowserPaths paths, IUserRegistry? registry) =>
+        Check(browser, executable, paths, registry).State;
+
+    /// <summary>
+    /// Where <paramref name="browser"/>'s registration leads: its state, and the program its manifest names
+    /// when that could be read (as written there, by whoever wrote it: clean it before showing it). Never
+    /// throws: what can't be read counts as leading elsewhere.
+    /// </summary>
+    public static RegistrationCheck Check(CompanionBrowser browser, string executable, BrowserPaths paths, IUserRegistry? registry)
     {
-        string? manifest = ManifestPath(browser, paths);
-        if (manifest is null)
+        ArgumentNullException.ThrowIfNull(paths);
+        try
         {
-            return RegistrationState.Unsupported;
-        }
-
-        if (OperatingSystem.IsWindows())
-        {
-            if (registry is null)
+            string? manifest = ManifestPath(browser, paths);
+            if (manifest is null)
             {
-                return RegistrationState.Unsupported;
+                return new RegistrationCheck(RegistrationState.Unsupported);
             }
 
-            // The key decides which manifest the browser reads, wherever it is.
-            if (registry.GetValue(RegistryKey(browser), string.Empty) is not { Length: > 0 } named)
+            if (OperatingSystem.IsWindows())
             {
-                return RegistrationState.NotRegistered;
+                if (registry is null)
+                {
+                    return new RegistrationCheck(RegistrationState.Unsupported);
+                }
+
+                // The key decides which manifest the browser reads, wherever it is. This app writes a full
+                // local path; a relative, unexpanded or network one is someone else's.
+                string? named = registry.GetValue(RegistryKey(browser), string.Empty);
+                if (string.IsNullOrEmpty(named))
+                {
+                    return new RegistrationCheck(RegistrationState.NotRegistered);
+                }
+
+                if (!Path.IsPathFullyQualified(named) || named.StartsWith(@"\\", StringComparison.Ordinal))
+                {
+                    return new RegistrationCheck(RegistrationState.Elsewhere);
+                }
+
+                manifest = named;
             }
 
-            manifest = named;
-        }
+            var info = new FileInfo(manifest);
+            if (info.LinkTarget is not null)
+            {
+                return new RegistrationCheck(RegistrationState.Elsewhere); // this app writes a plain file, never a link
+            }
 
-        string? path = ReadPath(manifest);
-        if (path is null)
+            if (!info.Exists)
+            {
+                return new RegistrationCheck(RegistrationState.NotRegistered);
+            }
+
+            string? path = ReadPath(info);
+            return path is null
+                ? new RegistrationCheck(RegistrationState.Elsewhere)
+                : new RegistrationCheck(SamePath(path, executable) ? RegistrationState.Registered : RegistrationState.Elsewhere, path);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            return File.Exists(manifest) ? RegistrationState.Elsewhere : RegistrationState.NotRegistered;
+            return new RegistrationCheck(RegistrationState.Elsewhere); // unreadable: assume the worst
         }
-
-        return SamePath(path, executable) ? RegistrationState.Registered : RegistrationState.Elsewhere;
     }
 
     /// <summary>Point <paramref name="browser"/> at <paramref name="executable"/>, replacing any earlier
@@ -242,28 +284,45 @@ public static class BrowserRegistration
         }
     }
 
-    /// <summary>The "path" of a host manifest; null when it can't be read.</summary>
-    internal static string? ReadPath(string manifest)
-    {
-        try
-        {
-            if (!File.Exists(manifest) || new FileInfo(manifest).Length > 64 * 1024)
-            {
-                return null;
-            }
+    private const int MaxManifestBytes = 64 * 1024;
 
-            using JsonDocument doc = JsonDocument.Parse(File.ReadAllBytes(manifest));
-            return doc.RootElement.ValueKind == JsonValueKind.Object
-                   && doc.RootElement.TryGetProperty("path", out JsonElement p) && p.ValueKind == JsonValueKind.String
-                ? p.GetString()
-                : null;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+    /// <summary>The "path" of a host manifest; null when it isn't a manifest. Only a regular file of a
+    /// sensible size is opened (a pipe or a device reports no size and is left alone), and no more than
+    /// that is read. Throws when the file can't be read.</summary>
+    internal static string? ReadPath(FileInfo manifest)
+    {
+        if (manifest.Length is 0 or > MaxManifestBytes)
         {
             return null;
         }
+
+        byte[] buffer = new byte[MaxManifestBytes + 1];
+        int total = 0;
+        using (var stream = new FileStream(manifest.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+        {
+            int read;
+            while (total < buffer.Length && (read = stream.Read(buffer, total, buffer.Length - total)) > 0)
+            {
+                total += read;
+            }
+        }
+
+        if (total > MaxManifestBytes)
+        {
+            return null;
+        }
+
+        using JsonDocument doc = JsonDocument.Parse(buffer.AsMemory(0, total));
+        return doc.RootElement.ValueKind == JsonValueKind.Object
+               && doc.RootElement.TryGetProperty("path", out JsonElement p) && p.ValueKind == JsonValueKind.String
+            ? p.GetString()
+            : null;
     }
 
-    internal static bool SamePath(string a, string b) =>
-        string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+    /// <summary>Whether a manifest's "path" names exactly this executable, compared as written, which is
+    /// how the browser uses it. A relative path (Windows browsers resolve it against the manifest's folder),
+    /// or any roundabout spelling of the same file, counts as another program.</summary>
+    internal static bool SamePath(string path, string executable) =>
+        Path.IsPathFullyQualified(path)
+        && string.Equals(path, executable, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 }

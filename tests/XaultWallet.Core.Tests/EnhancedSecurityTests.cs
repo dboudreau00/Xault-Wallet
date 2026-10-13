@@ -107,31 +107,44 @@ public class EnhancedSecurityTests
         }
     }
 
-    /// <summary>Whether this process holds SeDebugPrivilege enabled (some elevated or service contexts do).</summary>
+    /// <summary>Whether this process holds SeDebugPrivilege enabled (some elevated or service contexts do).
+    /// PrivilegeCheck wants an impersonation token, so the process token is duplicated as one first.</summary>
     private static bool DebugPrivilegeEnabled()
     {
-        if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, out IntPtr token))
+        if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE, out IntPtr token))
         {
             return false;
         }
 
+        IntPtr impersonation = IntPtr.Zero;
         try
         {
-            if (!LookupPrivilegeValueW(null, "SeDebugPrivilege", out long luid))
+            if (!DuplicateToken(token, SecurityImpersonation, out impersonation) || !LookupPrivilegeValueW(null, "SeDebugPrivilege", out long luid))
             {
                 return false;
             }
 
             var set = new PRIVILEGE_SET { PrivilegeCount = 1, Control = 1, Luid = luid, Attributes = 0 };
-            return PrivilegeCheck(token, ref set, out bool enabled) && enabled;
+            return PrivilegeCheck(impersonation, ref set, out bool enabled) && enabled;
         }
         finally
         {
+            if (impersonation != IntPtr.Zero)
+            {
+                CloseHandle(impersonation);
+            }
+
             CloseHandle(token);
         }
     }
 
     private const uint TOKEN_QUERY = 0x0008;
+    private const uint TOKEN_DUPLICATE = 0x0002;
+    private const int SecurityImpersonation = 2;
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DuplicateToken(IntPtr token, int impersonationLevel, out IntPtr duplicate);
 
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     private struct PRIVILEGE_SET

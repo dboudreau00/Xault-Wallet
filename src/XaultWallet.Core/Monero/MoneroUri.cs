@@ -10,7 +10,8 @@ public sealed record MoneroPaymentRequest(string Address, decimal? Amount = null
 /// <c>monero:&lt;address&gt;?tx_amount=1.25&amp;tx_description=Rent%20July&amp;recipient_name=Alice</c>.
 /// Amounts are XMR with a dot as the decimal separator. Payment IDs (tx_payment_id) are a legacy
 /// feature integrated addresses replaced; a URI carrying one is refused rather than silently
-/// paid without it.
+/// paid without it. The description and recipient name come from whoever made the link: they are
+/// cleaned of anything that could change how the text around them reads, and shortened.
 /// </summary>
 public static partial class MoneroUri
 {
@@ -18,6 +19,12 @@ public static partial class MoneroUri
     private static partial System.Text.RegularExpressions.Regex StrictAmount();
 
     private const string Scheme = "monero:";
+
+    /// <summary>The longest description shown, in UTF-16 units (the companion extension shows as much).</summary>
+    public const int MaxDescriptionLength = 200;
+
+    /// <summary>The longest recipient name shown.</summary>
+    public const int MaxRecipientLength = 100;
 
     /// <summary>Build a URI for <paramref name="request"/>. The address is taken as is (validate it first).</summary>
     public static string Build(MoneroPaymentRequest request)
@@ -121,10 +128,10 @@ public static partial class MoneroUri
                         amount = parsed;
                         break;
                     case "tx_description":
-                        description = value.Trim();
+                        description = XaultWallet.Core.Security.UntrustedText.Clean(value, MaxDescriptionLength);
                         break;
                     case "recipient_name":
-                        recipient = value.Trim();
+                        recipient = XaultWallet.Core.Security.UntrustedText.Clean(value, MaxRecipientLength);
                         break;
                     case "tx_payment_id":
                         if (value.Trim().Length > 0)

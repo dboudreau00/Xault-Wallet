@@ -184,6 +184,87 @@ public class NativeHostTests
     }
 
     [Fact]
+    public async Task Show_Starts_The_App_And_A_Failed_Start_Says_It_Isnt_Running()
+    {
+        bool started = false;
+        var host = new NativeHost(CompanionCaller.Chrome,
+            (_, _) => Task.FromResult(started ? CompanionProtocol.Ok("s") : null),
+            launchApp: () => started = true,
+            startWait: TimeSpan.FromSeconds(10));
+        Assert.True(JsonDocument.Parse(await host.HandleAsync("""{"v":1,"id":"s","type":"show"}"""u8.ToArray())).RootElement.GetProperty("ok").GetBoolean());
+        Assert.True(started);
+
+        var cannot = new NativeHost(CompanionCaller.Chrome, (_, _) => Task.FromResult<byte[]?>(null), launchApp: () => false);
+        JsonElement reply = JsonDocument.Parse(await cannot.HandleAsync("""{"v":1,"id":"s","type":"show"}"""u8.ToArray())).RootElement;
+        Assert.Equal(CompanionErrors.NotRunning, reply.GetProperty("error").GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task A_Running_App_That_Is_Busy_Is_Waited_For_Never_Started_Twice()
+    {
+        int attempts = 0;
+        var host = new NativeHost(CompanionCaller.Firefox,
+            (_, _) => Task.FromResult(++attempts >= 3 ? CompanionProtocol.Ok("p", w => w.WriteString("result", "shown")) : null),
+            launchApp: () => throw new InvalidOperationException("a copy is running: it must not be started again"),
+            startWait: TimeSpan.FromSeconds(10),
+            appRunning: () => true);
+        JsonElement paid = JsonDocument.Parse(await host.HandleAsync(Encoding.UTF8.GetBytes($$"""{"v":1,"id":"p","type":"pay","uri":"monero:{{Address}}"}"""))).RootElement;
+        Assert.Equal("shown", paid.GetProperty("result").GetString());
+
+        var busy = new NativeHost(CompanionCaller.Chrome, (_, _) => Task.FromResult<byte[]?>(null), launchApp: () => false, appRunning: () => true);
+        JsonElement status = JsonDocument.Parse(await busy.HandleAsync("""{"v":1,"id":"b","type":"status"}"""u8.ToArray())).RootElement;
+        Assert.Equal(CompanionErrors.NotReady, status.GetProperty("error").GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Two_Messages_In_One_Run_Get_Two_Replies()
+    {
+        var host = new NativeHost(CompanionCaller.Chrome,
+            (line, _) => Task.FromResult<byte[]?>(CompanionProtocol.Ok(JsonDocument.Parse(line).RootElement.GetProperty("id").GetString()!, w => w.WriteString("state", "locked"))),
+            launchApp: () => false);
+        byte[] input = [.. Frame("""{"v":1,"id":"one","type":"status"}"""), .. Frame("""{"v":1,"id":"two","type":"status"}""")];
+        var output = new MemoryStream();
+
+        Assert.Equal(0, await host.RunAsync(new MemoryStream(input), output));
+        Assert.Equal(new[] { "one", "two" }, Replies(output.ToArray()).Select(r => r.GetProperty("id").GetString()).ToArray());
+    }
+
+    [Fact]
+    public async Task What_Goes_Wrong_Becomes_A_Fixed_Refusal()
+    {
+        // A reply that isn't UTF-8, and an exception whose text must not reach the browser.
+        byte[] notUtf8 = Encoding.UTF8.GetBytes("""{"v":1,"id":"x","ok":true,"state":"locked"}""");
+        notUtf8[^4] = 0xC3;
+        var garbled = new NativeHost(CompanionCaller.Chrome, (_, _) => Task.FromResult<byte[]?>(notUtf8), launchApp: () => false);
+        JsonElement refused = JsonDocument.Parse(await garbled.HandleAsync("""{"v":1,"id":"x","type":"status"}"""u8.ToArray())).RootElement;
+        Assert.Equal(CompanionErrors.Failed, refused.GetProperty("error").GetProperty("code").GetString());
+
+        var failing = new NativeHost(CompanionCaller.Chrome, (_, _) => throw new TimeoutException("C:\\Users\\someone\\secret detail"), launchApp: () => false);
+        string reply = Encoding.UTF8.GetString(await failing.HandleAsync("""{"v":1,"id":"y","type":"status"}"""u8.ToArray()));
+        Assert.DoesNotContain("secret", reply, StringComparison.Ordinal);
+        Assert.Contains(CompanionErrors.Failed, reply, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_Browser_That_Stops_Reading_Ends_The_Host_Quietly()
+    {
+        var host = new NativeHost(CompanionCaller.Chrome, (_, _) => Task.FromResult<byte[]?>(CompanionProtocol.Ok("q")), launchApp: () => false);
+        Assert.Equal(1, await host.RunAsync(new MemoryStream(Frame("""{"v":1,"id":"q","type":"show"}""")), new ClosedStream()));
+    }
+
+    /// <summary>The browser's end of the pipe, gone.</summary>
+    private sealed class ClosedStream : MemoryStream
+    {
+        public override void Write(byte[] buffer, int offset, int count) => throw new IOException("The pipe is being closed.");
+
+        public override void Write(ReadOnlySpan<byte> buffer) => throw new IOException("The pipe is being closed.");
+
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => throw new IOException("The pipe is being closed.");
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) => throw new IOException("The pipe is being closed.");
+    }
+
+    [Fact]
     public async Task An_Oversized_Frame_Gets_One_Error_And_Ends_The_Host()
     {
         byte[] header = new byte[4];

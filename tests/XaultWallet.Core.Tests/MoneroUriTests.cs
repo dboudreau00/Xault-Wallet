@@ -71,4 +71,28 @@ public class MoneroUriTests
     {
         Assert.Equal("monero:" + Address, MoneroUri.Build(new MoneroPaymentRequest(Address, 0m, "  ")));
     }
+
+    [Theory]
+    [InlineData("Rent%0AOpened%20from%20your%20bank", "Rent Opened from your bank")] // a line break can't fake a second line
+    [InlineData("Rent%E2%80%AE%20yaP", "Rent yaP")]                                  // nor a right-to-left override reverse the note
+    [InlineData("a%E2%80%A8b%E2%80%8Bc%EF%BB%BF", "a bc")]                           // line separator, zero-width space, BOM
+    [InlineData("%F3%A0%81%81tag", "tag")]                                           // a tag character (outside the BMP)
+    public void Decoded_Notes_Lose_Hidden_Characters(string encoded, string shown)
+    {
+        MoneroPaymentRequest? request = MoneroUri.TryParse($"monero:{Address}?tx_description={encoded}&recipient_name={encoded}", out _);
+        Assert.Equal(shown, request!.Description);
+        Assert.Equal(shown, request.RecipientName);
+    }
+
+    [Fact]
+    public void Long_Notes_Are_Shortened_Between_Characters()
+    {
+        string emoji = string.Concat(Enumerable.Repeat("%F0%9F%98%80", 300)); // 600 UTF-16 units
+        MoneroPaymentRequest? request = MoneroUri.TryParse($"monero:{Address}?tx_description={emoji}&recipient_name={new string('n', 4000)}", out _);
+
+        Assert.True(request!.Description.Length <= MoneroUri.MaxDescriptionLength);
+        Assert.EndsWith("...", request.Description);
+        Assert.False(char.IsHighSurrogate(request.Description[^4]));
+        Assert.Equal(MoneroUri.MaxRecipientLength, request.RecipientName.Length);
+    }
 }

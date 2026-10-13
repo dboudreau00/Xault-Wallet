@@ -336,40 +336,70 @@ the app, never in the browser.
 
 It reaches the app through the browser's native messaging (XaultWallet's own executable, started by
 the browser only for the extension the host manifest names) and a local channel only your user
-account can open (a named pipe, or a Unix socket in a private folder). Replies carry the state, the
-network of the wallet on screen and, when asked for, one new subaddress: never a wallet's name,
-balance or history. At most 6 payment requests and 5 new addresses a minute are accepted.
+account can open (a named pipe that also refuses connections from the network, or a Unix socket in a
+private folder). The native host passes back only the fields each kind of reply has, checked. Replies
+carry the state, the network of the wallet on screen and, when asked for, one new subaddress: never a
+wallet's name, balance or history. At most 6 payment requests, 5 new addresses, 10 *show* and 60
+*status* requests a minute are accepted.
 
-**Tripwire.** At every start the app checks that each browser connection it set up still leads to
-it. A connection repointed to another program (to stand in for XaultWallet, for example to hand the
-browser its own "receive" address) brings up a warning; one that was simply removed is forgotten.
-On Windows the app also notices when another program created its channel first.
+**Requests in the app.** A request's own words (a description, a recipient name) are cleaned of
+anything that changes how text reads (line breaks, right-to-left overrides, invisible characters) and
+shown in quotes after where the request came from. A request never replaces a payment being confirmed,
+and one that would replace a form you filled, or a payment that may have gone out and needs checking,
+waits behind *Open it* instead. *Review* and *Send now* ignore clicks for a moment after a request
+lands or the confirmation appears. A new receive address is announced across the top of the window
+with its start and end, and only while the wallet is on screen. While the app is locked, the lock
+screen says only that a request waits, not where it came from; a request waits at most 10 minutes.
+
+**Which profile is open.** The browser can ask for the network of the wallet on screen and whether it
+is watch-only. If your decoy wallet differs from your real one in either, the browser (or a program on
+your computer) can tell them apart; keep them the same if that matters to you.
+
+**Tripwire.** At every start, and when the window comes back to the front, the app checks that each
+browser connection it set up still leads to it, comparing the exact path it wrote. A connection
+repointed to another program (to stand in for XaultWallet, for example to hand the browser its own
+"receive" address) brings up a warning naming that program; one that was removed is reported once,
+then forgotten. On Windows the app also notices when another program created its channel before
+XaultWallet started.
 
 What it can't stop: a program running as you can rewrite those registrations, talk to the channel
 itself (proposing payments you must still confirm, or asking for subaddresses), or simply read your
-files and keystrokes. The companion adds nothing such a program could steal; the tripwire makes the
-cheapest abuse visible.
+files and keystrokes. The companion adds nothing such a program could steal, but it can make the
+browser show an address of its own: by repointing a registration (the tripwire warns about that), by
+answering on the channel in XaultWallet's place, or by editing an extension you loaded unpacked.
+XaultWallet announces every address it gives the browser with its first and last characters; check
+that, or the Receive tab, before you rely on an address the browser shows.
 
 ## Enhanced Security
 
 Settings, *Enhanced Security* (Windows, off by default). While it is on:
 
-- **Screen capture.** The window is left out of screenshots, screen recordings, Windows Recall and
-  remote viewing (`SetWindowDisplayAffinity` with `WDA_EXCLUDEFROMCAPTURE`, the protection VeraCrypt
-  uses; Windows before 10 2004 shows it black instead). Menus and lists are drawn inside the window
-  so they share it. A camera pointed at the screen still sees it, and Microsoft documents this as
-  content protection, not a security boundary.
-- **Input.** Only input Windows reports as coming from a device (or from the system, or from an
-  accessibility program Windows trusts with UIAccess, such as its on-screen keyboard) can press a key
-  or a button in XaultWallet (`GetCurrentInputMessageSource`). Input injected with `SendInput`, and fake
-  window messages posted or sent by another program (how hidden-VNC malware drives a window), are
-  dropped and logged once. Typed characters alone can fill a field but never act.
+- **Screen capture.** The window is left out of screenshots, screen recordings, Windows Recall, and
+  screen sharing and remote-viewing tools that capture the screen (`SetWindowDisplayAffinity` with
+  `WDA_EXCLUDEFROMCAPTURE`, the protection VeraCrypt uses; Windows before 10 2004 shows it black
+  instead). When Enhanced Security is on as XaultWallet starts, menus and lists are drawn inside the
+  window so they share it; after turning it on in Settings, restart XaultWallet for them to be covered.
+  Windows' own file dialogs (where to save a backup, for example) are separate windows and are not
+  covered. A camera pointed at the screen still sees it, and Microsoft documents this as content
+  protection, not a security boundary.
+- **Input.** Only key presses and clicks Windows reports as coming from a device (or from the system,
+  or from an accessibility program Windows trusts with UIAccess, such as its on-screen keyboard) act in
+  XaultWallet (`GetCurrentInputMessageSource`). Input injected with `SendInput`, and fake window
+  messages posted or sent by another program (how hidden-VNC malware drives a window), are dropped and
+  logged once. Windows documents how it labels sent messages but not posted ones; XaultWallet's tests
+  check that injected ones are dropped. A program can still type characters into the field that has
+  focus (it can't press Enter or click), and mouse moves are not checked, though only moves from a
+  device keep the wallet from locking itself when you're away.
 - **Accessibility.** The window answers no UI Automation or MSAA requests, so other programs can
   neither read its text (addresses, balances, a seed being shown) nor press its buttons that way.
-- **Memory.** XaultWallet and the monero-wallet-rpc it starts get an access list that lets other
-  programs of your account only see that they exist and end them: not read or write their memory,
-  inject code, or change that list back (an "OWNER RIGHTS" entry takes away the owner's implicit right
-  to). Programs running as an administrator or with the debug privilege are not stopped by it.
+- **Memory.** XaultWallet and the monero-wallet-rpc it starts get an access list that stops other
+  programs of your account from opening them to read or write their memory or to start a thread in
+  them, and from changing that list back (an "OWNER RIGHTS" entry takes away the owner's implicit right
+  to). It closes the common way in, not every way: a program running as you can still get code into
+  XaultWallet without opening it (a window hook, or through one of its threads), a program that opened
+  XaultWallet before the list was applied keeps its access, and programs running as an administrator
+  or with the debug privilege are not stopped at all. (The published app also ignores
+  `DOTNET_STARTUP_HOOKS`, which any program can set for your account.)
 - **Hidden desktops.** XaultWallet refuses to start (exit code 4, a line in the log) on a desktop
   other than the one you see (`WinSta0\Default`): hidden-VNC malware starts its programs on a desktop
   of its own.
@@ -377,13 +407,22 @@ Settings, *Enhanced Security* (Windows, off by default). While it is on:
 The costs: screen readers, voice control, password-manager auto-type and remote-control tools can't
 operate XaultWallet while it is on. Turning it on asks for one click in the next 20 seconds; if the
 click doesn't get through (an input device Windows doesn't report as one), Enhanced Security turns
-itself off again, so you can't be locked out by it. Turning it off applies at once to the window; the
-memory protection stays until the app restarts.
+itself off again, and it is kept on only once you click *Keep it on* (if XaultWallet closes first, it
+starts without it and says so). If it stops accepting your input later (a remote-control tool, a
+software KVM or a key remapper, for example), XaultWallet says so after a few ignored presses: close
+XaultWallet from the taskbar and start it once with `XaultWallet.exe --no-enhanced-security`, or set
+`"EnhancedSecurity": false` in `settings.json` in XaultWallet's data folder while it is closed.
+Uninstalling keeps your settings, so reinstalling doesn't turn it off. Turning it off applies at once
+to the window; the memory protection stays until the app restarts. Turning it on says which parts
+Windows refused, if any.
 
 What it is not: the setting lives in `settings.json`, which a program running as you can change before
-the app starts; that program can also replace the app's files, read the vault file and log your
-password. Enhanced Security takes away the easy ways common malware watches and drives a wallet. It
-can't make an infected computer safe.
+the app starts; that program can also replace the app's files (including the libraries .NET unpacks
+into your temp folder when XaultWallet starts), make Windows load its own code into XaultWallet, read
+the vault file and log your password. It can also use the browser companion's channel to put a payment
+in the Send form, which is why every payment waits for your click on *Send now*. Enhanced Security
+takes away the easy ways common malware watches and drives a wallet. It can't make an infected computer
+safe.
 
 ## Choosing a daemon
 

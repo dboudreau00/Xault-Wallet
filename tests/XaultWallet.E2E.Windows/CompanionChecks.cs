@@ -89,7 +89,7 @@ internal static partial class Program
         {
             await driver.WaitForAsync("Unlock.PendingRequest", TimeSpan.FromSeconds(60), enabled: false);
             string note = await driver.ReadTextAsync("Unlock.PendingRequest");
-            if (!note.Contains("a monero: link", StringComparison.Ordinal))
+            if (!note.Contains("payment request is waiting", StringComparison.Ordinal))
             {
                 problems.Add("the unlock screen says: " + note);
             }
@@ -156,6 +156,7 @@ internal static partial class Program
         string settingsPath = Path.Combine(profile, "settings.json");
         var settings = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(File.ReadAllText(settingsPath))!;
         settings["EnhancedSecurity"] = JsonSerializer.SerializeToElement(true);
+        settings["EnhancedSecurityConfirmed"] = JsonSerializer.SerializeToElement(true); // as after a click on Keep it on
         File.WriteAllText(settingsPath, JsonSerializer.Serialize(settings));
         string logFile = Path.Combine(profile, "logs", "xaultwallet.log");
 
@@ -244,6 +245,114 @@ internal static partial class Program
             log("  refused to start on a hidden desktop (exit 4)");
         }
 
+        // 6. The way out when a computer's devices aren't seen as devices: "--no-enhanced-security"
+        // turns it off, and the app starts without it.
+        problems.AddRange(await StartAndCloseAsync(uia, exe, ["--no-enhanced-security"], "--no-enhanced-security", log));
+        if (ReadSetting(settingsPath, "EnhancedSecurity"))
+        {
+            problems.Add("--no-enhanced-security left Enhanced Security on in settings.json");
+        }
+
+        // 7. Turned on but never confirmed (the app closed during the countdown): the next start leaves it off and says so.
+        settings = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(File.ReadAllText(settingsPath))!;
+        settings["EnhancedSecurity"] = JsonSerializer.SerializeToElement(true);
+        settings["EnhancedSecurityConfirmed"] = JsonSerializer.SerializeToElement(false);
+        File.WriteAllText(settingsPath, JsonSerializer.Serialize(settings));
+        problems.AddRange(await StartAndCloseAsync(uia, exe, [], "Enhanced Security is off", log));
+        if (ReadSetting(settingsPath, "EnhancedSecurity"))
+        {
+            problems.Add("an unconfirmed Enhanced Security was still on after a start");
+        }
+
+        return problems;
+    }
+
+    private static bool ReadSetting(string settingsPath, string name) =>
+        JsonDocument.Parse(File.ReadAllText(settingsPath)).RootElement.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.True;
+
+    /// <summary>Starts the app (with <paramref name="args"/>), waits for its window, checks a notice
+    /// containing <paramref name="expect"/> when one is given (not for a command-line flag), and closes it.</summary>
+    private static async Task<List<string>> StartAndCloseAsync(UIA3Automation uia, string exe, string[] args, string expect, Action<string> log)
+    {
+        var problems = new List<string>();
+        var start = new ProcessStartInfo(exe) { WorkingDirectory = Path.GetDirectoryName(exe)!, UseShellExecute = false };
+        foreach (string arg in args)
+        {
+            start.ArgumentList.Add(arg);
+        }
+
+        using Application app = Application.Launch(start);
+        try
+        {
+            Window window = app.GetMainWindow(uia, TimeSpan.FromSeconds(120)) ?? throw new InvalidOperationException("no window");
+            if (args.Length == 0)
+            {
+                var driver = new UiaDriver(uia, window, app.ProcessId, Path.GetTempPath(), log);
+                await driver.WaitForAsync("Shell.Notice", TimeSpan.FromSeconds(30), enabled: false);
+                string notice = await driver.ReadTextAsync("Shell.NoticeText");
+                if (!notice.Contains(expect, StringComparison.Ordinal))
+                {
+                    problems.Add("the start-up notice says: " + notice);
+                }
+            }
+
+            log($"  started with {(args.Length == 0 ? "no arguments" : string.Join(" ", args))}: {expect}");
+        }
+        catch (Exception ex) when (ex is TimeoutException or InvalidOperationException)
+        {
+            problems.Add($"{expect}: {ex.Message}");
+        }
+        finally
+        {
+            using (Process p = Process.GetProcessById(app.ProcessId))
+            {
+                p.CloseMainWindow();
+            }
+
+            if (!WaitForExit(app.ProcessId, TimeSpan.FromSeconds(60)))
+            {
+                problems.Add($"{expect}: the app didn't close");
+                app.Kill();
+            }
+        }
+
+        return problems;
+    }
+
+    /// <summary>What the uninstallers run: every registration that leads to this program goes, and the
+    /// runner's registry is left as it was found.</summary>
+    private static List<string> CheckUninstallCleanup(string exe, Action<string> log)
+    {
+        var problems = new List<string>();
+        log("> The uninstallers' cleanup: --remove-registrations");
+        string? chromeManifest = Registry.CurrentUser.OpenSubKey(ChromeKey)?.GetValue(null) as string;
+        using (Process cleanup = Process.Start(new ProcessStartInfo(exe, "--remove-registrations") { UseShellExecute = false })!)
+        {
+            if (!cleanup.WaitForExit(60_000))
+            {
+                cleanup.Kill();
+                problems.Add("--remove-registrations didn't finish within a minute");
+            }
+            else if (cleanup.ExitCode != 0)
+            {
+                problems.Add($"--remove-registrations exited with {cleanup.ExitCode}");
+            }
+        }
+
+        foreach (string key in new[] { ChromeKey, FirefoxKey, LinkCommandKey })
+        {
+            if (Registry.CurrentUser.OpenSubKey(key) is { } left)
+            {
+                left.Dispose();
+                problems.Add($"HKCU\\{key} is still there after --remove-registrations");
+            }
+        }
+
+        if (chromeManifest is not null && File.Exists(chromeManifest))
+        {
+            problems.Add("the Chrome host manifest is still there after --remove-registrations");
+        }
+
         return problems;
     }
 
@@ -308,25 +417,33 @@ internal static partial class Program
         }
     }
 
+    /// <summary>Whether this process holds the debug privilege, enabled. PrivilegeCheck wants an
+    /// impersonation token, so the process token is duplicated as one first.</summary>
     private static bool DebugPrivilegeEnabled()
     {
-        if (!OpenProcessToken(GetCurrentProcess(), 0x0008, out IntPtr token))
+        if (!OpenProcessToken(GetCurrentProcess(), 0x0008 | 0x0002 /* TOKEN_QUERY | TOKEN_DUPLICATE */, out IntPtr token))
         {
             return false;
         }
 
+        IntPtr impersonation = IntPtr.Zero;
         try
         {
-            if (!LookupPrivilegeValueW(null, "SeDebugPrivilege", out long luid))
+            if (!DuplicateToken(token, 2 /* SecurityImpersonation */, out impersonation) || !LookupPrivilegeValueW(null, "SeDebugPrivilege", out long luid))
             {
                 return false;
             }
 
             var set = new PRIVILEGE_SET { PrivilegeCount = 1, Control = 1, Luid = luid };
-            return PrivilegeCheck(token, ref set, out bool enabled) && enabled;
+            return PrivilegeCheck(impersonation, ref set, out bool enabled) && enabled;
         }
         finally
         {
+            if (impersonation != IntPtr.Zero)
+            {
+                CloseHandle(impersonation);
+            }
+
             CloseHandle(token);
         }
     }
@@ -395,4 +512,7 @@ internal static partial class Program
 
     [DllImport("advapi32.dll", SetLastError = true)]
     private static extern bool PrivilegeCheck(IntPtr token, ref PRIVILEGE_SET privileges, out bool result);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool DuplicateToken(IntPtr token, int impersonationLevel, out IntPtr duplicate);
 }

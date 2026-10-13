@@ -88,4 +88,6 @@ Filename: "{app}\XaultWallet.exe"; Description: "{cm:LaunchProgram,XaultWallet}"
 [UninstallRun]
 ; The browser connections and the monero: link handler made in Settings point at this program: they
 ; go with it (only those that point here). Installing a new version over this one doesn't run this.
-Filename: "{app}\XaultWallet.exe"; Parameters: "--remove-registrations"; Flags: runhidden waituntilterminated; RunOnceId: "RemoveRegistrations"
+; Not in an all-users install: its uninstaller runs as an administrator, and would then run a program
+; from a folder a user may be able to change (and clean the administrator's settings, not the user's).
+Filename: "{app}\XaultWallet.exe"; Parameters: "--remove-registrations"; Flags: runhidden waituntilterminated; RunOnceId: "RemoveRegistrations"; Check: not IsAdminInstallMode

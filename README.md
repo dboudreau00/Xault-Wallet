@@ -27,9 +27,9 @@ installed, and fail-closed while it runs) and coin control come built in.
   [How-to #13](#13-pay-from-the-browser-companion-extension)
 - **`monero:` links open in XaultWallet** from any browser (Windows, Linux), when you choose it.
 - **Enhanced Security** (Windows, off by default): XaultWallet disappears from screenshots, screen
-  recordings and remote viewing, only your own keyboard, mouse or touchscreen can operate it (not
-  hidden-VNC malware), other programs can't read its window or its memory, and it won't run on a
-  hidden desktop. [How-to #14](#14-enhanced-security)
+  recordings and screen sharing, only your own keyboard, mouse or touchscreen can press its keys and
+  buttons (not hidden-VNC malware), other programs can't read its window or open its memory, and it
+  won't run on a hidden desktop. [How-to #14](#14-enhanced-security)
 - **The confirmation says which wallet pays**, and where a payment request came from.
 
 <p align="center">
@@ -97,7 +97,7 @@ installed, and fail-closed while it runs) and coin control come built in.
 | **Built-in Tor** | Choose *Tor, built in* and the app runs its own `tor`: node traffic, node checks and downloads go through it, and **nothing goes out directly while it connects** (fail closed). *Download & install Tor* checks Tor Project's signature (Tor Browser Developers key, pinned in the app) and the download's signed SHA-256 first. A badge on every wallet says how it reaches its node. |
 | **Coin control** | The **Coins** tab lists unspent coins with the address label they arrived at. **Freeze** one and no transaction spends it (Send max included) until you unfreeze it; the frozen list is sealed in the vault and survives a lock. |
 | **Browser companion** | A Chrome and Firefox extension pays `monero:` links and addresses from web pages and gets fresh receive addresses, through the app: it holds no key, seed or balance, stores nothing, and every payment is confirmed in XaultWallet. |
-| **Enhanced Security** | Optional (Windows): hidden from screenshots and remote viewing, operated only by your own keyboard, mouse or touchscreen (not by hidden-VNC malware), unreadable to other programs, never on a hidden desktop. |
+| **Enhanced Security** | Optional (Windows): hidden from screenshots and screen sharing, its buttons pressed only by your own keyboard, mouse or touchscreen (not by hidden-VNC malware), its window and memory closed to other programs' usual ways in, never on a hidden desktop. |
 | **Windows installers** | A per-user `setup.exe` or `.msi` (no admin rights), Start menu entry and uninstaller; the vault in `%APPDATA%` is never touched. Or keep using the zip. |
 | **Locked-down backend** | wallet-rpc runs on loopback with **per-session random credentials**, its files (wallet, log, ring database) live in one folder **shredded on lock**, and the app checks the port belongs to the process it started before sending it a seed or keys. |
 | **Hygiene by default** | Copied addresses/keys **auto-clear from the clipboard after 30 s**. Logs **redact seeds, passwords and keys** and record nothing that tells your two wallets apart. Auto-lock on inactivity. |
@@ -427,26 +427,33 @@ it, and while a wallet catches up the sync line estimates the time left.
    *This Firefox*, *Load Temporary Add-on* (until it is on addons.mozilla.org). Every step and the
    reasons behind it: [docs/BROWSER-COMPANION.md](docs/BROWSER-COMPANION.md).
 3. On a checkout page, click the XaultWallet button: it shows whether the app is unlocked and lists the
-   page's `monero:` links and addresses. **Pay** opens one in XaultWallet's Send tab, saying where it
-   came from; check the address against the page and confirm in the app. Or select an address,
-   right-click, **Pay with XaultWallet**.
-4. **New address** gives you a fresh subaddress of the wallet on screen, labelled with the site, to
-   paste into a form. The app shows the start and end of the same address in a notice.
+   `monero:` links and addresses you can see on the page, with the site's name and its own words in
+   quotes. **Pay** opens one in XaultWallet's Send tab, saying where it came from; check the address
+   against the page and confirm in the app. Or select an address, right-click, **Pay with XaultWallet**.
+   If the Send form already holds a payment you started, the request waits at the top of the window
+   until you click **Open it**.
+4. **New address** gives you a fresh subaddress of the wallet on screen, labelled *Browser:* and the
+   site, to paste into a form. The app shows the start and end of the same address across the top of
+   its window.
 5. Optional: **Open them here** next to *monero: links* makes any browser hand those links to
    XaultWallet (Windows, Linux), with or without the extension.
 
-A request that arrives while the vault is locked waits on the unlock screen. The browser never gets a
-key, a seed, a balance or a wallet's name.
+A request that arrives while the vault is locked waits for the unlock (the lock screen says only that
+one waits). The browser never gets a key, a seed, a balance or a wallet's name. Using the zip or tar
+copy? Disconnect browsers and links in Settings before you delete or move it.
 
 ### 14. Enhanced Security
 
 **Settings → Enhanced Security** (Windows, off by default), **Save changes**, then **Keep it on** in the
-bar that appears. While it is on, screenshots, recordings, Recall and remote viewing show nothing where
-XaultWallet is; only input from your own keyboard, mouse, touchscreen or pen operates it; other programs
-can't read its window through accessibility interfaces, or its memory and its wallet backend's; and it
-won't start on a hidden desktop. Screen readers, voice control, password-manager auto-type and
-remote-control tools can't operate it then. If your click doesn't get through within 20 seconds, it
-turns itself off again. What it can and can't do: [SECURITY.md](SECURITY.md#enhanced-security).
+bar that appears. While it is on, screenshots, recordings, Recall and screen sharing show nothing where
+XaultWallet is; only your own keyboard, mouse, touchscreen or pen can press its keys and buttons; other
+programs can't read its window through accessibility interfaces or open its memory (or its wallet
+backend's); and it won't start on a hidden desktop. Screen readers, voice control, password-manager
+auto-type and remote-control tools can't operate it then. If your click doesn't get through within 20
+seconds, it turns itself off again. It is saved as on only once you click **Keep it on**; to turn it
+off without a working keyboard or mouse, close XaultWallet and start it with
+`--no-enhanced-security`. Restart XaultWallet after turning it on, so its menus and lists are covered
+too. What it can and can't do: [SECURITY.md](SECURITY.md#enhanced-security).
 
 ---
 

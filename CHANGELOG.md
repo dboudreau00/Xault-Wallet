@@ -7,24 +7,32 @@ settings and wallets are unchanged**; nothing new happens until you use it.
 
 ### Browser companion (Chrome and Firefox)
 - **An extension for Chrome and Firefox** ([docs/BROWSER-COMPANION.md](docs/BROWSER-COMPANION.md)). Its
-  popup shows whether XaultWallet is running and unlocked, lists the `monero:` links and addresses on the
-  page you're on, opens one of them (or one you paste) in XaultWallet's Send tab, and gets a fresh
-  receive address labelled with the site. Right-click a selected address: *Pay with XaultWallet*.
+  popup shows whether XaultWallet is running and unlocked, lists the `monero:` links and addresses you can
+  see on the page you're on (naming the site, with the page's own words in quotes, and flagging plain
+  `http` pages), opens one of them (or one you paste) in XaultWallet's Send tab, and gets a fresh receive
+  address labelled with the site. Right-click a selected address: *Pay with XaultWallet*.
 - **It holds nothing.** No key, seed, password, balance, wallet name or history ever reaches the browser,
   and the extension stores nothing (no storage permission, no network access, no content scripts), so an
   infostealer that copies the browser profile gets nothing of the wallet. A payment request only fills
-  the Send form; you confirm it in the app, where the form and the confirmation say *Requested by your
-  browser (shop.example)*.
+  the Send form; you confirm it in the app, where the form and the confirmation say where it came from
+  (*your browser (shop.example)*) and that XaultWallet can't confirm who sent it. Its own words are
+  cleaned of line breaks, right-to-left overrides and invisible characters.
 - **How it connects.** Settings, *Browser companion*, *Connect* writes a native messaging host manifest
   (and on Windows a key under HKEY_CURRENT_USER) that lets only the companion's extension id start
   XaultWallet's own executable as its host; the host passes each checked request to the running app over
-  a local channel only your account can open. Requests while the vault is locked wait on the unlock
-  screen; *Pay* starts the app when it isn't running. Six payment requests and five new addresses a
-  minute at most.
-- **Tripwire.** At every start the app checks that each browser connection it made still leads to it,
-  and warns across the top of the window if one was repointed to another program (the way something
-  could stand in for XaultWallet and hand the browser its own address). On Windows it also says so when
-  another program took its channel's name first.
+  a local channel only your account can open (on Windows, not from the network either), and passes back
+  only the fields each reply has. Requests while the vault is locked wait for the unlock, at most 10
+  minutes (the lock screen says only that one waits); *Pay* starts the app when it isn't running. A
+  request never replaces a form you filled or a payment that may have gone out: it waits behind *Open
+  it*. Six payment requests, five new addresses, ten *show* and sixty *status* requests a minute at most.
+- **New addresses are announced** across the top of the app's window with their start and end (only
+  while the wallet is on screen), and labelled *Browser:* on the Receive tab.
+- **Tripwire.** At every start, and when the window comes back to the front, the app checks that each
+  browser connection it made still leads to it (the exact path it wrote), and warns across the top of
+  the window, naming the program, if one was repointed to another program (the way something could
+  stand in for XaultWallet and hand the browser its own address). On Windows it also says so when
+  another program took its channel's name first. (A removed connection is reported once; the channel
+  and the extension's own files are not covered, see SECURITY.md.)
 - **`monero:` links open in XaultWallet** (Windows and Linux), from any browser, once you choose *Open
   them here*. A second launch hands the link to the copy already running.
 - **Uninstalling removes them.** The setup and MSI uninstallers run `XaultWallet.exe
@@ -35,21 +43,25 @@ settings and wallets are unchanged**; nothing new happens until you use it.
   companion is on addons.mozilla.org, load it from `about:debugging` (or use Developer Edition).
 
 ### Enhanced Security (Windows, off by default)
-- Settings, *Enhanced Security*. While it is on, screenshots, screen recordings, Recall and remote viewing
-  show nothing where the window is (the same window flag VeraCrypt uses); only input Windows reports as
-  coming from a device operates the app, so input injected by another program and fake window messages
-  (how hidden-VNC malware drives a window) are dropped; the window answers no accessibility requests, so
+- Settings, *Enhanced Security*. While it is on, screenshots, screen recordings, Recall and screen sharing
+  show nothing where the window is (the same window flag VeraCrypt uses); only key presses and clicks Windows
+  reports as coming from a device act on the app, so input injected by another program and fake window
+  messages (how hidden-VNC malware drives a window) are dropped; the window answers no accessibility requests, so
   other programs can't read its text or press its buttons that way; XaultWallet and its monero-wallet-rpc
-  get an access list that keeps other programs of your account out of their memory; and the app refuses
-  to start on a desktop other than the one you see. Details and limits in
-  [SECURITY.md](SECURITY.md#enhanced-security).
+  get an access list that stops other programs of your account from opening their memory (not every way
+  in; see SECURITY.md); and the app refuses to start on a desktop other than the one you see. Details and
+  limits in [SECURITY.md](SECURITY.md#enhanced-security).
 - Screen readers, voice control, password-manager auto-type and remote-control tools can't operate
   XaultWallet while it is on. Turning it on asks for one click within 20 seconds and turns itself off
-  again without it, so an input device Windows doesn't count as one can't lock you out.
+  again without it; it is saved as on only after that click, and `--no-enhanced-security` turns it off
+  if it later stops accepting your input (the app says so after a few ignored presses). Turning it on
+  says which parts Windows refused, if any.
+- The published app ignores `DOTNET_STARTUP_HOOKS`, which any program can set for your account.
 
 ### Interface
 - **The confirmation says which wallet pays** ("From Everyday", with the account when there are several)
-  and, for a request from a link or the browser, where it came from.
+  and, for a request from a link or the browser, where it came from. *Review* and *Send now* ignore
+  clicks for a moment after a request lands or the confirmation appears.
 - A payment link for another network than the wallet on screen is flagged as soon as it fills the form,
   not at Review.
 - Settings warns before *Close* throws away unsaved changes.
@@ -58,10 +70,13 @@ settings and wallets are unchanged**; nothing new happens until you use it.
 - Every message and label in the app is now written without em dashes (the docs already were).
 
 ### For integrators of XaultWallet.Core
-- Added only: the `XaultWallet.Core.Companion` namespace (protocol, framing, endpoint, native host,
-  launcher, browser and `monero:` link registration) and `ProcessHardening` and `InputTrust` in
-  `XaultWallet.Core.Security`. `MoneroProcessManager` registers its monero-wallet-rpc with
-  `ProcessHardening` (a no-op until it is enabled). See [PUBLIC-API.md](PUBLIC-API.md).
+- Added: the `XaultWallet.Core.Companion` namespace (protocol, framing, endpoint, native host,
+  launcher, browser and `monero:` link registration) and `ProcessHardening`, `InputTrust` and
+  `UntrustedText` in `XaultWallet.Core.Security`. `MoneroProcessManager` registers its monero-wallet-rpc
+  with `ProcessHardening` (a no-op until it is enabled). See [PUBLIC-API.md](PUBLIC-API.md).
+- Changed: `MoneroUri.TryParse` now cleans a link's description and recipient name (control, format,
+  separator and invisible characters dropped, whitespace collapsed) and shortens them to 200 and 100
+  characters.
 
 ### Tests
 - Core unit tests for the protocol, the browsers' framing, the native host, the local channel (a real pipe
@@ -74,6 +89,11 @@ settings and wallets are unchanged**; nothing new happens until you use it.
   itself, checks the tripwire, and checks Enhanced Security from outside (memory closed, no accessibility
   tree, absent from a screen capture, an injected click ignored, no start on a hidden desktop).
 - Checked by hand before release: real Chromium and Firefox with the published Linux build as native host.
+- An adversarial review of the new code before release, in five parts and a final pass; its fixes are part
+  of this version, with tests for each: hidden characters, edge-of-limit sizes, replies rebuilt by kind,
+  odd manifests (relative, linked, empty, oversized, a pipe), registry values of the wrong kind, a held
+  request over the user's own form, the unconfirmed and command-line ways Enhanced Security is turned
+  off, and the uninstallers' cleanup.
 
 ## 0.6.0b-beta - 2026-10-11 - security hardening, BSD 3-Clause license
 

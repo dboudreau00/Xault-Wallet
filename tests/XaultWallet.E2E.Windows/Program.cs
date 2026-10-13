@@ -143,6 +143,9 @@ internal static partial class Program
             problems.AddRange(await CheckEnhancedSecurityAsync(uia, exe, profile, orangeBefore, log));
         }
 
+        // Last, whatever happened above: the registrations go, as an uninstall removes them.
+        problems.AddRange(CheckUninstallCleanup(exe, log));
+
         if (problems.Count > 0)
         {
             foreach (string p in problems)

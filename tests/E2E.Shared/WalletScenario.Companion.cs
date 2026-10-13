@@ -27,6 +27,7 @@ public sealed partial class WalletScenario
         await StepAsync("Browser companion: status, as the extension sees it", CompanionStatusAsync);
         await StepAsync("Browser companion: a new receive address, labelled, in the Receive list", CompanionReceiveAsync);
         await StepAsync("Browser companion: a payment request opens in the Send tab, with its source", CompanionPayAsync);
+        await StepAsync("Browser companion: a request over the user's own form waits behind Open it", CompanionPayHeldAsync);
         await StepAsync("Browser companion: a request while locked waits for the unlock", CompanionPayWhileLockedAsync);
         await StepAsync("Browser companion: what isn't in the protocol is refused", CompanionRefusesAsync);
     }
@@ -69,9 +70,9 @@ public sealed partial class WalletScenario
         string shortForm = CompanionAddress[..10] + "…" + CompanionAddress[^10..];
         await EventuallyAsync(
             () => _app.ReadTextsAsync("Receive.Addresses"),
-            texts => texts.Contains(CompanionLabel) && texts.Contains(shortForm),
+            texts => texts.Contains("Browser: " + CompanionLabel) && texts.Contains(shortForm),
             Seconds(30),
-            "the new address, labelled, in the Receive list");
+            "the new address, labelled as the browser's, in the Receive list");
         await ShotAsync("companion-receive");
     }
 
@@ -94,6 +95,26 @@ public sealed partial class WalletScenario
             "the request says what it is and where it came from: " + note);
     }
 
+    /// <summary>The user changes the amount of the request in the form (so the form is theirs now); the next
+    /// request doesn't replace it, it waits behind Open it, and opening it puts it in the form.</summary>
+    private async Task CompanionPayHeldAsync()
+    {
+        await _app.TypeAsync("Send.Amount", "0.5");
+        string uri = $"monero:{CompanionAddress}?tx_amount=0.75&tx_description=E2E%20order";
+        JsonElement r = await AskAsync($$"""{"v":1,"id":"pay3","type":"pay","uri":"{{uri}}","origin":"https://shop.example/checkout"}""");
+        Check(Ok(r) && Str(r, "result") == "held", "a request over the user's own form: " + r);
+        string amount = await _app.ReadTextAsync("Send.Amount");
+        Check(amount == "0.5", "the user's amount was replaced: " + amount);
+
+        await _app.WaitForAsync("Shell.HeldRequest", Seconds(10), enabled: false);
+        string held = await _app.ReadTextAsync("Shell.HeldRequestText");
+        Check(held.Contains("your browser (shop.example)", StringComparison.Ordinal), "the held request says where it came from: " + held);
+        await ShotAsync("companion-held");
+
+        await _app.ClickAsync("Shell.OpenHeldRequest");
+        await CheckRequestInSendAsync();
+    }
+
     private async Task CompanionPayWhileLockedAsync()
     {
         await LockAsync();
@@ -106,7 +127,9 @@ public sealed partial class WalletScenario
 
         await _app.WaitForAsync("Unlock.PendingRequest", Seconds(10), enabled: false);
         string note = await _app.ReadTextAsync("Unlock.PendingRequest");
-        Check(note.Contains("your browser (shop.example)", StringComparison.Ordinal), "the unlock screen says a request waits: " + note);
+        Check(note.Contains("payment request is waiting", StringComparison.Ordinal) && !note.Contains("shop.example", StringComparison.Ordinal)
+              && !note.Contains("browser", StringComparison.Ordinal),
+            "the unlock screen says a request waits, and nothing about it (anyone at the computer can read it): " + note);
         await ShotAsync("companion-waiting");
 
         await _app.TypeAsync("Unlock.Password", MainPassword);

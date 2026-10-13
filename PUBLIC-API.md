@@ -14,8 +14,10 @@ monero-wallet-rpc orchestration without the Avalonia desktop app.
 > [CHANGELOG.md](CHANGELOG.md#for-integrators-of-xaultwalletcore-1).
 > 0.6.0 only adds API: coin control on `MoneroWalletService`, `WalletSecrets.FrozenKeyImages` and the
 > `XaultWallet.Core.Tor` namespace. See [CHANGELOG.md](CHANGELOG.md#for-integrators-of-xaultwalletcore).
-> 0.7.0 only adds API: the `XaultWallet.Core.Companion` namespace (the browser companion's protocol,
-> transport and registration) and `ProcessHardening` and `InputTrust` in `XaultWallet.Core.Security`.
+> 0.7.0 adds API: the `XaultWallet.Core.Companion` namespace (the browser companion's protocol,
+> transport and registration) and `ProcessHardening`, `InputTrust` and `UntrustedText` in
+> `XaultWallet.Core.Security`. One behaviour changes: `MoneroUri.TryParse` cleans and shortens a link's
+> description and recipient name.
 
 ## Namespaces & surface
 
@@ -87,11 +89,15 @@ as `[]` when nothing is frozen, so the shape stays the same for every slot.
 
 - **`ProcessHardening`** (Windows): `Enable()` gives this process, and every child passed to
   `Track(process)` (before or after), an access list that lets other programs of the user only query,
-  wait for and end it (no memory access, no code injection, no changing the list back). `Enabled`,
-  `IsSupported`.
-- **`InputTrust`** (Windows): `IsAction(message)` and `IsTrusted(message, sentByAnotherThread, origin)`:
-  which key, button, wheel and pointer messages may act when Enhanced Security is on (device, system or
-  UIAccess input only).
+  wait for and end it (no opening for memory access or remote threads, no changing the list back;
+  threads keep their default access and window hooks still work). `Enabled`, `SelfProtected` (whether
+  Windows applied it to this process), `IsSupported`.
+- **`InputTrust`** (Windows): `IsAction(message)`, `IsTrusted(message, sentByAnotherThread, origin)` and
+  `IsFromDevice(sentByAnotherThread, origin)`: which key, button, wheel and pointer messages may act when
+  Enhanced Security is on (device, system or UIAccess input only).
+- **`UntrustedText`**: text from outside the app, as it may be shown. `HasHiddenCharacters(text)` (control,
+  format, line and paragraph separator, private-use, unassigned characters and lone surrogates, by code
+  point) and `Clean(text, maxLength)` (those dropped, whitespace collapsed, cut between characters).
 
 ### `XaultWallet.Core.Models`
 - **`WalletProfile`**: what one password opens: `Wallets`, `Contacts`, `ActiveWalletId` (opens
@@ -187,7 +193,9 @@ as `[]` when nothing is frozen, so the shape stays the same for every slot.
   `tx_amount`, `tx_description`, `recipient_name`); `IsUri(text)`; `TryParse(uri, out problem)` →
   `MoneroPaymentRequest` or null with a reason. Strict: an amount is digits with an optional `.` and
   up to 12 decimals (`1,5` is refused, never read as 1.5 or 15), and links with `tx_payment_id` or
-  several addresses are refused.
+  several addresses are refused. The description and recipient name come from whoever made the link:
+  they are cleaned (`UntrustedText.Clean`) and shortened to `MaxDescriptionLength` (200) and
+  `MaxRecipientLength` (100).
 - **`DaemonAddress`**: the one definition of a valid node URL. `IsLoopback(address)`: `localhost` or a
   loopback IP (`127.0.0.0/8`, `::1`).
 - **`MoneroDiagnostics`**: `ProbeWalletRpcAsync(binaryPath)` (runs `--version`; same full-path rule as a launch),
@@ -244,34 +252,45 @@ The browser companion and `monero:` links ([docs/BROWSER-COMPANION.md](docs/BROW
   `CompanionRequest(Id, Type, Via, Uri, Origin, Label)` or null and a `CompanionError(Code, Message)`
   (codes in `CompanionErrors`). Strict: one JSON object, `"v": 1`, an id of 1 to 64 letters, digits,
   `-` or `_`, a known `type` (`status`, `show`, `pay`, `receive`), no field twice, at most
-  `MaxRequestBytes`; a `pay` needs a `monero:` link of at most 4096 characters; `origin` is reduced to
-  `scheme://host[:port]` (ASCII host) by `NormalizeOrigin`; a `label` is cleaned by `CleanLabel` (no
-  control or direction characters, at most 40). With `via` given (the native host's own knowledge of
-  its caller) a `"via"` field in the request is ignored; without it, it is required (the local
-  channel). `Serialize(request)`, `Ok(id, body?)`, `Fail(id, error)`, `IsReplyTo(reply, id)`,
-  `TryReadId(json)`, `HostOf(origin)`.
+  `MaxRequestBytes`; a `pay` needs a `monero:` link that passes `CleanPaymentUri` (at most 4096
+  characters, nothing hidden in it); `origin` is reduced to `scheme://host[:port]` (ASCII host, an IPv6
+  address in brackets) by `NormalizeOrigin`; a `label` is cleaned by `CleanLabel` (at most 40). With
+  `via` given (the native host's own knowledge of its caller) a `"via"` field in the request is ignored;
+  without it, it is required (the local channel). `Serialize(request)`, `Ok(id, body?)`,
+  `Fail(id, error)`, `RebuildReply(reply, request)` (the reply as the browser gets it: only the fields
+  of that kind of request, each checked; null when it isn't a usable answer), `TryReadId(json)`,
+  `HostOf(origin)`, `IsInsecureOrigin(origin)` (a plain http page off this computer).
+  `CompanionErrors.All` lists every code, `watch-only` among them.
 - **`NativeMessaging`**: the browsers' framing (`ReadAsync`: null at a clean end, `InvalidDataException`
   past `MaxIncomingBytes` or on a cut message; `WriteAsync`). **`CompanionWire`**: one line per message
   on the local channel (`ReadLineAsync(stream, maxBytes)`, `WriteLineAsync`).
 - **`CompanionEndpoint`**: `ForDataDirectory(dir)` → where the app listens (`PipeName`: a named pipe
   on Windows, from the user, session and folder; a Unix socket in `$XDG_RUNTIME_DIR` or the data folder
   elsewhere); `CreateServer(maxInstances, first)` (on Windows the first instance fails if the name is
-  taken), `CreateClient()`, `RemoveLeftoverSocket()`. Both ends use `PipeOptions.CurrentUserOnly`.
-  **`CompanionClient`**: `SendAsync(endpoint, request, connectTimeout, replyTimeout)` → the reply, or
-  null when nothing listens.
+  taken), `CreateClient()`, `RemoveLeftoverSocket()`, `IsUsable` (false where a socket's path would be
+  too long). Clients use `PipeOptions.CurrentUserOnly`; on Windows the server's access list allows only
+  the user and refuses network logons. **`CompanionClient`**: `SendAsync(endpoint, request,
+  connectTimeout, replyTimeout)` → the reply, or null when nothing listens; on Windows it lets the
+  answering process take the foreground.
 - **`NativeHost`**: `TryIdentifyCaller(args, out looksLikeHostLaunch)` (Chrome's and Firefox's
-  command lines, our extension ids only); `new NativeHost(caller, forward, launchApp, startWait?)`;
-  `RunAsync(stdin, stdout)`; `HandleAsync(message)`. A `pay` or `show` for an app that isn't running
-  starts it with `launchApp` (see **`DetachedLauncher`**: `Launch(exe)` outside the browser's job or
-  process group; `AllowAnyForeground()`).
+  command lines, our extension ids only); `new NativeHost(caller, forward, launchApp, startWait?,
+  appRunning?)`; `RunAsync(stdin, stdout)`; `HandleAsync(message)` (never throws; replies rebuilt by
+  `RebuildReply`). A `pay` or `show` for an app that isn't running starts it with `launchApp`, and one
+  that is running but busy is waited for (see **`DetachedLauncher`**: `Launch(exe)` outside the
+  browser's job or process group; `AllowForeground(processId)`).
 - **`BrowserRegistration`**: `HostName`, `ChromeExtensionIds`, `FirefoxExtensionIds`;
   `ManifestJson(browser, exe)`, `ManifestPath(browser, paths)`, `RegistryKey(browser)`,
   `Status(browser, exe, paths, registry)` → `RegistrationState` (`NotRegistered`, `Registered`,
-  `Elsewhere`, `Unsupported`), `Register`, `Unregister`. `BrowserPaths(Home, ConfigHome, DataHome,
-  AppLocalData)` (`ForCurrentUser`), `IUserRegistry` and `WindowsUserRegistry` (HKCU only).
-- **`MoneroLinkRegistration`**: `IsSupported` (Windows, Linux), `Status`, `Register`, `Unregister`
-  (leaves another program's registration alone), `WindowsUserChoiceOverrides(registry)`,
-  `WindowsCommand(exe)`.
+  `Elsewhere`, `Unsupported`) and `Check(...)` → `RegistrationCheck(State, Target)` (the program a
+  registration leads to). Both never throw: what can't be read leads `Elsewhere`; the manifest's path
+  must be exactly the executable (a relative or roundabout path, a linked manifest, a relative or network
+  registry value lead elsewhere). `Register`, `Unregister`. `BrowserPaths(Home, ConfigHome, DataHome,
+  AppLocalData)` (`ForCurrentUser`), `IUserRegistry` and `WindowsUserRegistry` (HKCU only; a value
+  that isn't text throws `InvalidDataException`).
+- **`MoneroLinkRegistration`**: `IsSupported` (Windows, Linux), `Status` (never throws; a COM, DDE or
+  other-verb handler beside the command leads elsewhere), `CurrentHandler` (what opens links now),
+  `Register` (refuses a path with `%` or a quote on Windows), `Unregister` (leaves another program's,
+  or another copy's, registration alone), `WindowsUserChoiceOverrides(registry)`, `WindowsCommand(exe)`.
 
 ### `XaultWallet.Core.Diagnostics`
 - **`Log`**: `Initialize(dir)`, `Info/Warn/Error`. Thread-safe file logger. Never log secrets, or

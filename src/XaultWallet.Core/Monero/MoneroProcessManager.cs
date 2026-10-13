@@ -275,6 +275,10 @@ public sealed class MoneroProcessManager : IAsyncDisposable
             // the job handle and takes wallet-rpc (and the open wallet) down with it.
             WindowsChildJob.TryAssign(_process);
 
+            // Enhanced Security (Windows): its memory, which holds the open wallet, is closed to other
+            // programs too, now if it is on or as soon as it is turned on.
+            XaultWallet.Core.Security.ProcessHardening.Track(_process);
+
             // CRITICAL: drain both pipes, or a chatty child fills the pipe buffer and blocks.
             _process.OutputDataReceived += (_, _) => { /* discard stdout */ };
             // NOTE: the sender parameter must NOT be named "_": a single lambda parameter

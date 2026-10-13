@@ -1,0 +1,196 @@
+using System.Text.Json;
+using XaultWallet.Core.Companion;
+using Xunit;
+
+namespace XaultWallet.Core.Tests.Companion;
+
+/// <summary>A registry in memory: the tests never touch the real HKEY_CURRENT_USER.</summary>
+internal sealed class FakeRegistry : IUserRegistry
+{
+    public Dictionary<string, Dictionary<string, string>> Keys { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public string? GetValue(string subKey, string name) =>
+        Keys.TryGetValue(subKey, out Dictionary<string, string>? values) && values.TryGetValue(name, out string? v) ? v : null;
+
+    public void SetValue(string subKey, string name, string value)
+    {
+        if (!Keys.TryGetValue(subKey, out Dictionary<string, string>? values))
+        {
+            Keys[subKey] = values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        values[name] = value;
+    }
+
+    public void DeleteTree(string subKey)
+    {
+        foreach (string key in Keys.Keys.Where(k => k.Equals(subKey, StringComparison.OrdinalIgnoreCase) || k.StartsWith(subKey + "\\", StringComparison.OrdinalIgnoreCase)).ToList())
+        {
+            Keys.Remove(key);
+        }
+    }
+}
+
+/// <summary>Connecting the browsers and opening monero: links, in a throwaway home folder.</summary>
+public sealed class RegistrationTests : IDisposable
+{
+    private readonly string _root = Directory.CreateTempSubdirectory("xw-reg-").FullName;
+    private readonly BrowserPaths _paths;
+    private readonly FakeRegistry _registry = new();
+    private readonly string _exe;
+
+    public RegistrationTests()
+    {
+        _paths = new BrowserPaths(Path.Combine(_root, "home"), Path.Combine(_root, "config"), Path.Combine(_root, "data"), Path.Combine(_root, "local", "XaultWallet"));
+        _exe = Path.Combine(_root, "app", OperatingSystem.IsWindows() ? "XaultWallet.exe" : "XaultWallet");
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_root, recursive: true); } catch (IOException) { }
+    }
+
+    [Theory]
+    [InlineData(CompanionBrowser.Chrome, "allowed_origins", "chrome-extension://kpcmnhbbahdifkhgibnboafelgfkgcdj/")]
+    [InlineData(CompanionBrowser.Firefox, "allowed_extensions", "xaultwallet-companion@dboudreau.dev")]
+    public void Manifests_Name_The_Executable_And_Only_Our_Extension(CompanionBrowser browser, string list, string allowed)
+    {
+        using JsonDocument doc = JsonDocument.Parse(BrowserRegistration.ManifestJson(browser, @"C:\Program Files\XaultWallet\XaultWallet.exe"));
+        JsonElement m = doc.RootElement;
+        Assert.Equal("dev.dboudreau.xaultwallet", m.GetProperty("name").GetString());
+        Assert.Equal(@"C:\Program Files\XaultWallet\XaultWallet.exe", m.GetProperty("path").GetString());
+        Assert.Equal("stdio", m.GetProperty("type").GetString());
+        Assert.Equal(new[] { allowed }, m.GetProperty(list).EnumerateArray().Select(e => e.GetString()).ToArray());
+        Assert.Equal(5, m.EnumerateObject().Count());
+    }
+
+    [Fact]
+    public void The_Host_Name_Follows_The_Browsers_Rules() =>
+        Assert.Matches("^[a-z0-9_]+(\\.[a-z0-9_]+)*$", BrowserRegistration.HostName);
+
+    [Theory]
+    [InlineData(CompanionBrowser.Chrome)]
+    [InlineData(CompanionBrowser.Firefox)]
+    public void Connect_Check_And_Disconnect(CompanionBrowser browser)
+    {
+        Assert.Equal(RegistrationState.NotRegistered, BrowserRegistration.Status(browser, _exe, _paths, _registry));
+
+        BrowserRegistration.Register(browser, _exe, _paths, _registry);
+        Assert.Equal(RegistrationState.Registered, BrowserRegistration.Status(browser, _exe, _paths, _registry));
+        string manifest = BrowserRegistration.ManifestPath(browser, _paths)!;
+        Assert.True(File.Exists(manifest));
+        Assert.StartsWith(_root, manifest, StringComparison.Ordinal);
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Equal(manifest, _registry.GetValue(BrowserRegistration.RegistryKey(browser), string.Empty));
+        }
+
+        // Another copy (or anything else) taking the name over shows as "elsewhere".
+        string other = Path.Combine(_root, "other", Path.GetFileName(_exe));
+        BrowserRegistration.Register(browser, other, _paths, _registry);
+        Assert.Equal(RegistrationState.Elsewhere, BrowserRegistration.Status(browser, _exe, _paths, _registry));
+
+        BrowserRegistration.Register(browser, _exe, _paths, _registry);
+        BrowserRegistration.Unregister(browser, _paths, _registry);
+        Assert.Equal(RegistrationState.NotRegistered, BrowserRegistration.Status(browser, _exe, _paths, _registry));
+        Assert.False(File.Exists(manifest));
+        Assert.Empty(_registry.Keys);
+    }
+
+    [Fact]
+    public void A_Manifest_Repointed_Behind_The_Apps_Back_Is_Noticed()
+    {
+        BrowserRegistration.Register(CompanionBrowser.Chrome, _exe, _paths, _registry);
+        string manifest = BrowserRegistration.ManifestPath(CompanionBrowser.Chrome, _paths)!;
+        File.WriteAllText(manifest, BrowserRegistration.ManifestJson(CompanionBrowser.Chrome, Path.Combine(_root, "evil", "host")));
+
+        Assert.Equal(RegistrationState.Elsewhere, BrowserRegistration.Status(CompanionBrowser.Chrome, _exe, _paths, _registry));
+
+        File.WriteAllText(manifest, "not json");
+        Assert.Equal(RegistrationState.Elsewhere, BrowserRegistration.Status(CompanionBrowser.Chrome, _exe, _paths, _registry));
+    }
+
+    [Fact]
+    public void Relative_Executables_Are_Refused() =>
+        Assert.Throws<ArgumentException>(() => BrowserRegistration.Register(CompanionBrowser.Chrome, "XaultWallet.exe", _paths, _registry));
+
+    [Fact]
+    public void Monero_Links_On_Windows_Use_A_Per_User_Protocol()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        Assert.Equal(RegistrationState.NotRegistered, MoneroLinkRegistration.Status(_exe, _paths, _registry));
+        MoneroLinkRegistration.Register(_exe, _paths, _registry);
+        Assert.Equal(RegistrationState.Registered, MoneroLinkRegistration.Status(_exe, _paths, _registry));
+        Assert.Equal(string.Empty, _registry.GetValue(@"Software\Classes\monero", "URL Protocol"));
+        Assert.Equal("\"" + _exe + "\" \"%1\"", _registry.GetValue(@"Software\Classes\monero\shell\open\command", string.Empty));
+
+        // Another wallet taking monero: links over is "elsewhere", and unregistering leaves it alone.
+        _registry.SetValue(@"Software\Classes\monero\shell\open\command", string.Empty, "\"C:\\Other\\wallet.exe\" \"%1\"");
+        Assert.Equal(RegistrationState.Elsewhere, MoneroLinkRegistration.Status(_exe, _paths, _registry));
+        MoneroLinkRegistration.Unregister(_exe, _paths, _registry);
+        Assert.NotNull(_registry.GetValue(@"Software\Classes\monero\shell\open\command", string.Empty));
+
+        MoneroLinkRegistration.Register(_exe, _paths, _registry);
+        MoneroLinkRegistration.Unregister(_exe, _paths, _registry);
+        Assert.Empty(_registry.Keys);
+
+        Assert.False(MoneroLinkRegistration.WindowsUserChoiceOverrides(_registry));
+        _registry.SetValue(@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\monero\UserChoice", "ProgId", "FeatherWallet.monero");
+        Assert.True(MoneroLinkRegistration.WindowsUserChoiceOverrides(_registry));
+    }
+
+    [Fact]
+    public void Monero_Links_On_Linux_Use_A_Desktop_Entry_And_Keep_Mimeapps_Intact()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        string list = Path.Combine(_paths.ConfigHome, "mimeapps.list");
+        Directory.CreateDirectory(_paths.ConfigHome);
+        File.WriteAllText(list, "[Default Applications]\ntext/html=firefox.desktop\nx-scheme-handler/monero=feather.desktop;\n\n[Added Associations]\nimage/png=eog.desktop;\n");
+
+        Assert.Equal(RegistrationState.Elsewhere, MoneroLinkRegistration.Status(_exe, _paths, null));
+        MoneroLinkRegistration.Register(_exe, _paths, null);
+        Assert.Equal(RegistrationState.Registered, MoneroLinkRegistration.Status(_exe, _paths, null));
+
+        string text = File.ReadAllText(list);
+        Assert.Contains("text/html=firefox.desktop\n", text, StringComparison.Ordinal);
+        Assert.Contains("x-scheme-handler/monero=xaultwallet-monero-link.desktop;\n", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("feather", text, StringComparison.Ordinal);
+        Assert.Contains("[Added Associations]\nimage/png=eog.desktop;", text, StringComparison.Ordinal);
+
+        string entry = File.ReadAllText(Path.Combine(_paths.DataHome, "applications", "xaultwallet-monero-link.desktop"));
+        Assert.Contains("\nExec=\"" + _exe + "\" %u\n", entry, StringComparison.Ordinal);
+        Assert.Contains("\nMimeType=x-scheme-handler/monero;\n", entry, StringComparison.Ordinal);
+
+        MoneroLinkRegistration.Unregister(_exe, _paths, null);
+        Assert.Equal(RegistrationState.NotRegistered, MoneroLinkRegistration.Status(_exe, _paths, null));
+        Assert.Equal("[Default Applications]\ntext/html=firefox.desktop\n\n[Added Associations]\nimage/png=eog.desktop;\n", File.ReadAllText(list));
+    }
+
+    [Fact]
+    public void Monero_Links_On_Linux_Start_A_Missing_Mimeapps_File()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        MoneroLinkRegistration.Register(_exe, _paths, null);
+        Assert.Equal("[Default Applications]\nx-scheme-handler/monero=xaultwallet-monero-link.desktop;\n", File.ReadAllText(Path.Combine(_paths.ConfigHome, "mimeapps.list")));
+    }
+
+    [Theory]
+    [InlineData("/opt/x\"y/XaultWallet")]
+    [InlineData("/opt/$HOME/XaultWallet")]
+    [InlineData("/opt/100%/XaultWallet")]
+    [InlineData("/opt/a`b/XaultWallet")]
+    public void Paths_A_Desktop_Entry_Cannot_Quote_Are_Refused(string path) =>
+        Assert.Throws<ArgumentException>(() => MoneroLinkRegistration.DesktopExec(path));
+}

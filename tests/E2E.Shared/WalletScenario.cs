@@ -37,10 +37,12 @@ public sealed partial class WalletScenario
 
     /// <param name="installWalletRpc">The app starts without monero-wallet-rpc: the scenario begins
     /// by installing it with the startup screen's "Download &amp; install" (signed list, checksum).</param>
+    /// <param name="connectBrowsers">Connects the browser in Settings and allows its extension, for a program under
+    /// test whose channel answers a browser only after that (the real exe on Windows); the headless run is set up that way.</param>
     /// <param name="companion">Sends a browser companion request through the real native messaging host
     /// and returns the reply (both JSON); the companion steps are skipped without it.</param>
     public WalletScenario(IAppDriver app, TestChain chain, Action<string> log, double timeScale = 1.0, bool installWalletRpc = false,
-        Func<string, Task<string>>? companion = null)
+        Func<string, Task<string>>? companion = null, Func<Task>? connectBrowsers = null)
     {
         _app = app;
         _chain = chain;
@@ -48,6 +50,7 @@ public sealed partial class WalletScenario
         _timeScale = timeScale;
         _installWalletRpc = installWalletRpc;
         _companion = companion;
+        _connectBrowsers = connectBrowsers;
     }
 
     /// <summary>What the install reported, when the scenario installed monero-wallet-rpc.</summary>

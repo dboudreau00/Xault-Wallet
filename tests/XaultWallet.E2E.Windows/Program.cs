@@ -76,7 +76,8 @@ internal static partial class Program
             problems.AddRange(await CheckTitleBarAsync(window, log));
 
             scenario = new WalletScenario(driver, chain, log, timeScale, installWalletRpc,
-                companion: json => NativeHostClient.AskAsync(HostStart(exe), json, TimeSpan.FromSeconds(90)));
+                companion: json => NativeHostClient.AskAsync(HostStart(exe), json, TimeSpan.FromSeconds(90)),
+                connectBrowsers: () => ConnectBrowsersAsync(driver, exe));
             try
             {
                 await scenario.RunAsync();

@@ -33,15 +33,33 @@ internal static partial class Program
         return start;
     }
 
-    /// <summary>With the app running and locked: Settings connects Chrome and Firefox and makes the app
-    /// open monero: links; a link Windows opens arrives in the running app.</summary>
-    private static async Task<List<string>> CheckConnectionsAsync(UiaDriver driver, string exe, Action<string> log)
+    /// <summary>The browser companion steps need a connected browser: Settings connects Chrome and Firefox,
+    /// and the extension's first contact only asks the user ("A browser extension wants to connect"): Allow it.</summary>
+    private static async Task ConnectBrowsersAsync(UiaDriver driver, string exe)
     {
-        var problems = new List<string>();
-        log("> Settings: connect Chrome and Firefox, open monero: links with XaultWallet");
         await driver.ClickAsync("Shell.Settings");
         await driver.ClickAsync("Settings.ConnectChrome");
         await driver.ClickAsync("Settings.ConnectFirefox");
+        await driver.ClickAsync("Settings.Close");
+
+        string first = await NativeHostClient.AskAsync(HostStart(exe), """{"v":1,"id":"win0","type":"status"}""", TimeSpan.FromSeconds(60));
+        if (!first.Contains("\"code\":\"busy\"", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("the extension's first contact wasn't held for the user: " + first);
+        }
+
+        await driver.WaitForAsync("Shell.AllowExtension", TimeSpan.FromSeconds(10), enabled: true); // after the click hold
+        await driver.ScreenshotAsync("91-pair-extension");
+        await driver.ClickAsync("Shell.AllowExtension");
+    }
+
+    /// <summary>With the app running and locked: the connections made in Settings are registered as they should
+    /// be, the app opens monero: links; a link Windows opens arrives in the running app.</summary>
+    private static async Task<List<string>> CheckConnectionsAsync(UiaDriver driver, string exe, Action<string> log)
+    {
+        var problems = new List<string>();
+        log("> Settings: the connections of Chrome and Firefox, open monero: links with XaultWallet");
+        await driver.ClickAsync("Shell.Settings");
         await driver.ClickAsync("Settings.RegisterLinks");
         await driver.ScreenshotAsync("90-settings-companion");
 
@@ -67,17 +85,7 @@ internal static partial class Program
             }
         }
 
-        // The extension's first contact only asks the user ("A browser extension wants to connect"); after
-        // Allow, the host the Chrome manifest names answers for the locked app.
-        string first = await NativeHostClient.AskAsync(HostStart(exe), """{"v":1,"id":"win0","type":"status"}""", TimeSpan.FromSeconds(60));
-        if (!first.Contains("\"code\":\"busy\"", StringComparison.Ordinal))
-        {
-            problems.Add("the extension's first contact wasn't held for the user: " + first);
-        }
-
-        await driver.WaitForAsync("Shell.AllowExtension", TimeSpan.FromSeconds(10), enabled: true); // after the click hold
-        await driver.ScreenshotAsync("91-pair-extension");
-        await driver.ClickAsync("Shell.AllowExtension");
+        // The extension was allowed earlier: the host the Chrome manifest names answers for the locked app.
         string reply = await NativeHostClient.AskAsync(HostStart(exe), """{"v":1,"id":"win1","type":"status"}""", TimeSpan.FromSeconds(60));
         if (!reply.Contains("\"state\":\"locked\"", StringComparison.Ordinal))
         {

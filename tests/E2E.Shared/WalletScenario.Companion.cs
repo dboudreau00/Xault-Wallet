@@ -11,6 +11,7 @@ public sealed partial class WalletScenario
 {
     /// <summary>Sends one request as the browser would (JSON in, JSON out), through the native host.</summary>
     private readonly Func<string, Task<string>>? _companion;
+    private readonly Func<Task>? _connectBrowsers;
 
     /// <summary>The subaddress the companion asked for.</summary>
     public string CompanionAddress { get; private set; } = string.Empty;
@@ -22,6 +23,11 @@ public sealed partial class WalletScenario
         if (_companion is null)
         {
             return;
+        }
+
+        if (_connectBrowsers is not null)
+        {
+            await StepAsync("Browser companion: connect the browser in Settings, allow its extension", _connectBrowsers);
         }
 
         await StepAsync("Browser companion: status, as the extension sees it", CompanionStatusAsync);

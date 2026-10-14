@@ -343,7 +343,13 @@ launch hands a clicked `monero:` link (or "show me") to the running copy through
 only open a payment request for you to review or bring the window forward, never read the state or get
 an address. The sender names itself ("chrome", "firefox" or "link") and a program running as you can
 claim any of them, so this limits what an install that never used the companion exposes; it doesn't
-authenticate anyone.
+authenticate anyone. The first time a connected browser's extension reaches the app, the app asks *A
+browser extension wants to connect* (browser and extension id; Allow and Deny, Allow held a moment like
+*Send now*) and remembers the answer until you disconnect that browser. That makes a first contact
+visible, including an unpacked copy carrying the same key (it has the same id, so the question looks the
+same: if you didn't just use the companion, deny it); it is not a secret a program running as you couldn't
+get around by talking to the channel as "link" (which can only open a payment request) or by pressing Allow
+for you while Enhanced Security is off.
 
 It reaches the app through the browser's native messaging (XaultWallet's own executable, started by
 the browser only for the extension the host manifest names) and a local channel only your user

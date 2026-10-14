@@ -43,11 +43,22 @@ internal sealed class CompanionHandler
     {
         // Off by default: a browser is answered only once the user connected it in Settings; a link
         // hand-off from a second launch only ever opens a payment request or the window (CompanionAccess).
-        if (CompanionAccess.Decide(r, AppServices.Instance.Settings.ConnectedBrowsers) != CompanionAccessDecision.Allow)
+        AppSettings settings = AppServices.Instance.Settings;
+        switch (CompanionAccess.Decide(r, settings.ConnectedBrowsers, settings.AllowedExtensions, settings.RefusedExtensions))
         {
-            return Fail(r.Id, CompanionErrors.NotConnected, r.Via == CompanionCaller.Link
-                ? "XaultWallet doesn't answer that from a link."
-                : "This browser isn't connected to XaultWallet. Connect it in XaultWallet's Settings (Browser companion), then try again.");
+            case CompanionAccessDecision.NotConnected:
+                return Fail(r.Id, CompanionErrors.NotConnected, r.Via == CompanionCaller.Link
+                    ? "XaultWallet doesn't answer that from a link."
+                    : "This browser isn't connected to XaultWallet. Connect it in XaultWallet's Settings (Browser companion), then try again.");
+
+            case CompanionAccessDecision.Refused:
+                return Fail(r.Id, CompanionErrors.NotConnected,
+                    "XaultWallet was told not to answer this extension. To be asked again, disconnect and connect this browser in XaultWallet's Settings.");
+
+            case CompanionAccessDecision.NeedsPairing:
+                _shell.AskToPair(r.Via);
+                BringToFront();
+                return Fail(r.Id, CompanionErrors.Busy, "XaultWallet asks whether to allow this extension. Allow it there, then try again.");
         }
 
         switch (r.Type)

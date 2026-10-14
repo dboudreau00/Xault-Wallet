@@ -90,14 +90,29 @@ public sealed partial class SettingsViewModel
         AppServices app = AppServices.Instance;
         bool watched = app.Settings.ConnectedBrowsers.Contains(key);
         RegistrationCheck check = BrowserRegistration.Check(browser, exe, app.BrowserPaths, app.UserRegistry);
+        string? pairing = CompanionAccess.PairingKey(browser == CompanionBrowser.Chrome ? CompanionCaller.Chrome : CompanionCaller.Firefox);
+        string extension = pairing is null ? string.Empty
+            : app.Settings.RefusedExtensions.Contains(pairing) ? " · its extension is refused (Disconnect, then Connect, to be asked again)"
+            : app.Settings.AllowedExtensions.Contains(pairing) ? " · its extension is allowed (Disconnect takes that back)"
+            : " · its extension will be asked about the first time it connects";
         return check.State switch
         {
-            RegistrationState.Registered => ("Connected to this XaultWallet", true, false, true),
+            RegistrationState.Registered => ("Connected to this XaultWallet" + extension, true, false, true),
             RegistrationState.Elsewhere => ("Leads to another program" + (check.Target is { } target ? ": " + UntrustedText.Clean(target, 80) : string.Empty), false, true, true),
             RegistrationState.NotRegistered when watched => ("Removed outside XaultWallet", false, true, true),
             RegistrationState.NotRegistered => ("Not connected", false, false, false),
             _ => ("Not available here", false, false, false),
         };
+    }
+
+    /// <summary>Forget whether the user allowed or refused <paramref name="browser"/>'s extension.</summary>
+    internal static void ForgetExtension(AppSettings settings, CompanionBrowser browser)
+    {
+        if (CompanionAccess.PairingKey(browser == CompanionBrowser.Chrome ? CompanionCaller.Chrome : CompanionCaller.Firefox) is { } key)
+        {
+            settings.AllowedExtensions.Remove(key);
+            settings.RefusedExtensions.Remove(key);
+        }
     }
 
     [RelayCommand]
@@ -140,6 +155,7 @@ public sealed partial class SettingsViewModel
                 // Removes this app's registration, or one another program put in its place.
                 BrowserRegistration.Unregister(browser, app.BrowserPaths, app.UserRegistry);
                 app.Settings.ConnectedBrowsers.Remove(which);
+                ForgetExtension(app.Settings, browser); // connecting again asks again
                 app.SaveSettings();
                 CompanionOk = true;
                 CompanionResult = $"{name} is disconnected: its extension can no longer reach XaultWallet.";

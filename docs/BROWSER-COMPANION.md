@@ -55,11 +55,17 @@ it in the form.
      listed on addons.mozilla.org, load it from `about:debugging`, *This Firefox*, *Load Temporary
      Add-on* (it stays until Firefox restarts), or sign it for yourself as an unlisted add-on, or use
      Firefox Developer Edition or Nightly. Its id is `xaultwallet-companion@dboudreau.dev`.
-3. **Optional: let XaultWallet open `monero:` links** (Windows and Linux): Settings, *Browser
+3. **Allow the extension, once.** The first time the extension in a connected browser reaches
+   XaultWallet, the app comes forward with *A browser extension wants to connect*, naming the browser
+   and the extension id, with *Allow* and *Deny* (Allow ignores clicks for a moment after it appears).
+   Until you answer, the extension gets `busy`; after *Deny* it gets `not-connected`. The answer is
+   kept in the settings and shown next to the browser in Settings; *Disconnect* forgets it, so
+   connecting again asks again. Installs updated from 0.7.0a are asked once too.
+4. **Optional: let XaultWallet open `monero:` links** (Windows and Linux): Settings, *Browser
    companion*, *Open them here*. A click on a `monero:` link in any browser then starts XaultWallet (or
    hands the link to the copy already running) with the payment waiting in the Send tab. This needs no
    extension at all.
-4. **Using the zip or tar copy:** disconnect browsers and links in Settings before you delete or move
+5. **Using the zip or tar copy:** disconnect browsers and links in Settings before you delete or move
    it. There is no uninstaller to do it for you.
 
 Paths it writes: Windows `%LOCALAPPDATA%\XaultWallet\browser\dev.dboudreau.xaultwallet.chrome.json` and

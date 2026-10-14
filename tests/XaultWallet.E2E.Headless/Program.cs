@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Threading;
+using XaultWallet.Core.Companion;
 using XaultWallet.Desktop;
 using XaultWallet.Desktop.Companion;
 using XaultWallet.Desktop.ViewModels;
@@ -64,6 +65,8 @@ internal static class Program
         {
             // As after "Connect" for Chrome in Settings: the channel answers only connected browsers.
             AppServices.Instance.Settings.ConnectedBrowsers.Add("chrome");
+            AppServices.Instance.Settings.AllowedExtensions.Add(CompanionAccess.PairingKey(CompanionCaller.Chrome)!); // as after Allow
+
             var handler = new CompanionHandler(shell, () => { });
             companion = new CompanionServer(AppServices.Instance.CompanionEndpoint, handler.HandleAsync);
             companion.Start();

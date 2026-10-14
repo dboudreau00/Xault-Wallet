@@ -67,7 +67,17 @@ internal static partial class Program
             }
         }
 
-        // The host the Chrome manifest names answers for the locked app.
+        // The extension's first contact only asks the user ("A browser extension wants to connect"); after
+        // Allow, the host the Chrome manifest names answers for the locked app.
+        string first = await NativeHostClient.AskAsync(HostStart(exe), """{"v":1,"id":"win0","type":"status"}""", TimeSpan.FromSeconds(60));
+        if (!first.Contains("\"code\":\"busy\"", StringComparison.Ordinal))
+        {
+            problems.Add("the extension's first contact wasn't held for the user: " + first);
+        }
+
+        await driver.WaitForAsync("Shell.AllowExtension", TimeSpan.FromSeconds(10), enabled: true); // after the click hold
+        await driver.ScreenshotAsync("91-pair-extension");
+        await driver.ClickAsync("Shell.AllowExtension");
         string reply = await NativeHostClient.AskAsync(HostStart(exe), """{"v":1,"id":"win1","type":"status"}""", TimeSpan.FromSeconds(60));
         if (!reply.Contains("\"state\":\"locked\"", StringComparison.Ordinal))
         {

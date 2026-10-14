@@ -9,6 +9,14 @@ public enum CompanionAccessDecision
     /// <summary>Refuse it: the user hasn't connected this browser in Settings (or the request is a kind the
     /// sender can't make).</summary>
     NotConnected,
+
+    /// <summary>The browser is connected but its extension was never allowed: ask the user in the app
+    /// ("A browser extension wants to connect") and refuse this request until they answer.</summary>
+    NeedsPairing,
+
+    /// <summary>The user refused this browser's extension: refuse, without asking again (connecting the
+    /// browser again in Settings forgets the answer).</summary>
+    Refused,
 }
 
 /// <summary>
@@ -33,6 +41,43 @@ public static class CompanionAccess
         _ => null,
     };
 
+    /// <summary>What the user allows or refuses: the browser and the one extension id it lets use the host
+    /// ("chrome:kpcm…", "firefox:xaultwallet-companion@…"); null for a link. A release that allowed another id
+    /// would ask again.</summary>
+    public static string? PairingKey(CompanionCaller via) => via switch
+    {
+        CompanionCaller.Chrome => "chrome:" + string.Join(",", BrowserRegistration.ChromeExtensionIds),
+        CompanionCaller.Firefox => "firefox:" + string.Join(",", BrowserRegistration.FirefoxExtensionIds),
+        _ => null,
+    };
+
+    /// <summary>The extension id(s) shown in the pairing question.</summary>
+    public static string ExtensionIds(CompanionCaller via) => via switch
+    {
+        CompanionCaller.Chrome => string.Join(", ", BrowserRegistration.ChromeExtensionIds),
+        CompanionCaller.Firefox => string.Join(", ", BrowserRegistration.FirefoxExtensionIds),
+        _ => string.Empty,
+    };
+
+    /// <summary>The gate and then the pairing: a connected browser's extension is answered only once the
+    /// user allowed it in the app.</summary>
+    public static CompanionAccessDecision Decide(CompanionRequest request, IReadOnlyCollection<string> connectedBrowsers,
+        IReadOnlyCollection<string> allowedExtensions, IReadOnlyCollection<string> refusedExtensions)
+    {
+        ArgumentNullException.ThrowIfNull(allowedExtensions);
+        ArgumentNullException.ThrowIfNull(refusedExtensions);
+        CompanionAccessDecision gate = Decide(request, connectedBrowsers);
+        if (gate != CompanionAccessDecision.Allow || request.Via == CompanionCaller.Link || PairingKey(request.Via) is not { } key)
+        {
+            return gate;
+        }
+
+        return refusedExtensions.Contains(key) ? CompanionAccessDecision.Refused
+            : allowedExtensions.Contains(key) ? CompanionAccessDecision.Allow
+            : CompanionAccessDecision.NeedsPairing;
+    }
+
+    /// <summary>The gate alone (Settings' Connect), without the pairing.</summary>
     public static CompanionAccessDecision Decide(CompanionRequest request, IReadOnlyCollection<string> connectedBrowsers)
     {
         ArgumentNullException.ThrowIfNull(request);

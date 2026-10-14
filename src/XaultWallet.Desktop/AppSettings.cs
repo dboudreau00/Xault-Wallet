@@ -72,6 +72,13 @@ public sealed class AppSettings
     /// <summary>The user made this app the one that opens monero: links (same purpose as above).</summary>
     public bool OpensMoneroLinks { get; set; }
 
+    /// <summary>Browser extensions the user allowed when they first connected (CompanionAccess.PairingKey,
+    /// e.g. "chrome:kpcm…"). Disconnecting the browser in Settings forgets the answer.</summary>
+    public List<string> AllowedExtensions { get; set; } = new();
+
+    /// <summary>Browser extensions the user refused: not asked about again until the browser is connected again.</summary>
+    public List<string> RefusedExtensions { get; set; } = new();
+
     /// <summary>Label an address given to the browser with the site (or what was typed in the extension).
     /// Off by default: the vault then records only "Browser", not where you shop.</summary>
     public bool CompanionSavesSiteNames { get; set; }
@@ -140,6 +147,8 @@ public sealed class AppSettings
         TorBinaryPath ??= "";
         ConnectedBrowsers = (ConnectedBrowsers ?? new List<string>())
             .Where(b => b is "chrome" or "firefox").Distinct(StringComparer.Ordinal).ToList();
+        AllowedExtensions = (AllowedExtensions ?? new List<string>()).Where(k => k is { Length: > 0 and <= 200 }).Distinct(StringComparer.Ordinal).ToList();
+        RefusedExtensions = (RefusedExtensions ?? new List<string>()).Where(k => k is { Length: > 0 and <= 200 }).Distinct(StringComparer.Ordinal).ToList();
         if (WindowWidth is < 0 or > 20000 || double.IsNaN(WindowWidth) || WindowHeight is < 0 or > 20000 || double.IsNaN(WindowHeight))
         {
             WindowWidth = WindowHeight = 0;

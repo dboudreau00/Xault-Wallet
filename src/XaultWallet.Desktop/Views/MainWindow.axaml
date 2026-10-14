@@ -83,6 +83,20 @@
                     </Button>
                 </Grid>
             </Border>
+            <Border Classes="callout" Margin="18,10,18,0" Padding="14,10" IsVisible="{Binding HasPairAsk}"
+                    AutomationProperties.AutomationId="Shell.PairAsk">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <c:Icon Grid.Column="0" Data="{StaticResource IconLink}" Width="16" Height="16" Margin="0,0,10,0"
+                            Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" AutomationProperties.AutomationId="Shell.PairAskText" Text="{Binding PairAskNote}" TextWrapping="Wrap"
+                               VerticalAlignment="Center" FontSize="12.5"/>
+                    <Button Grid.Column="2" Content="Allow" Margin="12,0,0,0" VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="Shell.AllowExtension" AutomationProperties.Name="Allow the browser extension" Command="{Binding AllowExtensionCommand}"
+                            IsEnabled="{Binding !PairAskHeld}" Focusable="False" IsTabStop="False"/>
+                    <Button Grid.Column="3" Content="Deny" Margin="6,0,0,0" VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="Shell.DenyExtension" AutomationProperties.Name="Refuse the browser extension" Command="{Binding DenyExtensionCommand}"/>
+                </Grid>
+            </Border>
             <Border Classes="callout" Margin="18,10,18,0" Padding="14,10" IsVisible="{Binding HasReceiveAsk}"
                     AutomationProperties.AutomationId="Shell.ReceiveAsk">
                 <Grid ColumnDefinitions="Auto,*,Auto,Auto">

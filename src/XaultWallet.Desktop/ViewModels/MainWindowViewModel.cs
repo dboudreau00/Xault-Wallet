@@ -455,6 +455,71 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         ReceiveAskNote = string.Empty;
     }
 
+    // ------------------------------------------------------------------ a browser extension's first contact
+
+    /// <summary>The extension waiting for Allow or Deny (CompanionAccess.PairingKey), or null.</summary>
+    private string? _pairKey;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPairAsk))]
+    private string _pairAskNote = string.Empty;
+
+    public bool HasPairAsk => PairAskNote.Length > 0;
+
+    private ClickHold? _pairAskHold;
+
+    private ClickHold PairAskHold => _pairAskHold ??= new ClickHold(() => OnPropertyChanged(nameof(PairAskHeld)));
+
+    /// <summary>Allow ignores clicks for a moment after the question appears (the window comes forward with it).</summary>
+    public bool PairAskHeld => _pairAskHold?.Held ?? false;
+
+    /// <summary>A connected browser's extension asked for the first time: "A browser extension wants to
+    /// connect", with the browser and the extension id, until the user allows or refuses it.</summary>
+    internal void AskToPair(CompanionCaller via)
+    {
+        if (CompanionAccess.PairingKey(via) is not { } key)
+        {
+            return;
+        }
+
+        _pairKey = key;
+        PairAskHold.Start();
+        PairAskNote = $"A browser extension wants to connect: {via} extension {CompanionAccess.ExtensionIds(via)}. "
+                      + "Allow it only if you just used the XaultWallet companion in that browser. It can then ask for the app's state, "
+                      + "open payment requests for you to confirm here, and ask for new addresses.";
+    }
+
+    [RelayCommand]
+    private void AllowExtension() => AnswerPairing(allow: true);
+
+    [RelayCommand]
+    private void DenyExtension() => AnswerPairing(allow: false);
+
+    private void AnswerPairing(bool allow)
+    {
+        if (allow && PairAskHeld)
+        {
+            return; // it only just appeared
+        }
+
+        if (_pairKey is not { } key)
+        {
+            PairAskNote = string.Empty;
+            return;
+        }
+
+        AppSettings s = AppServices.Instance.Settings;
+        s.AllowedExtensions.Remove(key);
+        s.RefusedExtensions.Remove(key);
+        (allow ? s.AllowedExtensions : s.RefusedExtensions).Add(key);
+        _pairKey = null;
+        PairAskNote = string.Empty;
+        TrySaveSettings();
+        ShowNotice(allow
+            ? "The extension is allowed. Use it again in the browser. Disconnecting the browser in Settings takes this back."
+            : "The extension is refused: XaultWallet won't answer it. Disconnect and connect the browser in Settings to be asked again.", warning: false);
+    }
+
     // ------------------------------------------------------------------ a request held behind "Open it"
 
     /// <summary>A payment request that would have replaced what the user is doing in the Send tab (a form
@@ -639,6 +704,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             {
                 gone.Add(browser);
                 app.Settings.ConnectedBrowsers.Remove(key);
+                SettingsViewModel.ForgetExtension(app.Settings, key == "firefox" ? CompanionBrowser.Firefox : CompanionBrowser.Chrome);
             }
         }
 

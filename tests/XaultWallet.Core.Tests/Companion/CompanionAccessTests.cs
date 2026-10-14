@@ -42,3 +42,43 @@ public sealed class CompanionAccessTests
     [Fact]
     public void The_New_Refusal_Is_A_Known_Code() => Assert.Contains(CompanionErrors.NotConnected, CompanionErrors.All);
 }
+
+/// <summary>A connected browser's extension is asked about once, in the app, then remembered.</summary>
+public sealed class CompanionPairingTests
+{
+    private static readonly string[] Chrome = ["chrome"];
+    private static readonly string ChromeKey = CompanionAccess.PairingKey(CompanionCaller.Chrome)!;
+
+    private static CompanionAccessDecision D(CompanionCaller via, CompanionRequestType type, string[] connected, string[] allowed, string[] refused) =>
+        CompanionAccess.Decide(new CompanionRequest("a", type, via), connected, allowed, refused);
+
+    [Fact]
+    public void The_First_Contact_Asks_The_User() =>
+        Assert.Equal(CompanionAccessDecision.NeedsPairing, D(CompanionCaller.Chrome, CompanionRequestType.Status, Chrome, [], []));
+
+    [Fact]
+    public void An_Allowed_Extension_Is_Answered() =>
+        Assert.Equal(CompanionAccessDecision.Allow, D(CompanionCaller.Chrome, CompanionRequestType.Receive, Chrome, [ChromeKey], []));
+
+    [Fact]
+    public void A_Refused_Extension_Is_Refused_Without_Asking_Even_If_Also_Allowed() =>
+        Assert.Equal(CompanionAccessDecision.Refused, D(CompanionCaller.Chrome, CompanionRequestType.Status, Chrome, [ChromeKey], [ChromeKey]));
+
+    [Fact]
+    public void Pairing_Never_Opens_A_Browser_That_Isnt_Connected() =>
+        Assert.Equal(CompanionAccessDecision.NotConnected, D(CompanionCaller.Chrome, CompanionRequestType.Status, [], [ChromeKey], []));
+
+    [Fact]
+    public void A_Link_Needs_No_Pairing() =>
+        Assert.Equal(CompanionAccessDecision.Allow, D(CompanionCaller.Link, CompanionRequestType.Pay, [], [], []));
+
+    [Fact]
+    public void Each_Browser_Is_Paired_On_Its_Own_And_Names_Its_Extension_Id()
+    {
+        string firefox = CompanionAccess.PairingKey(CompanionCaller.Firefox)!;
+        Assert.NotEqual(ChromeKey, firefox);
+        Assert.Contains("kpcmnhbbahdifkhgibnboafelgfkgcdj", ChromeKey, StringComparison.Ordinal);
+        Assert.Equal(CompanionAccessDecision.NeedsPairing, D(CompanionCaller.Firefox, CompanionRequestType.Status, ["chrome", "firefox"], [ChromeKey], []));
+        Assert.Null(CompanionAccess.PairingKey(CompanionCaller.Link));
+    }
+}

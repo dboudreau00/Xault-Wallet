@@ -225,20 +225,20 @@ public sealed partial class WalletViewModel
     internal const string BrowserLabelPrefix = "Browser: ";
 
     /// <summary>
-    /// A new receive address for the browser companion, labelled "Browser: " and what the user typed there
-    /// (or the site): it is the Receive tab's "New subaddress", asked for from the browser (the shell
+    /// A new receive address for the browser companion, labelled "Browser" (and, only when the user turned
+    /// on saving site names, what they typed there or the site): it is the Receive tab's "New subaddress", asked for from the browser (the shell
     /// announces it). Null when there is none (the Receive tab says why); one the vault couldn't record
     /// isn't given out, so it can't reach a page and then be handed out again.
     /// </summary>
-    internal async Task<string?> CreateAddressForCompanionAsync(string label, string origin)
+    internal async Task<string?> CreateAddressForCompanionAsync(string label, string origin, bool saveSiteNames)
     {
         if (!IsReady)
         {
             return null;
         }
 
-        string host = XaultWallet.Core.Companion.CompanionProtocol.HostOf(origin);
-        string name = BrowserLabelPrefix + (label.Length > 0 ? label : host.Length > 0 ? host : "no page");
+        string site = XaultWallet.Core.Companion.CompanionReceiveGate.LabelFor(label, origin, saveSiteNames);
+        string name = site.Length > 0 ? BrowserLabelPrefix + site : BrowserLabelPrefix.TrimEnd(' ', ':');
         if (name.Length > MaxLabelLength)
         {
             name = name[..MaxLabelLength].TrimEnd();

@@ -290,6 +290,18 @@
                             </StackPanel>
                         </Grid>
 
+                        <Separator Margin="0,2"/>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="Label browser addresses with the site" FontWeight="SemiBold"/>
+                                <TextBlock Classes="caption" TextWrapping="Wrap"
+                                           Text="Off: an address you give your browser is labelled just &quot;Browser&quot;, so the vault doesn't record where you shop."/>
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" OnContent="" OffContent="" VerticalAlignment="Center"
+                                          AutomationProperties.AutomationId="Settings.CompanionSiteNames" AutomationProperties.Name="Label browser addresses with the site"
+                                          IsChecked="{Binding CompanionSavesSiteNames}"/>
+                        </Grid>
+
                         <Separator Margin="0,2" IsVisible="{Binding LinksSupported}"/>
                         <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding LinksSupported}">
                             <StackPanel Spacing="2">

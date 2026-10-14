@@ -145,6 +145,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             // A held request names its page: it doesn't stay on the lock screen. A waiting one stays
             // (the lock screen says only that one waits) and goes to whichever wallet opens next.
             ClearHeld();
+            DismissReceiveRequest(); // it names its site too
             _pendingWallet = null;
 
             // If the auto-lock fires while Settings is open, close the Settings state too —
@@ -368,7 +369,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         return new CompanionStatus(VaultManager.Exists(AppServices.Instance.VaultPath) ? "locked" : "setup", null, false, false);
     }
 
-    /// <summary>A new receive address of the wallet on screen. Only while the wallet itself is showing; the
+    /// <summary>A new receive address of the wallet on screen. Only while the wallet itself is showing, and
+    /// only after the user allowed it in the app ("Give address"): the first request just asks. The
     /// app announces it across the top of the window with its start and end, for the user to compare
     /// with what the browser shows.</summary>
     internal async Task<CompanionAddress> AddressForCompanionAsync(string label, string origin)
@@ -390,14 +392,53 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return new CompanionAddress(null, string.Empty, new CompanionError(CompanionErrors.NotReady, "The wallet on screen is still starting. Try again in a moment."));
         }
 
-        if (await wallet.CreateAddressForCompanionAsync(label, origin) is not { } address)
+        string host = CompanionProtocol.HostOf(origin);
+        if (!_receiveGate.TryTake(wallet, host))
+        {
+            ReceiveAskNote = $"Your browser asks for a new receive address{(host.Length > 0 ? " for " + host : string.Empty)}. "
+                             + "Give it one, then ask again in the browser within two minutes."
+                             + (AppServices.Instance.Settings.CompanionSavesSiteNames ? string.Empty : " It will be labelled just \"Browser\".");
+            return new CompanionAddress(null, string.Empty, new CompanionError(CompanionErrors.Busy,
+                "Confirm in XaultWallet (Give address), then ask again here."));
+        }
+
+        if (await wallet.CreateAddressForCompanionAsync(label, origin, AppServices.Instance.Settings.CompanionSavesSiteNames) is not { } address)
         {
             return new CompanionAddress(null, string.Empty, new CompanionError(CompanionErrors.Failed, "XaultWallet couldn't make a new address. Its Receive tab says why."));
         }
 
-        string host = CompanionProtocol.HostOf(origin);
         ShowNotice($"New address given to your browser{(host.Length > 0 ? " for " + host : string.Empty)}: {address[..8]}…{address[^8..]}. The extension should show the same start and end.", warning: false);
         return new CompanionAddress(address, wallet.CompanionNetwork, null);
+    }
+
+    // ------------------------------------------------------------------ a receive request behind "Give address"
+
+    /// <summary>A browser's request for a new address waits for the user (see <see cref="CompanionReceiveGate"/>).</summary>
+    private readonly CompanionReceiveGate _receiveGate = new();
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasReceiveAsk))]
+    private string _receiveAskNote = string.Empty;
+
+    public bool HasReceiveAsk => ReceiveAskNote.Length > 0;
+
+    /// <summary>The user allows the waiting request (with Enhanced Security on, only a real click can): the
+    /// browser's next request from that site gets its address.</summary>
+    [RelayCommand]
+    private void AllowReceiveRequest()
+    {
+        string? host = _receiveGate.AskedHost;
+        ReceiveAskNote = string.Empty;
+        ShowNotice(_receiveGate.Allow()
+            ? $"Allowed: ask for the address again in your browser{(host is { Length: > 0 } ? " on " + host : string.Empty)} within two minutes."
+            : "The browser's request waited too long and was dropped. Ask again from the browser.", warning: false);
+    }
+
+    [RelayCommand]
+    private void DismissReceiveRequest()
+    {
+        _receiveGate.Clear();
+        ReceiveAskNote = string.Empty;
     }
 
     // ------------------------------------------------------------------ a request held behind "Open it"

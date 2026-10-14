@@ -37,6 +37,9 @@ public sealed partial class SettingsViewModel
     [ObservableProperty] private string _companionResult = string.Empty;
     [ObservableProperty] private bool _companionOk;
 
+    /// <summary>Saved with the other settings: label browser addresses with the site (off by default).</summary>
+    [ObservableProperty] private bool _companionSavesSiteNames;
+
     /// <summary>Browsers can only be pointed at a real executable (not a development run through dotnet).</summary>
     public bool CanConnectBrowsers => AppServices.ExecutablePath is not null;
 
@@ -45,6 +48,7 @@ public sealed partial class SettingsViewModel
     private void InitializeCompanion()
     {
         EnhancedSecurity = AppServices.Instance.Settings.EnhancedSecurity;
+        CompanionSavesSiteNames = AppServices.Instance.Settings.CompanionSavesSiteNames;
         RefreshCompanion();
     }
 

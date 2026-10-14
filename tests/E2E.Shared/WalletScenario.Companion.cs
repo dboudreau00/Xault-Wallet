@@ -25,7 +25,7 @@ public sealed partial class WalletScenario
         }
 
         await StepAsync("Browser companion: status, as the extension sees it", CompanionStatusAsync);
-        await StepAsync("Browser companion: a new receive address, labelled, in the Receive list", CompanionReceiveAsync);
+        await StepAsync("Browser companion: a new receive address, after Give address, labelled just Browser, in the Receive list", CompanionReceiveAsync);
         await StepAsync("Browser companion: a payment request opens in the Send tab, with its source", CompanionPayAsync);
         await StepAsync("Browser companion: a request over the user's own form waits behind Open it", CompanionPayHeldAsync);
         await StepAsync("Browser companion: a request while locked waits for the unlock", CompanionPayWhileLockedAsync);
@@ -59,7 +59,16 @@ public sealed partial class WalletScenario
 
     private async Task CompanionReceiveAsync()
     {
-        JsonElement r = await AskAsync($$"""{"v":1,"id":"receive1","type":"receive","label":"{{CompanionLabel}}","origin":"https://shop.example/checkout"}""");
+        string ask = $$"""{"v":1,"id":"receive1","type":"receive","label":"{{CompanionLabel}}","origin":"https://shop.example/checkout"}""";
+        JsonElement first = await AskAsync(ask);
+        Check(!Ok(first) && ErrorCode(first) == "busy", "the first request only asks the user: " + first);
+        await _app.WaitForAsync("Shell.ReceiveAsk", Seconds(10), enabled: false);
+        string note = await _app.ReadTextAsync("Shell.ReceiveAskText");
+        Check(note.Contains("shop.example", StringComparison.Ordinal), "the app says which site asks: " + note);
+        await ShotAsync("companion-receive-ask");
+        await _app.ClickAsync("Shell.AllowReceive");
+
+        JsonElement r = await AskAsync(ask);
         Check(Ok(r), "receive failed: " + r);
         CompanionAddress = Str(r, "address");
         Check(CompanionAddress.Length == 95 && CompanionAddress != MainAddress && CompanionAddress[0] == '8',
@@ -70,7 +79,7 @@ public sealed partial class WalletScenario
         string shortForm = CompanionAddress[..10] + "…" + CompanionAddress[^10..];
         await EventuallyAsync(
             () => _app.ReadTextsAsync("Receive.Addresses"),
-            texts => texts.Contains("Browser: " + CompanionLabel) && texts.Contains(shortForm),
+            texts => texts.Contains("Browser") && !texts.Any(t => t.Contains(CompanionLabel, StringComparison.Ordinal)) && texts.Contains(shortForm),
             Seconds(30),
             "the new address, labelled as the browser's, in the Receive list");
         await ShotAsync("companion-receive");

@@ -425,6 +425,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
             string torPathBefore = s.TorBinaryPath;
             s.UseBuiltInTor = NetworkMode == 1;
             s.TorBinaryPath = torPath;
+            s.CompanionSavesSiteNames = CompanionSavesSiteNames;
             SaveEnhancedSecurity(s, out bool enhancedChanged);
             AppServices.Instance.SaveSettings();
             saved = true;
@@ -795,6 +796,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
                || NetworkMode != savedMode
                || (NetworkMode == 2 && (ProxyAddress ?? string.Empty).Trim() != s.ProxyAddress)
                || (TorBinaryPath ?? string.Empty).Trim() != s.TorBinaryPath
+               || CompanionSavesSiteNames != s.CompanionSavesSiteNames
                || EnhancedSecurity != (s.EnhancedSecurity && EnhancedSecuritySupported);
     }
 }

@@ -71,6 +71,10 @@ public sealed class AppSettings
     /// <summary>The user made this app the one that opens monero: links (same purpose as above).</summary>
     public bool OpensMoneroLinks { get; set; }
 
+    /// <summary>Label an address given to the browser with the site (or what was typed in the extension).
+    /// Off by default: the vault then records only "Browser", not where you shop.</summary>
+    public bool CompanionSavesSiteNames { get; set; }
+
     /// <summary>True when the last Load found a corrupt settings file and fell back to
     /// defaults (the corrupt file is preserved next to the original as *.bad).</summary>
     public static bool RecoveredFromCorruptFile { get; private set; }

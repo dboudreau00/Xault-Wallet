@@ -19,9 +19,11 @@ What it does:
   on any page, right-click, *Pay with XaultWallet*. Plain `http` pages are flagged: anyone on the
   network could have changed what they show.
 - **Get a receive address.** *New address* asks XaultWallet for a fresh subaddress of the wallet on
-  screen, labelled with the site (or what you type), to paste into a form. XaultWallet announces the
-  start and end of the same address across the top of its window, and lists it on its Receive tab,
-  labelled *Browser:* and the label.
+  screen, to paste into a form. The first click only asks: XaultWallet shows which site asks, with
+  *Give address*; once you click that in the app, *New address* again (within two minutes, from the
+  same site) gets the address. XaultWallet announces its start and end across the top of its window,
+  and lists it on its Receive tab labelled *Browser* (with the site, or what you typed, only if you
+  turned on *Label browser addresses with the site* in Settings).
 - **Status.** Whether XaultWallet is running, locked or unlocked, and the network of the wallet on
   screen (never its name or balance).
 
@@ -109,7 +111,7 @@ Requests:
 | `status` | | The app's state. |
 | `show` | | The window comes forward (the app starts if it isn't running). |
 | `pay` | `uri` (a `monero:` link, at most 4096 characters, nothing hidden in it), `origin` (optional: the page, `https://host[:port]` or `http://host[:port]`, an IPv6 host in brackets) | The link opens in the Send tab (after the next unlock if the vault is locked). The app starts if it isn't running. |
-| `receive` | `label` (optional, at most 40 characters), `origin` (optional) | A new subaddress of the wallet on screen. |
+| `receive` | `label` (optional, at most 40 characters), `origin` (optional) | A new subaddress of the wallet on screen, once the user allowed it in the app; until then error `busy`. |
 
 Every request carries `"v": 1` and an `"id"` (1 to 64 letters, digits, `-` or `_`) that its reply repeats.
 
@@ -167,8 +169,9 @@ stealing.
   overrides, invisible characters). A request never replaces a payment being confirmed; one that would
   replace a form you filled, or a payment that may have gone out, waits behind *Open it*. *Review* and
   *Send now* ignore clicks for a moment after a request lands or the confirmation appears. A new
-  receive address is announced across the top of the app's window with its start and end, and
-  labelled *Browser:* on the Receive tab, to compare with what the browser shows. The page a request
+  receive address is made only after you click *Give address* in the app (with Enhanced Security on,
+  only a real click can), is announced across the top of the app's window with its start and end, and
+  labelled *Browser* on the Receive tab, to compare with what the browser shows. The page a request
   came from is what the extension reports; a program on your computer can claim any page.
 - **Being repointed.** At every start, and when its window comes back to the front, XaultWallet checks
   that each browser connection it made still leads to it, comparing the exact path it wrote. If another

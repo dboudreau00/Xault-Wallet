@@ -347,8 +347,12 @@ anything that changes how text reads (line breaks, right-to-left overrides, invi
 shown in quotes after where the request came from. A request never replaces a payment being confirmed,
 and one that would replace a form you filled, or a payment that may have gone out and needs checking,
 waits behind *Open it* instead. *Review* and *Send now* ignore clicks for a moment after a request
-lands or the confirmation appears. A new receive address is announced across the top of the window
-with its start and end, and only while the wallet is on screen. While the app is locked, the lock
+lands or the confirmation appears. A new receive address is made only after you click *Give address*
+in the app for that site (a request just asks; with Enhanced Security on, only a real click counts),
+so a program on the channel can't quietly add subaddresses to your vault; it is announced across the
+top of the window with its start and end, and only while the wallet is on screen. It is labelled just
+*Browser* unless you turn on *Label browser addresses with the site* (Settings): off, the vault
+doesn't record which sites you gave addresses to. While the app is locked, the lock
 screen says only that a request waits, not where it came from; a request waits at most 10 minutes.
 
 **Which profile is open.** The browser can ask for the network of the wallet on screen and whether it
@@ -363,7 +367,7 @@ then forgotten. On Windows the app also notices when another program created its
 XaultWallet started.
 
 What it can't stop: a program running as you can rewrite those registrations, talk to the channel
-itself (proposing payments you must still confirm, or asking for subaddresses), or simply read your
+itself (proposing payments you must still confirm, or asking for subaddresses you must still allow), or simply read your
 files and keystrokes. The companion adds nothing such a program could steal, but it can make the
 browser show an address of its own: by repointing a registration (the tripwire warns about that), by
 answering on the channel in XaultWallet's place, or by editing an extension you loaded unpacked.

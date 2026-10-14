@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.7.0a-beta - 2026-10-13 - Tor and proxy fixes, browser addresses wait for you
+
+A revision of 0.7.0 (the letter marks it): fixes from a second review of the browser companion, and from
+checking the network code against a real monero-wallet-rpc. **Your vault, settings and wallets are
+unchanged.**
+
+### Fixes
+- **Tor and proxy modes can open a wallet on a remote node.** Through `--proxy`, monero-wallet-rpc
+  refuses to open or create a wallet for any node it can't verify (checked on 0.18.3.1, and in the
+  sources of the current releases) unless it is also told `--daemon-ssl-allow-any-cert`; only an
+  `.onion` address with a port passes without. The app didn't pass it, so with the built-in Tor or your
+  own SOCKS proxy wallet-rpc refused to open a wallet on a clearnet node (every built-in preset). It is
+  passed now, once. No certificate is checked then, as with wallet-rpc's default for an `http://` node;
+  [SECURITY.md](SECURITY.md) says what that means. A test against the real wallet-rpc, through a
+  stand-in proxy, guards it.
+- **`https://` nodes work, always over TLS.** wallet-rpc also refused `--daemon-ssl enabled` for a node
+  it can't verify, so a wallet on an `https://` node failed to open or to switch to it. The app now passes
+  `--daemon-ssl-allow-any-cert` with it: the connection is TLS and never falls back to plain HTTP, but the
+  node's certificate is not verified (wallet-rpc's default doesn't either). SECURITY.md no longer claims
+  it is. Pinning a certificate fingerprint would close that and isn't offered yet.
+- **Changing a wallet's node no longer goes around Tor.** A wallet opened on a node on this computer runs
+  without a proxy (Tor can't reach it). Switched in Manage to a remote node with Tor on, it reached that
+  node directly, and so did the app's own node check, while the badge still said LOCAL NODE. A node that
+  is reached the other way now restarts the wallet's backend for it. Not while a payment is being
+  confirmed or sent: the app says to finish it first.
+
+### Browser companion
+- **A receive address waits for you.** A browser's first request only asks: XaultWallet comes forward and
+  shows which site wants an address, with *Give address*. Press it, then ask again from the browser within
+  two minutes: that one request gets one address. So a program on the companion channel can no longer add
+  subaddresses to your vault unnoticed. With Enhanced Security on, another program can't press the button.
+- **Addresses are labelled just *Browser*** unless you turn on the new setting *Label browser addresses with
+  the site* (off by default), so the vault doesn't record where you shop.
+
+### Notes
+- SECURITY.md says the Chrome extension id comes from a public key (an unpacked copy with that key gets the
+  same id), that the companion shows XaultWallet is installed (not whether a decoy exists), and that Tor
+  and proxy modes check no node certificate.
+- Tests for the monero-wallet-rpc download going through the SOCKS proxy.
+
 ## 0.7.0-beta - 2026-10-13 - browser companion, Enhanced Security
 
 Two features, both off until you turn them on, and a round of interface fixes. **Your vault,

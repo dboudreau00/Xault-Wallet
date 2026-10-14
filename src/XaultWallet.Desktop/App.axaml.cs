@@ -143,6 +143,7 @@ public partial class App : Application
                 mainVm.OfferLaunchLink(link);
             }
 
+            MainWindowViewModel.FingerprintOwnBinary(); // the tripwire's reference: this program's file as it started
             // The tripwire: the connections this app set up must still lead to it. Checked at start and
             // again (at most once a minute) when the window comes back to the front.
             Dispatcher.UIThread.Post(() => _ = CheckRegistrationsAsync(mainVm), DispatcherPriority.Background);

@@ -662,7 +662,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     /// <summary>What the tripwire read: each watched browser's registration, the link handler, and whether
     /// Windows' own choice of app for monero: links outranks it.</summary>
-    private sealed record RegistrationReport(List<(string Browser, string Key, RegistrationCheck Check)> Browsers, RegistrationState Links, bool LinksOverridden);
+    private sealed record RegistrationReport(List<(string Browser, string Key, RegistrationCheck Check, FingerprintMatch File)> Browsers, RegistrationState Links, bool LinksOverridden);
+
+    /// <summary>SHA-256 of this program's own file, read once at start (null when it couldn't be read).</summary>
+    private static Task<string?>? _ownFingerprint;
+
+    private static readonly Dictionary<string, ((long, DateTime) Stamp, string? Hash)> FingerprintCache =
+        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
+    /// <summary>Hash the running program's file now, in the background, before anything could replace it.</summary>
+    internal static void FingerprintOwnBinary() =>
+        _ownFingerprint ??= AppServices.ExecutablePath is { } exe ? Task.Run(() => ExecutableFingerprint.Sha256(exe)) : Task.FromResult<string?>(null);
 
     /// <summary>
     /// The tripwire: every browser connection and the monero: link handler this app set up must still lead
@@ -694,11 +704,18 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
 
         var gone = new List<string>();
-        foreach ((string browser, string key, RegistrationCheck check) in report.Browsers)
+        foreach ((string browser, string key, RegistrationCheck check, FingerprintMatch file) in report.Browsers)
         {
             if (check.State == RegistrationState.Elsewhere)
             {
-                Tripwire(Changed(browser, check.Target), warning: true);
+                Tripwire(Changed(browser, check.Target, file), warning: true);
+            }
+            else if (check.State == RegistrationState.Registered && file == FingerprintMatch.Different)
+            {
+                // The path is this app's, but the file there is no longer the program that is running.
+                Tripwire($"The program file your {browser} connection leads to ({UntrustedText.Clean(exe, 120)}) has changed since XaultWallet started. "
+                         + "If you just updated XaultWallet, restart it. If you didn't, another program may have replaced it to answer your browser in XaultWallet's place: "
+                         + "close XaultWallet, check the file against the release's SHA256SUMS, and reinstall if it doesn't match.", warning: true);
             }
             else if (check.State == RegistrationState.NotRegistered)
             {
@@ -734,10 +751,54 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private static RegistrationReport Inspect(string exe, string[] connected, bool links, AppServices app)
     {
+        // Fail-safe: a hash that can't be had (unreadable file, too slow) is Unknown and warns about nothing.
+        FingerprintOwnBinary();
+        string? own = _ownFingerprint!.Wait(TimeSpan.FromSeconds(5)) ? _ownFingerprint.Result : null;
+        FingerprintMatch FileAt(string? path)
+        {
+            if (own is null || path is null || !Path.IsPathFullyQualified(path) || path.StartsWith(@"\\", StringComparison.Ordinal))
+            {
+                return FingerprintMatch.Unknown; // never reach out to a network path to hash it
+            }
+
+            // Hashed again only when the file's size or time changed (the check repeats when the window
+            // comes back; the program file is large).
+            (long, DateTime) stamp;
+            try
+            {
+                var info = new FileInfo(path);
+                stamp = info.Exists ? (info.Length, info.LastWriteTimeUtc) : (-1, default);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                return FingerprintMatch.Unknown;
+            }
+            string? hash;
+            lock (FingerprintCache)
+            {
+                if (!FingerprintCache.TryGetValue(path, out var cached) || cached.Stamp != stamp)
+                {
+                    cached = (stamp, ExecutableFingerprint.Sha256(path));
+                    FingerprintCache[path] = cached;
+                }
+
+                hash = cached.Hash;
+            }
+
+            return ExecutableFingerprint.Compare(own, hash);
+        }
+
         var browsers = connected.Select(key =>
         {
             CompanionBrowser kind = key == "firefox" ? CompanionBrowser.Firefox : CompanionBrowser.Chrome;
-            return (kind.ToString(), key, BrowserRegistration.Check(kind, exe, app.BrowserPaths, app.UserRegistry));
+            RegistrationCheck check = BrowserRegistration.Check(kind, exe, app.BrowserPaths, app.UserRegistry);
+            FingerprintMatch file = check.State switch
+            {
+                RegistrationState.Registered => FileAt(exe),
+                RegistrationState.Elsewhere => FileAt(check.Target),
+                _ => FingerprintMatch.Unknown,
+            };
+            return (kind.ToString(), key, check, file);
         }).ToList();
         RegistrationState linkState = links ? MoneroLinkRegistration.Status(exe, app.BrowserPaths, app.UserRegistry) : RegistrationState.Unsupported;
         bool overridden = linkState == RegistrationState.Registered && MoneroLinkRegistration.WindowsUserChoiceOverrides(app.UserRegistry);
@@ -754,7 +815,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     /// <summary>What a browser connection that leads elsewhere now leads to, in words: a program that is no
     /// longer there, another copy of XaultWallet, or something else.</summary>
-    private static string Changed(string browser, string? target)
+    private static string Changed(string browser, string? target, FingerprintMatch file = FingerprintMatch.Unknown)
     {
         const string StandIn = "If you didn't do that, another program may be trying to stand in for XaultWallet. Review it in Settings.";
         if (target is null)
@@ -769,8 +830,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return $"Your {browser} connection leads to a program that is no longer there ({shown}). Connect it again in Settings, so nothing put there later can answer in XaultWallet's place.";
         }
 
+        if (file == FingerprintMatch.Same)
+        {
+            return $"Your {browser} connection now leads to another copy of XaultWallet ({shown}), byte for byte the same program as this one. If that isn't a copy you use, review it in Settings.";
+        }
+
         return string.Equals(Path.GetFileName(target), Path.GetFileName(AppServices.ExecutablePath), StringComparison.OrdinalIgnoreCase)
-            ? $"Your {browser} connection now leads to another copy of XaultWallet ({shown}). If that isn't a copy you use, review it in Settings: another program may be trying to stand in for XaultWallet."
+            ? $"Your {browser} connection now leads to another copy of XaultWallet ({shown}){(file == FingerprintMatch.Different ? ", and it isn't the same program as this one" : string.Empty)}. If that isn't a copy you use, review it in Settings: another program may be trying to stand in for XaultWallet."
             : $"Your {browser} connection to XaultWallet now leads to another program ({shown}). {StandIn}";
     }
 

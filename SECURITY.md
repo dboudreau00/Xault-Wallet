@@ -387,7 +387,12 @@ installed and used with a browser. None of them says whether a vault holds a hid
 reveal the app, not the decoy.
 
 **Tripwire.** At every start, and when the window comes back to the front, the app checks that each
-browser connection it set up still leads to it, comparing the exact path it wrote. A connection
+browser connection it set up still leads to it, comparing the exact path it wrote, and that the program
+file there is still, byte for byte (SHA-256), the one that was running when the app started: a file
+replaced at the same path is reported too (after an update, restart the app). A connection that leads
+elsewhere says whether that program is an identical copy of XaultWallet. Release builds aren't
+Authenticode-signed, so there is no signature to compare; a file that can't be read is not reported
+(the check warns, it never blocks). A connection
 repointed to another program (to stand in for XaultWallet, for example to hand the browser its own
 "receive" address) brings up a warning naming that program; one that was removed is reported once,
 then forgotten. On Windows the app also notices when another program created its channel before

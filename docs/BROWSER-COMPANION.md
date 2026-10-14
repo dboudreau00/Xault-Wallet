@@ -185,7 +185,7 @@ stealing.
   labelled *Browser* on the Receive tab, to compare with what the browser shows. The page a request
   came from is what the extension reports; a program on your computer can claim any page.
 - **Being repointed.** At every start, and when its window comes back to the front, XaultWallet checks
-  that each browser connection it made still leads to it, comparing the exact path it wrote. If another
+  that each browser connection it made still leads to it, comparing the exact path it wrote and the program file there (SHA-256, against the running app as it started: a file replaced at the same path is reported too). If another
   program rewrote one (to stand in for XaultWallet and, say, hand your browser its own "receive"
   address), you get a warning across the top of the window naming the program it now leads to. A
   connection that was removed is mentioned once, then forgotten. The same goes for `monero:` links. On

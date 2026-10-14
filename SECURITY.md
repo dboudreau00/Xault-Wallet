@@ -299,7 +299,10 @@ own node checks (sync height, node tests), and the monero-wallet-rpc download. *
 while Tor is chosen but not connected, wallets wait ("Connecting to Tor"), node checks are skipped,
 and nothing falls back to a direct connection. A wallet started through Tor keeps that route until
 it is opened again; if Tor stops, its traffic stops with it. The wallet screen says which route a
-wallet uses (TOR, PROXY, DIRECT or LOCAL NODE).
+wallet uses (TOR, PROXY, DIRECT or LOCAL NODE). Changing a wallet's node (Manage) keeps that: a node
+that is reached the other way (a remote node for a wallet opened on a node on this computer, which has
+no proxy, or the reverse) restarts the wallet's backend for it, instead of switching it in live, where
+monero-wallet-rpc would reach the remote node directly and the app's own node checks would too.
 
 Exceptions, deliberately: a node on this computer (`127.0.0.1`, `localhost`) is reached directly,
 because Tor refuses loopback destinations and that traffic never leaves the machine; and the Tor

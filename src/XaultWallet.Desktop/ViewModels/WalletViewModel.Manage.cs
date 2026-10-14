@@ -83,7 +83,8 @@ public sealed partial class WalletViewModel
         }
     }
 
-    /// <summary>Use another node for this wallet: switched live (no rescan) and saved for next time.</summary>
+    /// <summary>Use another node for this wallet: switched live (no rescan) and saved for next time, or, when
+    /// the new node is reached another way (Tor or direct), by starting the wallet's backend again.</summary>
     [RelayCommand]
     private async Task ApplyNodeAsync()
     {
@@ -100,9 +101,37 @@ public sealed partial class WalletViewModel
             return;
         }
 
+        // The backend keeps how it reaches nodes (see NodeSwitchNeedsRestart): when the new node needs the other
+        // way, restart it for that, never switch live around Tor. Not while a payment is being confirmed or sent.
+        bool restart = IsReady && NodeSwitchNeedsRestart(_route is not null, AppServices.Instance.DescribeRoute(address));
+        if (restart && (ShowSendConfirm || Sending))
+        {
+            Notice("A payment is being confirmed or sent. Finish it first: that node is reached another way, so the wallet has to restart to use it.", error: true);
+            return;
+        }
+
         string before = _secrets.DaemonAddress;
         try
         {
+            if (restart)
+            {
+                _secrets.DaemonAddress = address;
+                if (await _profile.SaveAsync() is { } saveError)
+                {
+                    _secrets.DaemonAddress = before;
+                    Notice(saveError, error: true);
+                    return;
+                }
+
+                Notice("Restarting this wallet to reach that node the way your network settings say…");
+                await RestartBackendAsync();
+                OnPropertyChanged(nameof(CanRescanSpent));
+                Notice(StartupFailed
+                    ? "The node is saved, but the wallet couldn't restart. Use Retry on the message at the top."
+                    : "This wallet now uses that node.");
+                return;
+            }
+
             if (IsReady)
             {
                 await _wallet.SetDaemonAsync(address, _cts.Token);
@@ -129,6 +158,24 @@ public sealed partial class WalletViewModel
         {
             Notice("Couldn't switch to that node: " + Friendly(ex), error: true);
         }
+    }
+
+    /// <summary>Stop this wallet's wallet-rpc and start it again, so how it reaches its node (Tor, proxy or
+    /// direct) is decided anew. A refresh in flight finishes first; the next ones wait for the new backend.</summary>
+    private async Task RestartBackendAsync()
+    {
+        await _refreshGate.WaitAsync(_cts.Token);
+        try
+        {
+            IsReady = false;
+            try { await _wallet.DisposeAsync(); } catch { /* best effort */ }
+        }
+        finally
+        {
+            try { _refreshGate.Release(); } catch (ObjectDisposedException) { }
+        }
+
+        await InitializeAsync();
     }
 
     // ------------------------------------------------------------------ backup: seed and keys

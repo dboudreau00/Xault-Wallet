@@ -296,7 +296,20 @@ public sealed partial class WalletViewModel : ViewModelBase, IAsyncDisposable
     }
 
     /// <summary>The node can't see this computer's IP address (Tor or the user's proxy).</summary>
-    public bool RouteIsPrivate => RouteName is "Tor" or "SOCKS proxy";
+    public bool RouteIsPrivate => IsProxiedRoute(RouteName);
+
+    /// <summary>A route name (see <c>AppServices.DescribeRoute</c>) that goes through a SOCKS proxy.</summary>
+    internal static bool IsProxiedRoute(string routeName) => routeName is "Tor" or "SOCKS proxy";
+
+    /// <summary>
+    /// Whether switching a running wallet to a node that is reached by <paramref name="routeForNewNode"/>
+    /// takes a restart of its backend. monero-wallet-rpc keeps the way it reaches nodes (set_daemon can neither
+    /// add nor drop --proxy), and so does the app's own node check: a wallet opened on a node on this computer
+    /// has no proxy (Tor can't reach it), so a remote node switched in live would be reached DIRECTLY while Tor
+    /// is on; one opened behind the proxy could no longer reach a node on this computer.
+    /// </summary>
+    internal static bool NodeSwitchNeedsRestart(bool backendBehindProxy, string routeForNewNode) =>
+        backendBehindProxy != IsProxiedRoute(routeForNewNode);
 
     /// <summary>Through the built-in Tor, which isn't connected right now: node traffic is held back.</summary>
     public bool RouteDown => RouteIsTor && !(_torUpForPreview ?? AppServices.Instance.Tor.IsReady);

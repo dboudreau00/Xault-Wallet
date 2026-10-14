@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.VisualTree;
 using XaultWallet.Core.Models;
 using XaultWallet.Core.Monero;
+using XaultWallet.Desktop;
 using XaultWallet.Desktop.ViewModels;
 
 namespace XaultWallet.UiSnapshots;
@@ -103,6 +104,48 @@ internal static partial class Program
         Expect(send is { Focusable: false, IsTabStop: false } && !reached,
             "Send now ok: it never takes the keyboard focus, so no key press can send.",
             $"Send now: found={send is not null}, focusable={send?.Focusable}, tab stop={send?.IsTabStop}, reached by Tab={reached}");
+    }
+
+    /// <summary>
+    /// A running wallet-rpc keeps how it reaches nodes, so a node that needs the other way restarts the wallet's
+    /// backend instead of being switched in live: with the built-in Tor, a wallet opened on a node on this computer
+    /// (no proxy) must not be given a remote node directly, and the reverse; with a proxy of the user's own or no
+    /// proxy at all nothing changes with the node.
+    /// </summary>
+    private static void CheckNodeSwitchRoutes()
+    {
+        AppSettings settings = AppServices.Instance.Settings;
+        (bool tor, string proxy) = (settings.UseBuiltInTor, settings.ProxyAddress);
+        const string local = "http://127.0.0.1:18081", remote = "http://node.example.org:18089";
+        bool torOk, proxyOk, directOk;
+        try
+        {
+            settings.UseBuiltInTor = true;
+            settings.ProxyAddress = string.Empty;
+            string toLocal = AppServices.Instance.DescribeRoute(local), toRemote = AppServices.Instance.DescribeRoute(remote);
+            torOk = toLocal == "Local node" && toRemote == "Tor"
+                && WalletViewModel.NodeSwitchNeedsRestart(backendBehindProxy: false, toRemote)
+                && WalletViewModel.NodeSwitchNeedsRestart(backendBehindProxy: true, toLocal)
+                && !WalletViewModel.NodeSwitchNeedsRestart(backendBehindProxy: true, toRemote)
+                && !WalletViewModel.NodeSwitchNeedsRestart(backendBehindProxy: false, toLocal);
+
+            settings.UseBuiltInTor = false;
+            settings.ProxyAddress = "127.0.0.1:9050";
+            proxyOk = AppServices.Instance.DescribeRoute(local) == "SOCKS proxy" && AppServices.Instance.DescribeRoute(remote) == "SOCKS proxy"
+                && !WalletViewModel.NodeSwitchNeedsRestart(backendBehindProxy: true, "SOCKS proxy");
+
+            settings.ProxyAddress = string.Empty;
+            directOk = AppServices.Instance.DescribeRoute(local) == "Direct" && AppServices.Instance.DescribeRoute(remote) == "Direct"
+                && !WalletViewModel.NodeSwitchNeedsRestart(backendBehindProxy: false, "Direct");
+        }
+        finally
+        {
+            (settings.UseBuiltInTor, settings.ProxyAddress) = (tor, proxy);
+        }
+
+        Expect(torOk && proxyOk && directOk,
+            "Node switch ok: with Tor on, a node reached the other way (local or remote) restarts the backend; otherwise it switches live.",
+            $"Node switch routes: tor={torOk}, own proxy={proxyOk}, direct={directOk}");
     }
 
     /// <summary>Scroll the control with this automation id into view, with some room above it.</summary>

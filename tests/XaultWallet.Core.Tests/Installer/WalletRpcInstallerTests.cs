@@ -234,6 +234,44 @@ public sealed class WalletRpcInstallerTests : IDisposable
     public void Install_Folder_Must_Be_A_Full_Path() =>
         Assert.Throws<ArgumentException>(() => new WalletRpcInstaller("relative/folder", null));
 
+    [Fact]
+    public void The_Handler_Goes_Through_The_Socks_Proxy_When_One_Is_Set()
+    {
+        using SocketsHttpHandler direct = WalletRpcInstaller.CreateHandler(null);
+        Assert.False(direct.UseProxy);
+
+        using SocketsHttpHandler proxied = WalletRpcInstaller.CreateHandler("127.0.0.1:9050");
+        Assert.True(proxied.UseProxy);
+        var proxy = Assert.IsType<WebProxy>(proxied.Proxy);
+        Assert.Equal(new Uri("socks5://127.0.0.1:9050"), proxy.Address);
+    }
+
+    [Fact]
+    public async Task The_Download_Reaches_The_Proxy_Not_The_Site()
+    {
+        // A stand-in proxy on this computer: the installer must open its first connection here and
+        // greet it as SOCKS5 (version byte 5), not go to the download site itself.
+        using var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        var installer = new WalletRpcInstaller(_root, proxyAddress: $"127.0.0.1:{port}")
+        {
+            HashListUrl = new Uri("https://example.test/downloads/hashes.txt"),
+            PlatformForTesting = "linux-x64",
+        };
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        Task install = installer.InstallAsync(null, cts.Token);
+
+        using System.Net.Sockets.TcpClient client = await listener.AcceptTcpClientAsync(cts.Token);
+        var greeting = new byte[1];
+        int read = await client.GetStream().ReadAsync(greeting, cts.Token);
+        Assert.Equal(1, read);
+        Assert.Equal(5, greeting[0]);
+        client.Close();
+
+        await Assert.ThrowsAnyAsync<Exception>(() => install); // the stand-in answers nothing useful
+    }
+
     // ---- helpers ----
 
     private WalletRpcInstaller Installer(FakeServer server, string platform, Func<string, CancellationToken, Task<string>>? probe = null) =>

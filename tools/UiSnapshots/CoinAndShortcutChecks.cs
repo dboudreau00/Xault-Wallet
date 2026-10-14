@@ -106,6 +106,24 @@ internal static partial class Program
             $"Send now: found={send is not null}, focusable={send?.Focusable}, tab stop={send?.IsTabStop}, reached by Tab={reached}");
     }
 
+    /// <summary>The guard "Send now" uses, on buttons that appear because of a request from outside (Give
+    /// address, Allow for a browser extension): held right after it appears, released after the hold time.</summary>
+    private static void CheckClickHold()
+    {
+        long now = 1_000;
+        int changes = 0;
+        var hold = new XaultWallet.Desktop.Controls.ClickHold(() => changes++, () => now);
+        bool before = hold.Held;
+        hold.Start();
+        bool heldAtFirst = hold.Held;
+        now += (long)WalletViewModel.ConfirmHoldTime.TotalMilliseconds - 1;
+        bool heldJustBefore = hold.Held;
+        now += 2;
+        Expect(!before && heldAtFirst && heldJustBefore && !hold.Held && changes >= 1,
+            "Click hold ok: a button that just appeared ignores clicks for the Send now hold time, then takes them.",
+            $"Click hold: before={before}, held at first={heldAtFirst}, just before the end={heldJustBefore}, after={hold.Held}, changes={changes}");
+    }
+
     /// <summary>
     /// A running wallet-rpc keeps how it reaches nodes, so a node that needs the other way restarts the wallet's
     /// backend instead of being switched in live: with the built-in Tor, a wallet opened on a node on this computer

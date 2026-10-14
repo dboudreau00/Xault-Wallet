@@ -91,7 +91,8 @@
                     <TextBlock Grid.Column="1" AutomationProperties.AutomationId="Shell.ReceiveAskText" Text="{Binding ReceiveAskNote}" TextWrapping="Wrap"
                                VerticalAlignment="Center" FontSize="12.5"/>
                     <Button Grid.Column="2" Content="Give address" Margin="12,0,0,0" VerticalAlignment="Center"
-                            AutomationProperties.AutomationId="Shell.AllowReceive" AutomationProperties.Name="Give the browser a new address" Command="{Binding AllowReceiveRequestCommand}"/>
+                            AutomationProperties.AutomationId="Shell.AllowReceive" AutomationProperties.Name="Give the browser a new address" Command="{Binding AllowReceiveRequestCommand}"
+                            IsEnabled="{Binding !ReceiveAskHeld}" Focusable="False" IsTabStop="False"/>
                     <Button Grid.Column="3" Classes="ghost icon" Margin="6,0,-4,0" Padding="6" VerticalAlignment="Center"
                             AutomationProperties.AutomationId="Shell.DismissReceive" AutomationProperties.Name="Refuse the browser's address request" ToolTip.Tip="Refuse"
                             Command="{Binding DismissReceiveRequestCommand}">

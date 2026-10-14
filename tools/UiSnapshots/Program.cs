@@ -160,6 +160,7 @@ internal static partial class Program
         CheckShortcutsPickTabs();
         CheckSendNowTakesAClick();
         CheckNodeSwitchRoutes();
+        CheckClickHold();
         AppServices.Instance.Tor.ShowForPreview(TorState.Off);
         if (!OperatingSystem.IsWindows())
         {

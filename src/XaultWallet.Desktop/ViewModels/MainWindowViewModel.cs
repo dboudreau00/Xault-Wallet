@@ -5,6 +5,7 @@ using XaultWallet.Core.Companion;
 using XaultWallet.Core.Diagnostics;
 using XaultWallet.Core.Models;
 using XaultWallet.Core.Security;
+using XaultWallet.Desktop.Controls;
 
 namespace XaultWallet.Desktop.ViewModels;
 
@@ -395,6 +396,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         string host = CompanionProtocol.HostOf(origin);
         if (!_receiveGate.TryTake(wallet, host))
         {
+            ReceiveAskHold.Start(); // the window comes forward with it: a click already on its way can't press Give address
             ReceiveAskNote = $"Your browser asks for a new receive address{(host.Length > 0 ? " for " + host : string.Empty)}. "
                              + "Give it one, then ask again in the browser within two minutes."
                              + (AppServices.Instance.Settings.CompanionSavesSiteNames ? string.Empty : " It will be labelled just \"Browser\".");
@@ -422,11 +424,23 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public bool HasReceiveAsk => ReceiveAskNote.Length > 0;
 
+    /// <summary>"Give address" ignores clicks for a moment after the request lands (as "Send now" does).</summary>
+    private ClickHold? _receiveAskHold;
+
+    private ClickHold ReceiveAskHold => _receiveAskHold ??= new ClickHold(() => OnPropertyChanged(nameof(ReceiveAskHeld)));
+
+    public bool ReceiveAskHeld => _receiveAskHold?.Held ?? false;
+
     /// <summary>The user allows the waiting request (with Enhanced Security on, only the user's own input can,
     /// not another program's): the browser's next request from that site gets its address.</summary>
     [RelayCommand]
     private void AllowReceiveRequest()
     {
+        if (ReceiveAskHeld)
+        {
+            return; // it only just appeared
+        }
+
         string? host = _receiveGate.AskedHost;
         ReceiveAskNote = string.Empty;
         ShowNotice(_receiveGate.Allow()

@@ -236,19 +236,9 @@ public sealed class MoneroProcessManager : IAsyncDisposable
             Arg("--rpc-bind-port", port.ToString(CultureInfo.InvariantCulture));
             Arg("--config-file", configFile);
             Arg("--wallet-dir", walletDir);
-            Arg("--daemon-address", daemonAddress.Trim());
-            if (DaemonSslMode(daemonAddress) == "enabled")
+            foreach (string argument in DaemonConnectionArguments(daemonAddress, _options.ProxyAddress))
             {
-                // An https:// node must really be reached over TLS, never plain HTTP: see DaemonSslMode.
-                Arg("--daemon-ssl", "enabled");
-                Arg("--daemon-ssl-allow-any-cert");
-            }
-
-            if (_options.ProxyAddress is not null)
-            {
-                // Route daemon traffic through the user's SOCKS proxy (e.g. Tor at 127.0.0.1:9050)
-                // so the configured node never learns the user's real IP.
-                Arg("--proxy", _options.ProxyAddress);
+                psi.ArgumentList.Add(argument);
             }
 
             Arg("--log-file", Path.Combine(_tempDir, "wallet-rpc.log"));
@@ -466,6 +456,44 @@ public sealed class MoneroProcessManager : IAsyncDisposable
     /// <c>ssl_allow_any_cert</c>): true exactly when <see cref="DaemonSslMode"/> is "enabled", which
     /// wallet-rpc otherwise refuses (see there).</summary>
     internal static bool DaemonSslAllowAnyCert(string daemonAddress) => DaemonSslMode(daemonAddress) == "enabled";
+
+    /// <summary>
+    /// How wallet-rpc is told to reach the node, in launch order: the node, TLS for an https:// node (see
+    /// <see cref="DaemonSslMode"/>) and the SOCKS proxy (the built-in Tor, or the user's own), so the
+    /// node never learns the user's real IP address.
+    /// <para>
+    /// <c>--daemon-ssl-allow-any-cert</c> goes in once, for an https:// node and for any proxy. Through
+    /// <c>--proxy</c> wallet-rpc (v0.18 and current master, wallet2.cpp make_basic) refuses to open or create a
+    /// wallet unless it can verify the node or is told not to ("Enabling --proxy requires
+    /// --daemon-ssl-allow-any-cert or --daemon-ssl-ca-certificates or --daemon-ssl-allowed-fingerprints or use
+    /// of a .onion/.i2p domain"), and only an .onion/.i2p address WITH a port counts as verified. Without this,
+    /// no clearnet node can be used through Tor or a proxy. The certificate is then not checked, exactly as under
+    /// wallet-rpc's own default for an http:// node (which tries TLS first and accepts any certificate). The
+    /// switch must not be repeated: wallet-rpc refuses to start with the same one twice.
+    /// </para>
+    /// </summary>
+    internal static IReadOnlyList<string> DaemonConnectionArguments(string daemonAddress, string? proxyAddress)
+    {
+        var arguments = new List<string> { "--daemon-address", daemonAddress.Trim() };
+        if (DaemonSslMode(daemonAddress) == "enabled")
+        {
+            arguments.Add("--daemon-ssl");
+            arguments.Add("enabled");
+        }
+
+        if (proxyAddress is not null || DaemonSslAllowAnyCert(daemonAddress))
+        {
+            arguments.Add("--daemon-ssl-allow-any-cert");
+        }
+
+        if (proxyAddress is not null)
+        {
+            arguments.Add("--proxy");
+            arguments.Add(proxyAddress);
+        }
+
+        return arguments;
+    }
 
     /// <summary>
     /// Throw unless the server on our port is provably the child we started and that child is still

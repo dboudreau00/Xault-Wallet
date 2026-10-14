@@ -458,6 +458,13 @@ someone who can intercept the connection can still impersonate the node. Pinning
 certificate fingerprint would close that and isn't offered yet. A `.onion` node reached through
 Tor (the built-in Tor, or your own SOCKS proxy) is encrypted and authenticated by Tor itself.
 
+Through Tor or a proxy, monero-wallet-rpc refuses to open or create a wallet for any node it can't
+verify (anything but an `.onion` or `.i2p` address with a port), unless it is told
+`--daemon-ssl-allow-any-cert`. The app passes it with `--proxy`, so for a clearnet node the node's
+certificate is not checked there either (as in wallet-rpc's default): Tor hides your IP address from
+the node, but an `http://` node's traffic is readable on its way from the exit relay to the node, and
+nothing proves a clearnet node is the one you meant. Use an `.onion` node, or your own, for that.
+
 A node also supplies the chain height a *new* seed starts scanning from. A height above the block
 that holds a payment would hide that payment until the wallet is restored with an earlier height,
 so the app never accepts more than the clock-based estimate monero's own wallet uses

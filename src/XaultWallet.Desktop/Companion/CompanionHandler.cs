@@ -41,6 +41,15 @@ internal sealed class CompanionHandler
 
     private async Task<byte[]> HandleOnUiThreadAsync(CompanionRequest r)
     {
+        // Off by default: a browser is answered only once the user connected it in Settings; a link
+        // hand-off from a second launch only ever opens a payment request or the window (CompanionAccess).
+        if (CompanionAccess.Decide(r, AppServices.Instance.Settings.ConnectedBrowsers) != CompanionAccessDecision.Allow)
+        {
+            return Fail(r.Id, CompanionErrors.NotConnected, r.Via == CompanionCaller.Link
+                ? "XaultWallet doesn't answer that from a link."
+                : "This browser isn't connected to XaultWallet. Connect it in XaultWallet's Settings (Browser companion), then try again.");
+        }
+
         switch (r.Type)
         {
             case CompanionRequestType.Status:

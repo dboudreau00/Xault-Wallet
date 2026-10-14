@@ -571,9 +571,12 @@ public static class CompanionErrors
     /// <summary>The app couldn't do it (the message says why).</summary>
     public const string Failed = "failed";
 
+    /// <summary>The user hasn't connected this browser in XaultWallet's Settings (or refused its extension).</summary>
+    public const string NotConnected = "not-connected";
+
     /// <summary>Every code a reply may carry: the native host passes no other on.</summary>
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
-        BadRequest, TooLarge, UnsupportedVersion, UnknownType, NotRunning, NoVault, Locked, NotReady, Busy, WatchOnly, TooMany, Failed,
+        BadRequest, TooLarge, UnsupportedVersion, UnknownType, NotRunning, NoVault, Locked, NotReady, Busy, WatchOnly, TooMany, Failed, NotConnected,
     };
 }

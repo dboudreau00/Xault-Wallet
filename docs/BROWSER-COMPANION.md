@@ -39,7 +39,11 @@ it in the form.
 1. **Connect the browser in XaultWallet.** Settings, *Browser companion*, *Connect* next to Chrome or
    Firefox. This writes a native messaging host manifest (and on Windows a registry key under
    `HKEY_CURRENT_USER`) naming this XaultWallet and the one extension allowed to use it. *Disconnect*
-   removes it; uninstalling XaultWallet removes it too.
+   removes it; uninstalling XaultWallet removes it too. **Until you connect a browser, XaultWallet
+   answers no browser at all** (error `not-connected`): the local channel stays open only so a second
+   launch can hand over a clicked `monero:` link, and a link can only open a payment request or the
+   window, never ask for the state or an address. An install that already had a browser connected
+   keeps it connected.
 2. **Install the extension.** From a release: `XaultWallet-<version>-browser-chrome.zip` or
    `…-browser-firefox.zip` (checksums in `SHA256SUMS`). From source: `node extension/build.mjs`
    (Node 20 or later, no dependencies) writes `extension/dist/chrome` and `extension/dist/firefox`.
@@ -132,7 +136,7 @@ or a refusal, `{"v":1,"id":…,"ok":false,"error":{"code":…,"message":…}}`, 
 `not-ready` (the wallet is still starting, or the app is busy), `busy` (a payment is being confirmed in
 the app, or another screen covers the wallet), `watch-only` (the wallet on screen can't pay),
 `too-many` (more than 6 payment requests, 5 new addresses, 10 *show* or 60 *status* requests a minute),
-`failed`. Messages are fixed sentences: no error text from inside the app reaches the browser.
+`failed`, `not-connected` (this browser isn't connected in XaultWallet's Settings). Messages are fixed sentences: no error text from inside the app reaches the browser.
 
 ## Threat model
 

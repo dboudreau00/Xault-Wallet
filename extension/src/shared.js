@@ -26,7 +26,7 @@
 
   // What a reply may say, and nothing else.
   const ERROR_CODES = new Set(["bad-request", "too-large", "unsupported-version", "unknown-type", "not-running", "no-vault",
-    "locked", "not-ready", "busy", "watch-only", "too-many", "failed"]);
+    "locked", "not-ready", "busy", "watch-only", "too-many", "failed", "not-connected"]);
   const STATES = new Set(["unlocked", "locked", "setup"]);
   const RESULTS = new Set(["shown", "after-unlock", "waiting", "held"]);
   // Each network, with the first characters of its addresses (a private test chain uses mainnet's).

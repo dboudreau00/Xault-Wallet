@@ -99,6 +99,8 @@ test("replies: only XaultWallet's answer to this request, and only the fields of
   assert.deepEqual(shared.checkReply({ v: 1, id: "a", ok: true, address: SUB_STAGENET, network: "Stagenet", x: 1 }, "a", "receive"),
     { ok: true, address: SUB_STAGENET, network: "Stagenet" });
 
+  const notConnected = shared.checkReply({ v: 1, id: "a", ok: false, error: { code: "not-connected", message: "Connect it in Settings." } }, "a", "status");
+  assert.equal(notConnected.error.code, "not-connected");
   const refused = shared.checkReply({ v: 1, id: "a", ok: false, error: { code: "locked", message: "Unlock XaultWallet first." } }, "a", "receive");
   assert.deepEqual(refused, { ok: false, error: { code: "locked", message: "Unlock XaultWallet first." } });
   const odd = shared.checkReply({ v: 1, id: "a", ok: false, error: { code: "pwned", message: "Line one\n" + RLO + "two" } }, "a", "pay");

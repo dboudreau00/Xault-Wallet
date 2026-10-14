@@ -65,7 +65,8 @@ public sealed class AppSettings
 
     /// <summary>The browsers the user connected to the companion from this app ("chrome", "firefox"). Kept
     /// so the app notices when a connection is changed behind its back (another program standing in for
-    /// XaultWallet), not to decide anything: the registration itself is what the browsers read.</summary>
+    /// XaultWallet), and to gate the channel: only a browser listed here gets answers (CompanionAccess). An
+    /// install that connected a browser before the gate existed already lists it, so it keeps working.</summary>
     public List<string> ConnectedBrowsers { get; set; } = new();
 
     /// <summary>The user made this app the one that opens monero: links (same purpose as above).</summary>

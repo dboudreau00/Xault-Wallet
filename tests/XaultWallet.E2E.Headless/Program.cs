@@ -62,6 +62,8 @@ internal static class Program
         Func<string, Task<string>>? ask = null;
         if (!OperatingSystem.IsWindows())
         {
+            // As after "Connect" for Chrome in Settings: the channel answers only connected browsers.
+            AppServices.Instance.Settings.ConnectedBrowsers.Add("chrome");
             var handler = new CompanionHandler(shell, () => { });
             companion = new CompanionServer(AppServices.Instance.CompanionEndpoint, handler.HandleAsync);
             companion.Start();

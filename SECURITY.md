@@ -337,6 +337,14 @@ address. It never holds a key, a seed, a password or a balance, and it stores no
 infostealer that copies the browser profile gets nothing of the wallet. Payments are confirmed in
 the app, never in the browser.
 
+The companion is off until you connect a browser in Settings: before that the app answers no
+browser request (`not-connected`). Its local channel is open whenever the app runs, because a second
+launch hands a clicked `monero:` link (or "show me") to the running copy through it; such a hand-off can
+only open a payment request for you to review or bring the window forward, never read the state or get
+an address. The sender names itself ("chrome", "firefox" or "link") and a program running as you can
+claim any of them, so this limits what an install that never used the companion exposes; it doesn't
+authenticate anyone.
+
 It reaches the app through the browser's native messaging (XaultWallet's own executable, started by
 the browser only for the extension the host manifest names) and a local channel only your user
 account can open (a named pipe that also refuses connections from the network, or a Unix socket in a

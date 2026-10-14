@@ -224,7 +224,7 @@ jobs:
           if (Test-Path $exe) { throw 'Uninstalling left XaultWallet.exe behind' }
           if (Test-Path 'HKCU:\Software\Classes\monero') { throw 'Uninstalling left monero: links pointing at the removed program' }
           Write-Host "MSI OK: $(Split-Path $msi -Leaf) installs the published exe and uninstalls cleanly."
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist-${{ matrix.rid }}
           path: dist/*
@@ -254,7 +254,7 @@ jobs:
         run: node --test extension/test/*.test.mjs
       - name: Package (the version is the app's; the build stops if the ids aren't the ones the app allows)
         run: node extension/build.mjs --zip dist --name "XaultWallet-${TAG:-dev-${GITHUB_SHA::7}}-browser"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist-extension
           path: dist/*

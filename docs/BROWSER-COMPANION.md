@@ -188,8 +188,8 @@ stealing.
   replace a form you filled, or a payment that may have gone out, waits behind *Open it*. *Review* and
   *Send now* ignore clicks for a moment after a request lands or the confirmation appears. A new
   receive address is made only after you press *Give address* in the app (which, like *Send now*,
-  ignores clicks for a moment after it appears, because the window comes forward with it; with Enhanced Security on,
-  only your own keyboard, mouse, touchscreen or pen can, not another program), is announced across the top of the app's window with its start and end, and
+  ignores clicks for a moment after it appears, because the window comes forward with it; it takes a click, no key
+  presses it, and with Enhanced Security on input from another program is dropped), is announced across the top of the app's window with its start and end, and
   labelled *Browser* on the Receive tab, to compare with what the browser shows. The page a request
   came from is what the extension reports; a program on your computer can claim any page.
 - **Being repointed.** At every start, and when its window comes back to the front, XaultWallet checks

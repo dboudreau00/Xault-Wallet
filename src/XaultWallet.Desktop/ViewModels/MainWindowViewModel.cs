@@ -431,8 +431,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public bool ReceiveAskHeld => _receiveAskHold?.Held ?? false;
 
-    /// <summary>The user allows the waiting request (with Enhanced Security on, only the user's own input can,
-    /// not another program's): the browser's next request from that site gets its address.</summary>
+    /// <summary>The user allows the waiting request (a click: the button takes no key press, and with Enhanced
+    /// Security on another program's input is dropped): the browser's next request from that site gets its address.</summary>
     [RelayCommand]
     private void AllowReceiveRequest()
     {

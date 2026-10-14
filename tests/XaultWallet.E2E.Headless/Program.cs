@@ -143,9 +143,20 @@ internal static class Program
         File.WriteAllText(Path.Combine(holdDir, "ready.json"), ready);
         log("Holding for the browser tests: " + ready);
 
+        // The browsers are connected and allowed (Chrome above, Firefox here), as after Connect and Allow.
+        AppServices.Instance.Settings.ConnectedBrowsers.Add("firefox");
+        AppServices.Instance.Settings.AllowedExtensions.Add(CompanionAccess.PairingKey(CompanionCaller.Firefox)!);
+
+        // A person at the app: a browser's receive request only asks, so press Give address when it shows
+        // (it ignores clicks for a moment after it appears: the next turn tries again).
         DateTime until = DateTime.UtcNow.AddMinutes(20);
         while (!File.Exists(Path.Combine(holdDir, "done")) && DateTime.UtcNow < until)
         {
+            if (await driver.IsVisibleAsync("Shell.ReceiveAsk"))
+            {
+                try { await driver.ClickAsync("Shell.AllowReceive"); } catch (Exception) { /* held a moment */ }
+            }
+
             await Task.Delay(500);
         }
 

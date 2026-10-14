@@ -103,6 +103,12 @@ public static class BrowserRegistration
     /// The Chrome extension ids allowed to talk to the app. The id is derived from the public key in the
     /// extension's manifest; the matching private key was never kept, so no store listing can claim it.
     /// A store listing gets an id of its own, added here in a release.
+    /// <para>The key is public (it is in the manifest), so this id is no secret: any unpacked extension that
+    /// copies the key gets the same id, and Chrome lets it use this host. The id check keeps other web-store
+    /// extensions out, not a copy someone loads unpacked (SECURITY.md, "Browser companion").</para>
+    /// TODO: once the Chrome Web Store listing exists, allow only its store-assigned id here (drop the
+    /// manifest-key id, or keep it only in a developer build) so a copied key no longer passes; build.mjs
+    /// then has to stop requiring the manifest key's id. No store id exists yet; don't add one until it does.
     /// </summary>
     public static readonly IReadOnlyList<string> ChromeExtensionIds = ["kpcmnhbbahdifkhgibnboafelgfkgcdj"];
 

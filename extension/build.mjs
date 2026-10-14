@@ -149,6 +149,8 @@ export function build() {
   const base = JSON.parse(readFileSync(join(src, "manifest.json"), "utf8"));
   const allowed = allowedIds();
 
+  // TODO: when the Chrome Web Store listing exists and BrowserRegistration.cs allows only its id, build
+  // the store package without the manifest key and check the store id instead (SECURITY.md, Browser companion).
   const chromeId = chromeIdFromKey(base.key);
   if (!allowed.chrome.includes(chromeId)) {
     fail(`the manifest's key gives the Chrome id ${chromeId}, which BrowserRegistration.cs doesn't allow (${allowed.chrome.join(", ")})`);

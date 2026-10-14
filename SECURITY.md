@@ -337,7 +337,12 @@ the app, never in the browser.
 It reaches the app through the browser's native messaging (XaultWallet's own executable, started by
 the browser only for the extension the host manifest names) and a local channel only your user
 account can open (a named pipe that also refuses connections from the network, or a Unix socket in a
-private folder). The native host passes back only the fields each kind of reply has, checked. Replies
+private folder). The browser starts the host only for the extension ids in its manifest
+(`allowed_origins`); the Chrome id comes from the public key in the extension's manifest, so it is not
+a secret: an extension loaded unpacked with that key copied gets the same id and can talk to the app
+(as can anything running as you, which can use the channel directly anyway). The check keeps other
+installed extensions out, not a deliberate copy. Once the companion is in the Chrome Web Store, a
+release will allow only the store's id. The native host passes back only the fields each kind of reply has, checked. Replies
 carry the state, the network of the wallet on screen and, when asked for, one new subaddress: never a
 wallet's name, balance or history. At most 6 payment requests, 5 new addresses, 10 *show* and 60
 *status* requests a minute are accepted.

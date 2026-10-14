@@ -71,7 +71,7 @@ jobs:
         env:
           XW_E2E_DAEMON: http://127.0.0.1:18081
         run: dotnet run -c Release --project tests/XaultWallet.E2E.Headless -- e2e-screens
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()   # the screenshots matter most when a step failed
         with:
           name: e2e-screens-linux
@@ -87,7 +87,7 @@ jobs:
         run: node --test extension/test/*.test.mjs
       - name: Build the Chrome and Firefox packages (fails if their ids aren't the ones the app allows)
         run: node extension/build.mjs --zip extension-dist --name XaultWallet-companion-${GITHUB_SHA::7}
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: browser-extension
           path: extension-dist/
@@ -106,7 +106,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends fonts-cascadia-code zbar-tools
       - name: Render every screen (fails on any binding error or a QR/address mismatch)
         run: dotnet run -c Release --project tools/UiSnapshots -- ui-snapshots
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ui-snapshots
           path: ui-snapshots/

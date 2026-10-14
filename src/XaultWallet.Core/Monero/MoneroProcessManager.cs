@@ -239,8 +239,9 @@ public sealed class MoneroProcessManager : IAsyncDisposable
             Arg("--daemon-address", daemonAddress.Trim());
             if (DaemonSslMode(daemonAddress) == "enabled")
             {
-                // An https:// node must really be reached over verified TLS: see DaemonSslMode.
+                // An https:// node must really be reached over TLS, never plain HTTP: see DaemonSslMode.
                 Arg("--daemon-ssl", "enabled");
+                Arg("--daemon-ssl-allow-any-cert");
             }
 
             if (_options.ProxyAddress is not null)
@@ -442,19 +443,29 @@ public sealed class MoneroProcessManager : IAsyncDisposable
     /// wallet-rpc's <c>--daemon-ssl</c> (and <c>set_daemon</c>'s <c>ssl_support</c>) for a node
     /// address: <c>"enabled"</c> for an <c>https://</c> node, otherwise <c>"autodetect"</c>, which is
     /// wallet-rpc's own default (so <c>http://</c> nodes behave exactly as before).
-    /// Why: under "autodetect" wallet-rpc accepts a certificate it could not verify (it only logs
-    /// a warning) and, when the TLS handshake fails, reconnects without TLS, so anyone on the path
-    /// can strip the encryption the user asked for by typing https. Under "enabled" the connection
-    /// must be TLS and the certificate must verify against the system CAs for the node's host
-    /// name, or it fails. Consequence: an https node with a self-signed certificate no longer
-    /// connects. Some monero-wallet-rpc builds also refuse to start with "enabled" unless a CA file
-    /// or certificate fingerprint is given (the error names --daemon-ssl-allowed-fingerprints);
-    /// that error then reaches the user through the launch failure's stderr tail.
+    /// Why: under "autodetect", when the TLS handshake fails wallet-rpc reconnects without TLS, so
+    /// anyone on the path can strip the encryption the user asked for by typing https. Under "enabled"
+    /// it never falls back to plain HTTP.
+    /// What monero-wallet-rpc requires (v0.18.4.x, wallet2.cpp make_basic and on_set_daemon; epee
+    /// net_ssl.cpp has_strong_verification): "enabled" with the default system-CA verification is
+    /// refused when a wallet is opened or created ("Enabling --daemon-ssl requires
+    /// --daemon-ssl-allow-any-cert or --daemon-ssl-ca-certificates or --daemon-ssl-allowed-fingerprints
+    /// or use of a .onion/.i2p domain"). A CA file is checked without the host name (and, without
+    /// --daemon-ssl-allow-chained, only as the exact leaf), so the system bundle is no substitute for
+    /// real verification. So an https node also gets <c>--daemon-ssl-allow-any-cert</c>
+    /// (<see cref="DaemonSslAllowAnyCert"/>): the traffic is always encrypted, but the certificate is
+    /// not checked, exactly as under "autodetect" (which only logs a warning for an unverified one).
+    /// Authenticating the node would need a certificate fingerprint pin (a future setting).
     /// </summary>
     internal static string DaemonSslMode(string daemonAddress) =>
         Uri.TryCreate(daemonAddress.Trim(), UriKind.Absolute, out Uri? uri) && uri.Scheme == Uri.UriSchemeHttps
             ? "enabled"
             : "autodetect";
+
+    /// <summary>wallet-rpc's <c>--daemon-ssl-allow-any-cert</c> (<c>set_daemon</c>'s
+    /// <c>ssl_allow_any_cert</c>): true exactly when <see cref="DaemonSslMode"/> is "enabled", which
+    /// wallet-rpc otherwise refuses (see there).</summary>
+    internal static bool DaemonSslAllowAnyCert(string daemonAddress) => DaemonSslMode(daemonAddress) == "enabled";
 
     /// <summary>
     /// Throw unless the server on our port is provably the child we started and that child is still

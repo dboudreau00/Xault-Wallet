@@ -216,9 +216,15 @@ public sealed class MoneroRpcClient : IDisposable
     /// <summary>Point the open wallet at another node without closing it.</summary>
     /// <summary>Switch the open wallet's node. <paramref name="trusted"/> enables commands that hand
     /// the node more than it would otherwise learn (rescan_spent sends every key image).</summary>
-    // An https:// node gets ssl_support "enabled", as at launch (see MoneroProcessManager.DaemonSslMode).
+    // An https:// node gets ssl_support "enabled" with ssl_allow_any_cert, as at launch (see MoneroProcessManager.DaemonSslMode).
     public Task SetDaemonAsync(string address, bool trusted, CancellationToken ct = default) =>
-        CallAsync<JsonElement>("set_daemon", new { address, trusted, ssl_support = MoneroProcessManager.DaemonSslMode(address) }, ct);
+        CallAsync<JsonElement>("set_daemon", new
+        {
+            address,
+            trusted,
+            ssl_support = MoneroProcessManager.DaemonSslMode(address),
+            ssl_allow_any_cert = MoneroProcessManager.DaemonSslAllowAnyCert(address),
+        }, ct);
 
     /// <summary>The account's unspent outputs ("coins"), each with its key image and frozen flag.
     /// A watch-only wallet lists them with empty key images (computing one takes the spend key).</summary>

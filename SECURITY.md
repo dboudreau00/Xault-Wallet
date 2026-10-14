@@ -442,12 +442,16 @@ passes your daemon address straight through to `monero-wallet-rpc`.
 
 **Encryption to the node.** An `http://` node address is unencrypted: anyone on the network path
 sees (and can alter) the wallet's traffic with that node. The built-in presets are all `http://`.
-For an `https://` address the app starts monero-wallet-rpc with `--daemon-ssl enabled` (and asks
-for the same when you switch a wallet's node): the connection must be TLS with a certificate that
-verifies against your system's certificate authorities for that host name, or it fails. Without it,
-wallet-rpc's default would accept an unverified certificate and fall back to plain HTTP if the TLS
-handshake failed, so an attacker on the path could quietly remove the encryption. A node with a
-self-signed certificate therefore does not connect over `https://`. A `.onion` node reached through
+For an `https://` address the app starts monero-wallet-rpc with `--daemon-ssl enabled
+--daemon-ssl-allow-any-cert` (and asks for the same when you switch a wallet's node): the connection
+must be TLS, never plain HTTP. Without it, wallet-rpc's default would fall back to plain HTTP if the
+TLS handshake failed, so an attacker on the path could quietly remove the encryption. The node's
+certificate is **not** verified: monero-wallet-rpc (v0.18.4) refuses `--daemon-ssl enabled` with
+only system certificate authorities, and its CA-file option doesn't check the host name, so it
+can't verify an `https://` node the way a browser does (its default accepts an unverified
+certificate too, with a log warning). This keeps the traffic encrypted against someone listening;
+someone who can intercept the connection can still impersonate the node. Pinning the node's
+certificate fingerprint would close that and isn't offered yet. A `.onion` node reached through
 Tor (the built-in Tor, or your own SOCKS proxy) is encrypted and authenticated by Tor itself.
 
 A node also supplies the chain height a *new* seed starts scanning from. A height above the block

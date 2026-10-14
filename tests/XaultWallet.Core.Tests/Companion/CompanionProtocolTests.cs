@@ -221,11 +221,14 @@ public class CompanionProtocolTests
     [Fact]
     public void Replies_Are_Rebuilt_From_The_Fields_Of_Their_Kind()
     {
-        Assert.Equal("""{"v":1,"id":"a","ok":true,"app":"XaultWallet","version":"0.7.0-beta","state":"unlocked","network":"Stagenet","watchOnly":true,"ready":false}""",
-            Rebuilt("""{"v":1,"id":"a","ok":true,"app":"Other","version":"0.7.0-beta","state":"unlocked","network":"Stagenet","watchOnly":true,"ready":false,"balance":"12"}""", CompanionRequestType.Status));
+        // Status: the state and "ready" only; the version, network and watch-only are dropped (a decoy that
+        // differs from the real wallet in them would otherwise be told apart).
+        Assert.Equal("""{"v":1,"id":"a","ok":true,"app":"XaultWallet","state":"unlocked","ready":true}""",
+            Rebuilt("""{"v":1,"id":"a","ok":true,"app":"Other","version":"0.7.0-beta","state":"unlocked","network":"Stagenet","watchOnly":true,"ready":true,"balance":"12"}""", CompanionRequestType.Status));
         Assert.Equal("""{"v":1,"id":"a","ok":true,"app":"XaultWallet","state":"locked"}""",
-            Rebuilt("""{"v":1,"id":"a","ok":true,"version":"<b>x</b>","state":"locked"}""", CompanionRequestType.Status));
-        Assert.Null(Rebuilt("""{"v":1,"id":"a","ok":true,"state":"unlocked","network":"Moon"}""", CompanionRequestType.Status));
+            Rebuilt("""{"v":1,"id":"a","ok":true,"version":"<b>x</b>","state":"locked","ready":true}""", CompanionRequestType.Status));
+        Assert.Equal("""{"v":1,"id":"a","ok":true,"app":"XaultWallet","state":"unlocked","ready":false}""",
+            Rebuilt("""{"v":1,"id":"a","ok":true,"state":"unlocked","network":"Moon"}""", CompanionRequestType.Status));
         Assert.Null(Rebuilt("""{"v":1,"id":"a","ok":true,"state":"open"}""", CompanionRequestType.Status));
 
         Assert.Equal("""{"v":1,"id":"a","ok":true,"result":"shown"}""", Rebuilt("""{"v":1,"id":"a","ok":true,"result":"shown","x":1}""", CompanionRequestType.Pay));

@@ -1,4 +1,3 @@
-using System.Reflection;
 using Avalonia.Threading;
 using XaultWallet.Core.Companion;
 using XaultWallet.Desktop.ViewModels;
@@ -7,15 +6,12 @@ namespace XaultWallet.Desktop.Companion;
 
 /// <summary>
 /// Answers the browser companion and monero: links, on the UI thread, from what the shell shows. It
-/// hands out as little as it can: whether the vault is locked, the network of the wallet on screen, and
-/// on request a new receive address. Never a balance, a wallet's name, history, keys or a seed; and a
+/// hands out as little as it can: whether the vault is locked (and, unlocked, whether the wallet is
+/// ready), and on request a new receive address. Never a balance, a wallet's name, history, keys or a seed; and a
 /// payment request only ever opens in the Send tab, for the user to review and confirm in the app.
 /// </summary>
 internal sealed class CompanionHandler
 {
-    internal static readonly string AppVersion =
-        (typeof(CompanionHandler).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? string.Empty).Split('+')[0];
-
     private readonly MainWindowViewModel _shell;
     private readonly Action _bringToFront;
 
@@ -144,15 +140,16 @@ internal sealed class CompanionHandler
     private byte[] Status(string id)
     {
         CompanionStatus s = _shell.StatusForCompanion();
+        // Only what the popup acts on: the state (which buttons work) and, unlocked, whether the wallet is
+        // ready. Not the version, the network or watch-only: a decoy that differs from the real wallet in
+        // those would otherwise be told apart by anything that can ask (CompanionProtocol.RebuildReply drops
+        // them too). A new address still says its network, after Give address.
         return CompanionProtocol.Ok(id, w =>
         {
             w.WriteString("app", "XaultWallet");
-            w.WriteString("version", AppVersion);
             w.WriteString("state", s.State);
-            if (s.Network is { } network)
+            if (s.State == "unlocked")
             {
-                w.WriteString("network", network);
-                w.WriteBoolean("watchOnly", s.WatchOnly);
                 w.WriteBoolean("ready", s.Ready);
             }
         });

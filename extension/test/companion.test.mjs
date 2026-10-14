@@ -85,6 +85,9 @@ test("replies: only XaultWallet's answer to this request, and only the fields of
   assert.equal(shared.checkReply({ v: 1, id: "a", ok: true, state: "unlocked", network: "Stagenet", ready: true, version: "0.7.0-beta" }, "a", "status").version, "0.7.0-beta");
   assert.equal(shared.checkReply({ v: 1, id: "a", ok: true, state: "unlocked", network: "x".repeat(500) }, "a", "status").error.code, "bad-reply");
   assert.equal(shared.checkReply({ v: 1, id: "a", ok: true, state: "open" }, "a", "status").error.code, "bad-reply");
+  // XaultWallet after 0.7.0a sends only the state and "ready".
+  assert.deepEqual(shared.checkReply({ v: 1, id: "a", ok: true, app: "XaultWallet", state: "unlocked", ready: true }, "a", "status"),
+    { ok: true, state: "unlocked", network: "", watchOnly: false, ready: true, version: "" });
   assert.equal(shared.checkReply({ v: 1, id: "b", ok: true }, "a", "show").error.code, "bad-reply");
   assert.equal(shared.checkReply({ v: 2, id: "a", ok: true }, "a", "show").error.code, "bad-reply");
   assert.equal(shared.checkReply(null, "a", "show").error.code, "bad-reply");

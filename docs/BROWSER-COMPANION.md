@@ -24,8 +24,8 @@ What it does:
   same site) gets the address. XaultWallet announces its start and end across the top of its window,
   and lists it on its Receive tab labelled *Browser* (with the site, or what you typed, only if you
   turned on *Label browser addresses with the site* in Settings).
-- **Status.** Whether XaultWallet is running, locked or unlocked, and the network of the wallet on
-  screen (never its name or balance).
+- **Status.** Whether XaultWallet is running, locked or unlocked, and whether the wallet is ready
+  (never its name, balance, network or kind).
 
 Nothing is ever sent from the browser. A payment request only fills XaultWallet's Send form; you
 review it there (the confirmation says it came from outside XaultWallet, from your browser
@@ -131,8 +131,9 @@ Every request carries `"v": 1` and an `"id"` (1 to 64 letters, digits, `-` or `_
 
 Replies are `{"v":1,"id":…,"ok":true,…}` with:
 
-- `status`: `"app": "XaultWallet"`, `"version"`, `"state"` (`setup`, `locked` or `unlocked`); when
-  unlocked also `"network"` (`Mainnet`, `Stagenet`, `Testnet` or `Regtest`), `"watchOnly"` and `"ready"`.
+- `status`: `"app": "XaultWallet"` and `"state"` (`setup`, `locked` or `unlocked`); when unlocked also
+  `"ready"`. Nothing else: not the version, the network or whether the wallet is watch-only (XaultWallet
+  0.7.0a and earlier sent those; the extension still accepts them from an older app).
 - `pay`: `"result"`: `shown`, `after-unlock` (it waits for the unlock), `waiting` (it opens when
   Settings closes) or `held` (the Send form is in use: it waits behind *Open it* in the app).
 - `receive`: `"address"` and `"network"`.
@@ -216,9 +217,9 @@ stealing.
   get an id of its own, added to the app in a release. Anyone can still load an unpacked copy with that
   key and get the same id, so install only from this repository.)
 - **Whoever sees your screen.** The popup shows the receive address it got.
-- **Telling your profiles apart.** The browser can ask for the network of the wallet on screen and
-  whether it is watch-only. If your decoy wallet differs from your real one in either, the browser (or
-  a program on your computer) can tell them apart; keep them the same if that matters to you.
+- **Telling your profiles apart.** Status no longer says the network of the wallet on screen or whether
+  it is watch-only. An address you give the browser carries its network, so a decoy on another network
+  than your real wallet can be told apart then; keep them on the same network if that matters to you.
 
 ## Enhanced Security
 

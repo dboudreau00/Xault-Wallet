@@ -387,10 +387,10 @@ public static class CompanionProtocol
             switch (request.Type)
             {
                 case CompanionRequestType.Status:
+                    // Only the state and, unlocked, "ready": never the version, network or watch-only, which
+                    // could tell a decoy from the real wallet (whatever the app sent).
                     string? state = TextOf(root, "state");
-                    string? network = TextOf(root, "network");
-                    string? appVersion = TextOf(root, "version");
-                    if (state is not ("unlocked" or "locked" or "setup") || (network is not null && NetworkOf(network) is null))
+                    if (state is not ("unlocked" or "locked" or "setup"))
                     {
                         return null;
                     }
@@ -398,16 +398,9 @@ public static class CompanionProtocol
                     return Ok(request.Id, w =>
                     {
                         w.WriteString("app", "XaultWallet");
-                        if (appVersion is { Length: > 0 and <= 32 } && appVersion.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '+'))
-                        {
-                            w.WriteString("version", appVersion);
-                        }
-
                         w.WriteString("state", state);
-                        if (network is not null)
+                        if (state == "unlocked")
                         {
-                            w.WriteString("network", network);
-                            w.WriteBoolean("watchOnly", root.TryGetProperty("watchOnly", out JsonElement wo) && wo.ValueKind == JsonValueKind.True);
                             w.WriteBoolean("ready", root.TryGetProperty("ready", out JsonElement ready) && ready.ValueKind == JsonValueKind.True);
                         }
                     });

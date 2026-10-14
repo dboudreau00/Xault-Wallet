@@ -51,10 +51,10 @@ public sealed partial class WalletScenario
     {
         JsonElement r = await AskAsync("""{"v":1,"id":"status1","type":"status"}""");
         Check(Ok(r), "status failed: " + r);
-        Check(Str(r, "app") == "XaultWallet" && Str(r, "version").Length > 0, "status names the app and its version: " + r);
-        Check(Str(r, "state") == "unlocked" && Str(r, "network") == "Regtest", "status says unlocked on the test chain: " + r);
-        Check(!r.ToString().Contains(MainAddress, StringComparison.Ordinal) && !r.TryGetProperty("balance", out _) && !r.TryGetProperty("wallet", out _),
-            "status gives away more than state and network: " + r);
+        Check(Str(r, "app") == "XaultWallet" && Str(r, "state") == "unlocked", "status says unlocked: " + r);
+        Check(!r.ToString().Contains(MainAddress, StringComparison.Ordinal) && !r.TryGetProperty("balance", out _) && !r.TryGetProperty("wallet", out _)
+              && !r.TryGetProperty("network", out _) && !r.TryGetProperty("watchOnly", out _) && !r.TryGetProperty("version", out _),
+            "status gives away more than the state: " + r);
     }
 
     private async Task CompanionReceiveAsync()

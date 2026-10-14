@@ -360,8 +360,9 @@ a secret: an extension loaded unpacked with that key copied gets the same id and
 (as can anything running as you, which can use the channel directly anyway). The check keeps other
 installed extensions out, not a deliberate copy. Once the companion is in the Chrome Web Store, a
 release will allow only the store's id. The native host passes back only the fields each kind of reply has, checked. Replies
-carry the state, the network of the wallet on screen and, when asked for, one new subaddress: never a
-wallet's name, balance or history. At most 6 payment requests, 5 new addresses, 10 *show* and 60
+carry the state (locked, unlocked, not set up, and whether an unlocked wallet is ready) and, when asked
+for and allowed, one new subaddress with its network: never a wallet's name, balance, history, the
+app's version, or the network or kind of the wallet on screen. At most 6 payment requests, 5 new addresses, 10 *show* and 60
 *status* requests a minute are accepted.
 
 **Requests in the app.** A request's own words (a description, a recipient name) are cleaned of
@@ -378,9 +379,10 @@ top of the window with its start and end, and only while the wallet is on screen
 doesn't record which sites you gave addresses to. While the app is locked, the lock
 screen says only that a request waits, not where it came from; a request waits at most 10 minutes.
 
-**Which profile is open.** The browser can ask for the network of the wallet on screen and whether it
-is watch-only. If your decoy wallet differs from your real one in either, the browser (or a program on
-your computer) can tell them apart; keep them the same if that matters to you.
+**Which profile is open.** Status doesn't say the network of the wallet on screen or whether it is
+watch-only (0.7.0a and earlier did). A new address still carries its network, so once you give the
+browser an address, a decoy on another network than your real wallet can be told apart; keep them on
+the same network if that matters to you.
 The companion itself is visible, though: the installed extension, the native-host manifests (and,
 on Windows, their registry keys) and a registered `monero:` handler show that XaultWallet is
 installed and used with a browser. None of them says whether a vault holds a hidden wallet: they

@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.7.0b-beta - 2026-10-14 - the browser companion answers only who you let in
+
+A revision of 0.7.0a (the letter marks it), from a hardening review of the browser companion. **Your vault,
+settings and wallets are unchanged.** One thing you will notice: if you connected Chrome or Firefox before,
+XaultWallet asks once more, see the first item.
+
+### Browser companion
+- **A connected browser's extension must be allowed once.** The first time it reaches the app, XaultWallet comes
+  forward with *A browser extension wants to connect* (the browser and the extension id; *Allow*, held a moment
+  like *Send now*, and *Deny*) and that first request gets `busy`. **If you already had a browser connected, you
+  will be asked once after updating; a payment request or address request made at that moment has to be made
+  again.** Settings shows the answer next to the browser, and Disconnect (or the app noticing a removed
+  connection) forgets it. An unpacked copy of the extension with the same key has the same id, so the question
+  looks the same: if you didn't just use the companion, deny it.
+- **The channel answers browsers only after you press Connect in Settings.** Until then every request from a
+  browser is refused with `not-connected`. A clicked `monero:` link handed over by a second launch still works,
+  but can only open a payment request or bring the window forward, never ask for the state or an address.
+- **Give address and Allow ignore clicks for a moment after they appear**, as *Send now* does, because the window
+  comes forward with them. They take a click: no key press (Tab, Enter, Space) reaches them.
+- **Status says less.** The state, and when unlocked whether the wallet is ready: no longer the version, the
+  network or whether the wallet is watch-only, which could tell a decoy from the real wallet. The popup shows
+  "Unlocked", without the network. An address you are given still says its network.
+- **The tripwire compares the file, not only the path.** The app hashes its own program file at start. A connection
+  that leads to this app's path but to a file that has since changed gets a warning (restart after an update;
+  otherwise check it against SHA256SUMS), and a connection that leads elsewhere says whether that program is a
+  byte-for-byte copy of this one. A file it can't read is never warned about.
+
+### Uninstall
+- The empty `%LOCALAPPDATA%\XaultWallet\browser` folder is removed with the last connection. The docs say what the
+  uninstaller cleans: the per-user setup and MSI run `--remove-registrations`; an all-users install can't clean
+  your profile, so disconnect in Settings first.
+
 ## 0.7.0a-beta - 2026-10-13 - Tor and proxy fixes, browser addresses wait for you
 
 A revision of 0.7.0 (the letter marks it): fixes from a second review of the browser companion, and from

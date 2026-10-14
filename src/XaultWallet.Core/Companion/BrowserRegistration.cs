@@ -288,6 +288,14 @@ public static class BrowserRegistration
         {
             File.Delete(manifest);
         }
+
+        // On Windows the manifests live in this app's own folder: once the last one is gone, so is the
+        // folder (an uninstall leaves nothing behind). Elsewhere the folder is the browser's: left alone.
+        if (OperatingSystem.IsWindows() && ManifestPath(browser, paths) is { } own && Path.GetDirectoryName(own) is { } folder
+            && Directory.Exists(folder) && !Directory.EnumerateFileSystemEntries(folder).Any())
+        {
+            Directory.Delete(folder);
+        }
     }
 
     private const int MaxManifestBytes = 64 * 1024;

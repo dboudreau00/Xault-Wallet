@@ -39,7 +39,14 @@ it in the form.
 1. **Connect the browser in XaultWallet.** Settings, *Browser companion*, *Connect* next to Chrome or
    Firefox. This writes a native messaging host manifest (and on Windows a registry key under
    `HKEY_CURRENT_USER`) naming this XaultWallet and the one extension allowed to use it. *Disconnect*
-   removes it; uninstalling XaultWallet removes it too. **Until you connect a browser, XaultWallet
+   removes it. Uninstalling XaultWallet removes it too, in the per-user `setup.exe` and `.msi` (the
+   default): the uninstaller runs `XaultWallet.exe --remove-registrations`, which deletes the Chrome and
+   Firefox keys under `HKEY_CURRENT_USER\Software\…\NativeMessagingHosts`, their manifests and the
+   `monero:` link handler, only where they still lead to that copy. Connect never writes keys for Edge,
+   Brave or other Chromium browsers, so there is nothing of theirs to remove. **An all-users install
+   (setup.exe run as administrator) can't clean your profile**: disconnect in Settings before you
+   uninstall it. Uninstalling keeps your settings; the next XaultWallet to start notices the removed
+   connections and forgets them, including whether you allowed the extension. **Until you connect a browser, XaultWallet
    answers no browser at all** (error `not-connected`): the local channel stays open only so a second
    launch can hand over a clicked `monero:` link, and a link can only open a payment request or the
    window, never ask for the state or an address. An install that already had a browser connected

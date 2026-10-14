@@ -363,6 +363,10 @@ screen says only that a request waits, not where it came from; a request waits a
 **Which profile is open.** The browser can ask for the network of the wallet on screen and whether it
 is watch-only. If your decoy wallet differs from your real one in either, the browser (or a program on
 your computer) can tell them apart; keep them the same if that matters to you.
+The companion itself is visible, though: the installed extension, the native-host manifests (and,
+on Windows, their registry keys) and a registered `monero:` handler show that XaultWallet is
+installed and used with a browser. None of them says whether a vault holds a hidden wallet: they
+reveal the app, not the decoy.
 
 **Tripwire.** At every start, and when the window comes back to the front, the app checks that each
 browser connection it set up still leads to it, comparing the exact path it wrote. A connection

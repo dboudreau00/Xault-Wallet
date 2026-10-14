@@ -355,9 +355,9 @@ anything that changes how text reads (line breaks, right-to-left overrides, invi
 shown in quotes after where the request came from. A request never replaces a payment being confirmed,
 and one that would replace a form you filled, or a payment that may have gone out and needs checking,
 waits behind *Open it* instead. *Review* and *Send now* ignore clicks for a moment after a request
-lands or the confirmation appears. A new receive address is made only after you click *Give address*
-in the app for that site (a request just asks; with Enhanced Security on, only a real click counts),
-so a program on the channel can't quietly add subaddresses to your vault; it is announced across the
+lands or the confirmation appears. A new receive address is made only after you press *Give address*
+in the app for that site (a request just asks; with Enhanced Security on, only your own keyboard,
+mouse, touchscreen or pen can press it, not another program), so a program on the channel can't quietly add subaddresses to your vault; it is announced across the
 top of the window with its start and end, and only while the wallet is on screen. It is labelled just
 *Browser* unless you turn on *Label browser addresses with the site* (Settings): off, the vault
 doesn't record which sites you gave addresses to. While the app is locked, the lock

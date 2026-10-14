@@ -107,6 +107,7 @@ internal static partial class Program
             ("wallet-send-confirm-request", WalletConfirmRequest, w => SelectTab(w, 1)),
             ("wallet-notice-tripwire", Wallet, ShowTripwire),
             ("wallet-request-held", WalletSend, ShowHeldRequest),
+            ("wallet-receive-ask", Wallet, ShowReceiveAsk),
         };
 
         foreach ((string name, Func<ViewModelBase> screen, Action<Window>? arrange) in shots)

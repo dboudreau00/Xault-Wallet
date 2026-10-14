@@ -3,7 +3,7 @@ namespace XaultWallet.Core.Companion;
 /// <summary>
 /// A browser's "receive" makes a new subaddress and records it in the vault, so it waits for the user:
 /// the first request only asks (the app shows "Give address"); once the user allows it in the app (with
-/// Enhanced Security on, only a real click can), the next request from the same site, for the same wallet,
+/// Enhanced Security on, only the user's own input can, not another program's), the next request from the same site, for the same wallet,
 /// within <see cref="Lifetime"/>, gets its address. One allowance, one address. Not thread-safe: the app
 /// uses it on the UI thread.
 /// </summary>

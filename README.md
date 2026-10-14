@@ -437,9 +437,13 @@ the time left.
 
    <img src="docs/screenshots/extension-popup-page.png" alt="The popup on a checkout page: the payments found there, with the page's own words in quotes" width="280" />
 
-4. **New address** gives you a fresh subaddress of the wallet on screen, labelled *Browser:* and the
-   site, to paste into a form. The app shows the start and end of the same address across the top of
-   its window.
+4. **New address** asks for a fresh subaddress of the wallet on screen, to paste into a form. The
+   first press only asks: XaultWallet comes forward and shows which site wants one, with **Give
+   address**. Press that, then **New address** again in the browser within two minutes. The address is
+   labelled just *Browser* (with the site only if you turn on *Label browser addresses with the site*
+   in Settings), and the app shows the start and end of the same address across the top of its window.
+
+   <img src="docs/screenshots/wallet-receive-ask.png" alt="XaultWallet asking whether to give the browser a receive address, naming the site" width="60%" />
 5. Optional: **Open them here** next to *monero: links* makes any browser hand those links to
    XaultWallet (Windows, Linux), with or without the extension.
 

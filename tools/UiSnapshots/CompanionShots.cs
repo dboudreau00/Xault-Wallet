@@ -71,6 +71,14 @@ internal static partial class Program
                                    "Open it to put it in the Send form in place of that.";
     }
 
+    /// <summary>A browser asked for a new receive address: the app says which site and waits for Give address.</summary>
+    private static void ShowReceiveAsk(Window w)
+    {
+        SelectTab(w, 0);
+        Shell(w).ReceiveAskNote = "Your browser asks for a new receive address for shop.example. " +
+                                  "Give it one, then ask again in the browser within two minutes. It will be labelled just \"Browser\".";
+    }
+
     private static void ShowEnhancedConfirm(Window w)
     {
         Shell(w).ConfirmingEnhancedSecurity = true;

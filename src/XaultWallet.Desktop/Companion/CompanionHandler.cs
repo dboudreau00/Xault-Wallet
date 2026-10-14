@@ -92,6 +92,11 @@ internal sealed class CompanionHandler
                 }
 
                 CompanionAddress result = await _shell.AddressForCompanionAsync(r.Label, r.Origin);
+                if (result.Error?.Code == CompanionErrors.Busy)
+                {
+                    BringToFront(); // it waits for the user in the app (Give address, or the wallet to be opened)
+                }
+
                 return result.Address is { } address
                     ? CompanionProtocol.Ok(r.Id, w =>
                     {

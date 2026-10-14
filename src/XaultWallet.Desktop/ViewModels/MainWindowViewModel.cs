@@ -422,8 +422,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public bool HasReceiveAsk => ReceiveAskNote.Length > 0;
 
-    /// <summary>The user allows the waiting request (with Enhanced Security on, only a real click can): the
-    /// browser's next request from that site gets its address.</summary>
+    /// <summary>The user allows the waiting request (with Enhanced Security on, only the user's own input can,
+    /// not another program's): the browser's next request from that site gets its address.</summary>
     [RelayCommand]
     private void AllowReceiveRequest()
     {
@@ -444,8 +444,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     // ------------------------------------------------------------------ a request held behind "Open it"
 
     /// <summary>A payment request that would have replaced what the user is doing in the Send tab (a form
-    /// they filled, a payment to check): it waits until the user opens it (with Enhanced Security on, only a
-    /// real click can) or dismisses it, for the wallet it came for.</summary>
+    /// they filled, a payment to check): it waits until the user opens it (with Enhanced Security on, only the
+    /// user's own input can, not another program's) or dismisses it, for the wallet it came for.</summary>
     private OutsidePayment? _heldPayment;
 
     private WalletViewModel? _heldWallet;

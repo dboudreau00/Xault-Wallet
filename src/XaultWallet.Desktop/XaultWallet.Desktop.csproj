@@ -51,7 +51,7 @@
          the app reads the module matrix only (QrCodeView). Their assets stay out of the build, so they
          are not shipped and not in THIRD-PARTY-NOTICES.md. Keep the versions QRCoder asks for. -->
     <PackageReference Include="System.Drawing.Common" Version="6.0.0" ExcludeAssets="all" />
-    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="6.0.0" ExcludeAssets="all" />
+    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="10.0.13" ExcludeAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
